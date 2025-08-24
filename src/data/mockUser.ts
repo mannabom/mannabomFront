@@ -1,0 +1,25 @@
+export const mockUser = {
+  profile: {
+    profileId: 1,
+    userId: 101,
+    gender: 'MALE',
+    height: 180,
+    bodyType: 'AVERAGE',
+    regionSido: '서울특별시',
+    regionSigungu: '강남구',
+    nickName: '만나봄유저',
+    birthDate: '2000-05-15',
+    mbti: 'ENTP',
+    alcohol: 'SOMETIMES',
+    smoking: 'NONE',
+    university: '연세대학교',
+    email: 'user@example.com',
+  },
+  answers: {
+    '101': '예',
+    '102': '아니오',
+    '103': '때때로',
+  },
+  coins: 42,
+  isSubscribed: true,
+};

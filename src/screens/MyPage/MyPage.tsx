@@ -2,12 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { styles } from './MyPage.styles';
 import ConfirmModal from '../../components/common/ConfirmModal';
-
+import { mockUser } from '../../data/mockUser';
 export default function MyPage() {
-  const coins = 7;
-  const isSubscribed = true;
+  const { profile, coins, isSubscribed } = mockUser;
 
-  // 모달 상태 관리
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
 
@@ -21,7 +19,7 @@ export default function MyPage() {
             source={{ uri: 'https://via.placeholder.com/100' }}
           />
         </View>
-        <Text style={styles.nickname}>닉네임</Text>
+        <Text style={styles.nickname}>{profile.nickName}</Text>
       </View>
 
       {/* 보유 팅 + 구독 카드 */}
