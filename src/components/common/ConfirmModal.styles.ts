@@ -82,4 +82,14 @@ export const styles = StyleSheet.create({
     letterSpacing: -0.23,
     color: '#FFFFFF',
   },
+  petal: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    top: 0,
+    right: 5,
+    opacity: 0.2,
+    transform: [{ rotate: '-45deg' }],
+    resizeMode: 'contain',
+  },
 });

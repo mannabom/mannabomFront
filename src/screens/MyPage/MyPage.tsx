@@ -13,7 +13,7 @@ export default function MyPage() {
 
   return (
     <ScrollView style={styles.container}>
-      {/* 프로필 + 닉네임 가로 정렬 */}
+      {/* 프로필 + 닉네임 */}
       <View style={styles.profileRow}>
         <View style={styles.avatar}>
           <Image
@@ -50,6 +50,12 @@ export default function MyPage() {
         })}
       </View>
 
+      {/* 벤치 이미지 */}
+      <Image
+        source={require('../../assets/images/bench.png')}
+        style={styles.bench}
+      />
+
       {/* 메뉴 리스트 */}
       <View style={styles.menuWrapper}>
         {[
@@ -64,7 +70,7 @@ export default function MyPage() {
           return (
             <Pressable
               key={idx}
-              style={[styles.menuItem, isLast && styles.lastMenuItem]} // 마지막만 별도 스타일 추가
+              style={[styles.menuItem, isLast && styles.lastMenuItem]}
               onPress={item.action}
             >
               <Text style={styles.menuText}>{item.label}</Text>
@@ -72,6 +78,24 @@ export default function MyPage() {
           );
         })}
       </View>
+
+      {/* 벚꽃 이미지 4개 */}
+      <Image
+        source={require('../../assets/images/petal.png')}
+        style={styles.petal1}
+      />
+      <Image
+        source={require('../../assets/images/petal.png')}
+        style={styles.petal2}
+      />
+      <Image
+        source={require('../../assets/images/petal.png')}
+        style={styles.petal3}
+      />
+      <Image
+        source={require('../../assets/images/petal.png')}
+        style={styles.petal4}
+      />
 
       {/* 로그아웃 모달 */}
       <ConfirmModal

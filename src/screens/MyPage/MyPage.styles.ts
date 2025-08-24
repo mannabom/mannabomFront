@@ -128,4 +128,55 @@ export const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#19191B',
   },
+
+  // 장식 이미지들
+  bench: {
+    position: 'absolute',
+    right: -18,
+    top: 132,
+    width: 70,
+    height: 70,
+    resizeMode: 'contain',
+  },
+
+  // 벚꽃들
+  petal1: {
+    position: 'absolute',
+    left: -13,
+    top: 308,
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
+    transform: [{ rotate: '-80deg' }],
+  },
+  petal2: {
+    position: 'absolute',
+    right: 105,
+    top: 368,
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
+    transform: [{ rotate: '-65deg' }],
+    opacity: 0.5,
+  },
+  petal3: {
+    position: 'absolute',
+    left: 90,
+    top: 462,
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
+    transform: [{ rotate: '-45deg' }],
+    opacity: 0.5,
+  },
+  petal4: {
+    position: 'absolute',
+    right: 65,
+    top: 548,
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
+    transform: [{ rotate: '-35deg' }],
+    opacity: 0.5,
+  },
 });
