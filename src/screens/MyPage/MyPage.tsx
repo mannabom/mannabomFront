@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { styles } from './MyPage.styles';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import { useNavigation } from '@react-navigation/native';
+import { RootStackParamList } from '../../navigation/types';
 import { mockUser } from '../../data/mockUser';
+
+type MyPageNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'MyPage'
+>;
+
 export default function MyPage() {
   const { profile, coins, isSubscribed } = mockUser;
-
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const navigation = useNavigation<MyPageNavigationProp>();
 
   return (
     <ScrollView style={styles.container}>
@@ -57,7 +66,10 @@ export default function MyPage() {
       {/* 메뉴 리스트 */}
       <View style={styles.menuWrapper}>
         {[
-          { label: '1. 프로필 수정' },
+          {
+            label: '1. 프로필 수정',
+            action: () => navigation.navigate('ProfileDetail'),
+          },
           { label: '2. 스토어' },
           { label: '3. 고객센터' },
           { label: '4. 앱정보' },
