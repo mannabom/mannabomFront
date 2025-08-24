@@ -1,21 +1,29 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ← 변경된 부분
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MyPage from './src/screens/MyPage/MyPage';
+import ProfileDetail from './src/screens/MyPage/ProfileDetail';
+import { RootStackParamList } from './src/navigation/types';
+import { enableScreens } from 'react-native-screens';
 
-function App() {
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+enableScreens();
+
+export default function App() {
   return (
-    <SafeAreaView style={styles.container}>
-      <MyPage />
-    </SafeAreaView>
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen
+          name="MyPage"
+          component={MyPage}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ProfileDetail"
+          component={ProfileDetail}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-});
-
-export default App;
