@@ -71,7 +71,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onSplashComplete }) => {
 
       <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
         <Image
-          source={require('../assets/images/splash_screen.png')} // PNG 파일 경로
+          source={require('../../assets/images/splash_screen.png')} // PNG 파일 경로
           style={styles.splashImage}
           resizeMode="cover"
         />
