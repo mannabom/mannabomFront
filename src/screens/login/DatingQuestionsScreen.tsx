@@ -49,50 +49,51 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!isFormValid()) {
-      Alert.alert('알림', '모든 항목을 입력해주세요.');
-      return;
-    }
+    // if (!isFormValid()) {
+    //   Alert.alert('알림', '모든 항목을 입력해주세요.');
+    //   return;
+    // }
 
-    if (isLoading || !profileId) {
-      Alert.alert('오류', '잠시 후 다시 시도해주세요.');
-      return;
-    }
+    // if (isLoading || !profileId) {
+    //   Alert.alert('오류', '잠시 후 다시 시도해주세요.');
+    //   return;
+    // }
 
-    setIsLoading(true);
+    // setIsLoading(true);
 
-    const questionsData = {
-      profileId: profileId,
-      optionalAnswers: {
-        meaningOfLove: meaningOfLove.trim() || undefined,
-        soulFood: soulFood.trim() || undefined,
-        dailyAndHoliday: dailyAndHoliday.trim() || undefined,
-        idealDate: idealDate.trim() || undefined,
-      },
-    };
+    // const questionsData = {
+    //   profileId: profileId,
+    //   optionalAnswers: {
+    //     meaningOfLove: meaningOfLove.trim() || undefined,
+    //     soulFood: soulFood.trim() || undefined,
+    //     dailyAndHoliday: dailyAndHoliday.trim() || undefined,
+    //     idealDate: idealDate.trim() || undefined,
+    //   },
+    // };
 
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        questionsData,
-      );
+    // try {
+    //   const response = await apiClient.post(
+    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+    //     questionsData,
+    //   );
 
-      if (response.data.success) {
-        Alert.alert('질문 답변 완료', '다음 단계로 진행합니다.', [
-          { text: '확인', onPress: onQuestionsComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '질문 답변 저장 중 문제가 발생했습니다.',
-        );
-      }
-    } catch (error) {
-      console.error('연애 질문 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoading(false);
-    }
+    //   if (response.data.success) {
+    //     Alert.alert('질문 답변 완료', '다음 단계로 진행합니다.', [
+    //       { text: '확인', onPress: onQuestionsComplete },
+    //     ]);
+    //   } else {
+    //     Alert.alert(
+    //       '오류',
+    //       response.data.message || '질문 답변 저장 중 문제가 발생했습니다.',
+    //     );
+    //   }
+    // } catch (error) {
+    //   console.error('연애 질문 설정 API 오류:', error);
+    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    // } finally {
+    //   setIsLoading(false);
+    // }
+    onQuestionsComplete();
   };
 
   const renderQuestionInput = (

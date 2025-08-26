@@ -48,43 +48,44 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!isFormValid() || isLoading || !profileId) {
-      Alert.alert('알림', '모든 항목을 입력해주세요.');
-      return;
-    }
+    // if (!isFormValid() || isLoading || !profileId) {
+    //   Alert.alert('알림', '모든 항목을 입력해주세요.');
+    //   return;
+    // }
 
-    setIsLoading(true);
+    // setIsLoading(true);
 
-    const introductionData = {
-      profileId: profileId,
-      selfIntroduction: introduction.trim(),
-      attractivePartnerTrait: charm.trim(),
-      desiredPartnerTrait: ideal.trim(),
-    };
+    // const introductionData = {
+    //   profileId: profileId,
+    //   selfIntroduction: introduction.trim(),
+    //   attractivePartnerTrait: charm.trim(),
+    //   desiredPartnerTrait: ideal.trim(),
+    // };
 
-    try {
-      // API 엔드포인트는 ProfileSetupScreen과 동일할 수 있습니다.
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        introductionData,
-      );
+    // try {
+    //   // API 엔드포인트는 ProfileSetupScreen과 동일할 수 있습니다.
+    //   const response = await apiClient.post(
+    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+    //     introductionData,
+    //   );
 
-      if (response.data.success) {
-        Alert.alert('자기소개 작성 완료', '다음 단계로 진행합니다.', [
-          { text: '확인', onPress: onIntroductionComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '자기소개 저장 중 문제가 발생했습니다.',
-        );
-      }
-    } catch (error) {
-      console.error('자기소개 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoading(false);
-    }
+    //   if (response.data.success) {
+    //     Alert.alert('자기소개 작성 완료', '다음 단계로 진행합니다.', [
+    //       { text: '확인', onPress: onIntroductionComplete },
+    //     ]);
+    //   } else {
+    //     Alert.alert(
+    //       '오류',
+    //       response.data.message || '자기소개 저장 중 문제가 발생했습니다.',
+    //     );
+    //   }
+    // } catch (error) {
+    //   console.error('자기소개 설정 API 오류:', error);
+    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    // } finally {
+    //   setIsLoading(false);
+    // }
+    onIntroductionComplete();
   };
 
   return (

@@ -96,54 +96,51 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!isFormValid() || isLoading || !profileId) {
-      Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    const profileData = {
-      profileId: profileId,
-      height: parseInt(height, 10),
-      bodyType: bodyType,
-      region: {
-        sido: region,
-        sigungu: district,
-      },
-      mbti: selectedMBTI.join(''),
-      smokingHabit: smoking,
-      drinkingHabit: drinking,
-      // DTO에 없는 항목들은 제거 또는 빈 값으로 처리
-      selfIntroduction: '',
-      attractivePartnerTrait: '',
-      desiredPartnerTrait: '',
-      optionalAnswers: {},
-      relationshipChoices: {},
-    };
-
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        profileData,
-      );
-
-      if (response.data.success) {
-        Alert.alert('프로필 설정 완료', '다음 단계로 진행합니다.', [
-          { text: '확인', onPress: onProfileComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '프로필 설정 중 문제가 발생했습니다.',
-        );
-      }
-    } catch (error) {
-      console.error('프로필 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoading(false);
-    }
+    // if (!isFormValid() || isLoading || !profileId) {
+    //   Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
+    //   return;
+    // }
+    // setIsLoading(true);
+    // const profileData = {
+    //   profileId: profileId,
+    //   height: parseInt(height, 10),
+    //   bodyType: bodyType,
+    //   region: {
+    //     sido: region,
+    //     sigungu: district,
+    //   },
+    //   mbti: selectedMBTI.join(''),
+    //   smokingHabit: smoking,
+    //   drinkingHabit: drinking,
+    //   // DTO에 없는 항목들은 제거 또는 빈 값으로 처리
+    //   selfIntroduction: '',
+    //   attractivePartnerTrait: '',
+    //   desiredPartnerTrait: '',
+    //   optionalAnswers: {},
+    //   relationshipChoices: {},
+    // };
+    // try {
+    //   const response = await apiClient.post(
+    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+    //     profileData,
+    //   );
+    //   if (response.data.success) {
+    //     Alert.alert('프로필 설정 완료', '다음 단계로 진행합니다.', [
+    //       { text: '확인', onPress: onProfileComplete },
+    //     ]);
+    //   } else {
+    //     Alert.alert(
+    //       '오류',
+    //       response.data.message || '프로필 설정 중 문제가 발생했습니다.',
+    //     );
+    //   }
+    // } catch (error) {
+    //   console.error('프로필 설정 API 오류:', error);
+    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    // } finally {
+    //   setIsLoading(false);
+    // }
+    onProfileComplete();
   };
 
   return (
