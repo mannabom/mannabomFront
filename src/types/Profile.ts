@@ -12,29 +12,49 @@ export enum DrinkingHabit {
   FREQUENT_DRINKER = 'FREQUENT_DRINKER', // 자주 음주
 }
 
+// 연애관 선택지 (enum)
 export enum RelationshipChoice {
-  // 갈등 해결: 바로 풀고 싶다 vs 시간을 갖고 싶다
+  // 갈등 해결 방식
   IMMEDIATE_RESOLVE = 'IMMEDIATE_RESOLVE',
   TAKE_TIME = 'TAKE_TIME',
-  // 사진 공유: SNS에 공유 OK vs 둘만의 추억으로
+
+  // 사진 공유
   SNS_SHARE_OK = 'SNS_SHARE_OK',
   PRIVATE_MEMORY = 'PRIVATE_MEMORY',
-  // 연애에서 중요한 것: 편안함 vs 설렘
+
+  // 연애 우선순위
   COMFORT = 'COMFORT',
   EXCITEMENT = 'EXCITEMENT',
-  // 연인과의 데이트: 실내 vs 실외
+
+  // 데이트 장소
   INDOOR = 'INDOOR',
   OUTDOOR = 'OUTDOOR',
-  // 질투: 적당한 질투가 재미있다 vs 질투 없이 쿨한 게 편하다
+
+  // 질투 태도
   MODERATE_JEALOUSY = 'MODERATE_JEALOUSY',
   COOL_ATTITUDE = 'COOL_ATTITUDE',
-  // 이상적인 하루: 같이 있는 편안한 일상 vs 새로운 경험을 찾아가는 하루
+
+  // 이상적인 하루
   COMFORTABLE_DAILY = 'COMFORTABLE_DAILY',
   NEW_EXPERIENCE = 'NEW_EXPERIENCE',
-  // 끌리는 점: 상대의 배려 vs 상대의 자기 주관
+
+  // 끌리는 모습
   CONSIDERATION = 'CONSIDERATION',
   STRONG_OPINION = 'STRONG_OPINION',
-  // 친구와의 관계: 자연스럽게 잘 어울렸으면 vs 따로 노는 게 편하다
+
+  // 친구들과의 관계
   MIX_WELL = 'MIX_WELL',
   SEPARATE_CIRCLE = 'SEPARATE_CIRCLE',
+}
+
+// 연애관 답변 전체 구조
+export interface RelationshipChoices {
+  conflictResolution: RelationshipChoice; // 연인과 싸웠을 때
+  photoSharing: RelationshipChoice; // 사진 공유
+  relationshipPriority: RelationshipChoice; // 연애에서 중요한 것
+  datePlace: RelationshipChoice; // 데이트 장소
+  jealousyAttitude: RelationshipChoice; // 질투 태도
+  idealDay: RelationshipChoice; // 이상적인 하루
+  attraction: RelationshipChoice; // 끌리는 모습
+  friendInteraction: RelationshipChoice; // 친구들과의 관계
 }

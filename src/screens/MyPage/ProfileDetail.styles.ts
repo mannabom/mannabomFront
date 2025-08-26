@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   container: {
@@ -10,23 +10,27 @@ export const styles = StyleSheet.create({
     paddingLeft: 16,
   },
   title: {
-    fontSize: 17,
+    fontSize: 20,
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    color: '#02113C',
+    fontFamily: 'Roboto SemiBold',
   },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 60,
   },
-  profilePlaceholder: {
+
+  profileImageWrapper: {
     width: '100%',
     height: 330,
-    backgroundColor: '#ddd',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 16,
   },
-  placeholderText: {
-    color: '#555',
-    fontSize: 16,
+
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   infoSection: {
     marginBottom: 30,
@@ -94,7 +98,7 @@ export const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    height: 200,
+    height: 300,
     resizeMode: 'contain',
     opacity: 0.2,
   },

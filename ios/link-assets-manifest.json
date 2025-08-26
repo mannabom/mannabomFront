@@ -1,0 +1,25 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assets/fonts/ABeeZee-Regular.ttf",
+      "sha1": "3228dce6045041ccde6ce7a12ebbcc52bbc257bd"
+    },
+    {
+      "path": "src/assets/fonts/Inter_18pt-SemiBold.ttf",
+      "sha1": "f3e44abd6661d5b861e66db22f4f79a6c466cd00"
+    },
+    {
+      "path": "src/assets/fonts/Roboto-Regular.ttf",
+      "sha1": "3bff51436aa7eb995d84cfc592cc63e1316bb400"
+    },
+    {
+      "path": "src/assets/fonts/Roboto-SemiBold.ttf",
+      "sha1": "9ca139684fe902c8310dd82991648376ac9838db"
+    },
+    {
+      "path": "src/assets/fonts/WorkSans-Regular.ttf",
+      "sha1": "5e0183b29b57c54595c62ac6bc223b21f1434226"
+    }
+  ]
+}

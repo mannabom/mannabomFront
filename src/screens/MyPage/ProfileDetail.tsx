@@ -41,9 +41,12 @@ export default function ProfileDetail() {
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        {/* 프로필 사진 들어갈 영역 (372px 높이) */}
-        <View style={styles.profilePlaceholder}>
-          <Text style={styles.placeholderText}>프로필 사진 영역 (330px)</Text>
+        {/* 프로필 사진 들어갈 영역 (330px 높이) */}
+        <View style={styles.profileImageWrapper}>
+          <Image
+            source={{ uri: 'https://via.placeholder.com/600x330' }} // 실제 프로필 사진
+            style={styles.profileImage}
+          />
         </View>
 
         {/* 기본 정보 */}
