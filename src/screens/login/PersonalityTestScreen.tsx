@@ -142,41 +142,38 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!isAllAnswered() || isLoading || !profileId) {
-      Alert.alert('알림', '모든 질문에 답변해주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    const relationshipData = {
-      profileId: profileId,
-      // answers의 모든 키가 채워졌으므로 안전하게 타입 변환 가능
-      relationshipChoices: answers as RelationshipChoices,
-    };
-
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        relationshipData,
-      );
-
-      if (response.data.success) {
-        Alert.alert('성향 분석 완료', '회원가입이 완료되었습니다!', [
-          { text: '확인', onPress: onTestComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '성향 테스트 저장 중 문제가 발생했습니다.',
-        );
-      }
-    } catch (error) {
-      console.error('성향 테스트 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoading(false);
-    }
+    // if (!isAllAnswered() || isLoading || !profileId) {
+    //   Alert.alert('알림', '모든 질문에 답변해주세요.');
+    //   return;
+    // }
+    // setIsLoading(true);
+    // const relationshipData = {
+    //   profileId: profileId,
+    //   // answers의 모든 키가 채워졌으므로 안전하게 타입 변환 가능
+    //   relationshipChoices: answers as RelationshipChoices,
+    // };
+    // try {
+    //   const response = await apiClient.post(
+    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+    //     relationshipData,
+    //   );
+    //   if (response.data.success) {
+    //     Alert.alert('성향 분석 완료', '회원가입이 완료되었습니다!', [
+    //       { text: '확인', onPress: onTestComplete },
+    //     ]);
+    //   } else {
+    //     Alert.alert(
+    //       '오류',
+    //       response.data.message || '성향 테스트 저장 중 문제가 발생했습니다.',
+    //     );
+    //   }
+    // } catch (error) {
+    //   console.error('성향 테스트 설정 API 오류:', error);
+    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    // } finally {
+    //   setIsLoading(false);
+    // }
+    onTestComplete();
   };
 
   const renderQuestion = (question: Question, index: number) => (
