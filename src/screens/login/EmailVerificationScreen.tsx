@@ -45,7 +45,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   }, []);
 
   const validateEmail = (emailText: string) => {
-    // 더 관대한 이메일 검증 로직
     const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     const trimmedEmail = emailText.trim();
     console.log('📧 이메일 검증:', {
@@ -76,23 +75,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleSendVerification = async () => {
-    // 개발 모드에서는 이메일 검증을 우회
-    if (__DEV__) {
-      console.log('🔧 개발 모드: 이메일 검증 우회');
-      if (email.length > 0) {
-        setIsLoading(true);
-        setTimeout(() => {
-          setIsCodeSent(true);
-          setIsLoading(false);
-          Alert.alert(
-            '인증번호 전송',
-            `${email}로 인증번호를 전송했습니다. (개발 모드)`,
-          );
-        }, 1000);
-        return;
-      }
-    }
-
     if (!isEmailValid || isLoading || !profileId) {
       Alert.alert('오류', '올바른 이메일을 입력해주세요.');
       return;
@@ -123,12 +105,9 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
       }
     } catch (error) {
       console.error('❌ 이메일 인증번호 전송 오류:', error);
-
-      // API 오류 시에도 성공으로 처리 (개발 모드)
-      setIsCodeSent(true);
       Alert.alert(
-        '인증번호 전송',
-        `${email}로 인증번호를 전송했습니다. (개발 모드)`,
+        '오류',
+        '인증번호 전송 중 오류가 발생했습니다. 다시 시도해주세요.',
       );
     } finally {
       setIsLoading(false);
@@ -136,29 +115,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleVerifyCode = async () => {
-    // 개발 모드에서는 인증번호 검증을 우회
-    if (__DEV__) {
-      console.log('🔧 개발 모드: 인증번호 검증 우회');
-      if (verificationCode.length > 0) {
-        setIsLoading(true);
-        setTimeout(() => {
-          setCodeError('');
-          setIsLoading(false);
-          Alert.alert(
-            '인증 완료',
-            '이메일 인증이 완료되었습니다! (개발 모드)',
-            [
-              {
-                text: '확인',
-                onPress: onVerificationComplete,
-              },
-            ],
-          );
-        }, 1000);
-        return;
-      }
-    }
-
     if (verificationCode.length === 0 || isLoading || !profileId) {
       setCodeError('*인증번호가 일치하지 않습니다.');
       return;
@@ -188,15 +144,11 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
       }
     } catch (error) {
       console.error('❌ 이메일 인증 확인 오류:', error);
-
-      // API 오류 시에도 성공으로 처리 (개발 모드)
-      setCodeError('');
-      Alert.alert('인증 완료', '이메일 인증이 완료되었습니다! (개발 모드)', [
-        {
-          text: '확인',
-          onPress: onVerificationComplete,
-        },
-      ]);
+      setCodeError('*인증번호가 일치하지 않습니다.');
+      Alert.alert(
+        '오류',
+        '인증번호 확인 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +156,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
 
   const handleCodeChange = (text: string) => {
     setVerificationCode(text);
-    // 인증번호 입력 시 에러 메시지 초기화
     if (codeError) {
       setCodeError('');
     }
@@ -216,7 +167,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
         <Text style={styles.title}>만나봄은 학교 인증이 필수입니다</Text>
 
         <View style={styles.formContainer}>
-          {/* 1. 이메일 입력 섹션 */}
           <View style={styles.inputSection}>
             <Text style={styles.stepLabel}>1 학교 이메일을 입력해주세요</Text>
 
@@ -240,25 +190,20 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
               <Text style={styles.errorText}>{emailError}</Text>
             ) : null}
 
-            {/* 인증번호 전송하기 / 재전송하기 버튼 */}
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (__DEV__ && email.length > 0) || (isEmailValid && !isLoading)
+                isEmailValid && !isLoading
                   ? styles.sendButtonActive
                   : styles.sendButtonDisabled,
               ]}
               onPress={handleSendVerification}
-              disabled={
-                __DEV__
-                  ? email.length === 0 || isLoading
-                  : !isEmailValid || isLoading
-              }
+              disabled={!isEmailValid || isLoading}
             >
               <Text
                 style={[
                   styles.sendButtonText,
-                  (__DEV__ && email.length > 0) || (isEmailValid && !isLoading)
+                  isEmailValid && !isLoading
                     ? styles.sendButtonTextActive
                     : styles.sendButtonTextDisabled,
                 ]}
@@ -272,7 +217,6 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* 2. 인증번호 입력 섹션 (인증번호 전송 후에만 표시) */}
           {isCodeSent && (
             <View style={styles.inputSection}>
               <Text style={styles.stepLabel}>2 인증번호를 입력해주세요</Text>
@@ -293,12 +237,10 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
                 <Text style={styles.errorText}>{codeError}</Text>
               ) : null}
 
-              {/* 인증하기 버튼 */}
               <TouchableOpacity
                 style={[
                   styles.verifyButton,
-                  (__DEV__ && verificationCode.length > 0) ||
-                  (verificationCode.length > 0 && !isLoading)
+                  verificationCode.length > 0 && !isLoading
                     ? styles.verifyButtonActive
                     : styles.verifyButtonDisabled,
                 ]}
@@ -308,8 +250,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
                 <Text
                   style={[
                     styles.verifyButtonText,
-                    (__DEV__ && verificationCode.length > 0) ||
-                    (verificationCode.length > 0 && !isLoading)
+                    verificationCode.length > 0 && !isLoading
                       ? styles.verifyButtonTextActive
                       : styles.verifyButtonTextDisabled,
                   ]}

@@ -1,3 +1,4 @@
+// src/screens/ProfileSetupScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,7 +10,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-
+import Slider from '@react-native-community/slider';
 import { getProfileId } from '../../utils/AuthUtils';
 import apiClient from '../../services/apiClient';
 import { SmokingHabit, DrinkingHabit } from '../../types/Profile';
@@ -23,7 +24,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onProfileComplete,
 }) => {
   const [profileId, setProfileId] = useState<string | null>(null);
-  const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
   const [bodyType, setBodyType] = useState('');
   const [region, setRegion] = useState('');
@@ -31,8 +31,11 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [selectedMBTI, setSelectedMBTI] = useState<string[]>(['', '', '', '']);
   const [smoking, setSmoking] = useState<SmokingHabit | null>(null);
   const [drinking, setDrinking] = useState<DrinkingHabit | null>(null);
-  const [gender, setGender] = useState(''); // gender 상태 추가
   const [isLoading, setIsLoading] = useState(false);
+
+  const [isBodyTypeDropdownOpen, setIsBodyTypeDropdownOpen] = useState(false);
+  const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
+  const [isDistrictDropdownOpen, setIsDistrictDropdownOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfileId = async () => {
@@ -42,7 +45,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     fetchProfileId();
   }, []);
 
-  const genderOptions = ['남성', '여성', '기타'];
+  const bodyTypeOptions = ['마름', '보통', '통통', '근육질'];
   const regionOptions = ['서울특별시', '경기도', '인천광역시', '부산광역시'];
   const districtOptions: Record<string, string[]> = {
     서울특별시: ['강남구', '서초구', '송파구', '강서구'],
@@ -56,16 +59,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     ['F', 'T'],
     ['J', 'P'],
   ];
-  const smokingOptions = [
-    SmokingHabit.NON_SMOKER,
-    SmokingHabit.VAPE_ONLY,
-    SmokingHabit.REGULAR_SMOKER,
-  ];
-  const drinkingOptions = [
-    DrinkingHabit.NON_DRINKER,
-    DrinkingHabit.OCCASIONAL_DRINKER,
-    DrinkingHabit.FREQUENT_DRINKER,
-  ];
 
   const handleMBTISelect = (index: number, value: string) => {
     const newMBTI = [...selectedMBTI];
@@ -73,20 +66,10 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setSelectedMBTI(newMBTI);
   };
 
-  const handleSmokingSelect = (value: SmokingHabit) => {
-    setSmoking(value);
-  };
-
-  const handleDrinkingSelect = (value: DrinkingHabit) => {
-    setDrinking(value);
-  };
-
   const isFormValid = () => {
     return (
-      age.length > 0 &&
       height.length > 0 &&
       bodyType.length > 0 &&
-      gender.length > 0 && // gender 유효성 검사 추가
       region.length > 0 &&
       district.length > 0 &&
       selectedMBTI.every(item => item.length > 0) &&
@@ -96,51 +79,126 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    // if (!isFormValid() || isLoading || !profileId) {
-    //   Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
-    //   return;
-    // }
-    // setIsLoading(true);
-    // const profileData = {
-    //   profileId: profileId,
-    //   height: parseInt(height, 10),
-    //   bodyType: bodyType,
-    //   region: {
-    //     sido: region,
-    //     sigungu: district,
-    //   },
-    //   mbti: selectedMBTI.join(''),
-    //   smokingHabit: smoking,
-    //   drinkingHabit: drinking,
-    //   // DTO에 없는 항목들은 제거 또는 빈 값으로 처리
-    //   selfIntroduction: '',
-    //   attractivePartnerTrait: '',
-    //   desiredPartnerTrait: '',
-    //   optionalAnswers: {},
-    //   relationshipChoices: {},
-    // };
-    // try {
-    //   const response = await apiClient.post(
-    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-    //     profileData,
-    //   );
-    //   if (response.data.success) {
-    //     Alert.alert('프로필 설정 완료', '다음 단계로 진행합니다.', [
-    //       { text: '확인', onPress: onProfileComplete },
-    //     ]);
-    //   } else {
-    //     Alert.alert(
-    //       '오류',
-    //       response.data.message || '프로필 설정 중 문제가 발생했습니다.',
-    //     );
-    //   }
-    // } catch (error) {
-    //   console.error('프로필 설정 API 오류:', error);
-    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    // } finally {
-    //   setIsLoading(false);
-    // }
-    onProfileComplete();
+    if (!isFormValid() || isLoading || !profileId) {
+      Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const profileData = {
+      profileId: profileId,
+      height: parseInt(height, 10),
+      bodyType: bodyType,
+      region: {
+        sido: region,
+        sigungu: district,
+      },
+      mbti: selectedMBTI.join(''),
+      smokingHabit: smoking,
+      drinkingHabit: drinking,
+    };
+
+    try {
+      const response = await apiClient.post(
+        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+        profileData,
+      );
+
+      if (response.data.success) {
+        Alert.alert('프로필 설정 완료', '다음 단계로 진행합니다.', [
+          { text: '확인', onPress: onProfileComplete },
+        ]);
+      } else {
+        Alert.alert(
+          '오류',
+          response.data.message || '프로필 설정 중 문제가 발생했습니다.',
+        );
+      }
+    } catch (error) {
+      console.error('프로필 설정 API 오류:', error);
+      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 흡연 슬라이더 값을 숫자로 변환하는 헬퍼 함수
+  const getSmokingValue = () => {
+    if (smoking === SmokingHabit.NON_SMOKER) return 0;
+    if (smoking === SmokingHabit.VAPE_ONLY) return 1;
+    if (smoking === SmokingHabit.REGULAR_SMOKER) return 2;
+    return 0; // 기본값
+  };
+
+  // 음주 슬라이더 값을 숫자로 변환하는 헬퍼 함수
+  const getDrinkingValue = () => {
+    if (drinking === DrinkingHabit.NON_DRINKER) return 0;
+    if (drinking === DrinkingHabit.OCCASIONAL_DRINKER) return 1;
+    if (drinking === DrinkingHabit.FREQUENT_DRINKER) return 2;
+    return 0; // 기본값
+  };
+
+  // 숫자값을 흡연 습관으로 변환하는 헬퍼 함수
+  const setSmokingFromValue = (value: number) => {
+    switch (value) {
+      case 0:
+        setSmoking(SmokingHabit.NON_SMOKER);
+        break;
+      case 1:
+        setSmoking(SmokingHabit.VAPE_ONLY);
+        break;
+      case 2:
+        setSmoking(SmokingHabit.REGULAR_SMOKER);
+        break;
+      default:
+        setSmoking(SmokingHabit.NON_SMOKER);
+    }
+  };
+
+  // 숫자값을 음주 습관으로 변환하는 헬퍼 함수
+  const setDrinkingFromValue = (value: number) => {
+    switch (value) {
+      case 0:
+        setDrinking(DrinkingHabit.NON_DRINKER);
+        break;
+      case 1:
+        setDrinking(DrinkingHabit.OCCASIONAL_DRINKER);
+        break;
+      case 2:
+        setDrinking(DrinkingHabit.FREQUENT_DRINKER);
+        break;
+      default:
+        setDrinking(DrinkingHabit.NON_DRINKER);
+    }
+  };
+
+  // 흡연 습관을 텍스트로 변환하는 헬퍼 함수
+  const getSmokingText = () => {
+    switch (smoking) {
+      case SmokingHabit.NON_SMOKER:
+        return '비흡연';
+      case SmokingHabit.VAPE_ONLY:
+        return '전자 담배';
+      case SmokingHabit.REGULAR_SMOKER:
+        return '일반 담배';
+      default:
+        return '';
+    }
+  };
+
+  // 음주 습관을 텍스트로 변환하는 헬퍼 함수
+  const getDrinkingText = () => {
+    switch (drinking) {
+      case DrinkingHabit.NON_DRINKER:
+        return '안 마심';
+      case DrinkingHabit.OCCASIONAL_DRINKER:
+        return '가끔 음주';
+      case DrinkingHabit.FREQUENT_DRINKER:
+        return '자주 음주';
+      default:
+        return '';
+    }
   };
 
   return (
@@ -150,235 +208,212 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>신체 프로필</Text>
+          <Text style={styles.title}>1 신체 프로필</Text>
 
-          {/* 나이/키/몸무게 입력 섹션 */}
-          <View style={styles.section}>
-            <View style={styles.inputGroupContainer}>
-              {/* 나이 입력 */}
-              <View style={styles.inputGroup}>
+          {/* 키/체형 입력 */}
+          <View style={[styles.section, styles.row]}>
+            <View style={styles.inputGroup}>
+              <View style={styles.inputContainer}>
                 <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
-                  placeholder="나이"
-                  value={age}
-                  onChangeText={setAge}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
-                <Text style={styles.unit}>세</Text>
-              </View>
-
-              {/* 키 입력 */}
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
+                  style={[styles.input, { flex: 1 }]}
                   placeholder="키"
                   value={height}
                   onChangeText={setHeight}
                   keyboardType="numeric"
                   maxLength={3}
                 />
-                <Text style={styles.unit}>cm</Text>
               </View>
-
-              {/* 몸무게 입력 */}
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
-                  placeholder="몸무게"
-                  value={bodyType}
-                  onChangeText={setBodyType}
-                  maxLength={3}
-                />
-                <Text style={styles.unit}>kg</Text>
-              </View>
+              <Text style={styles.unit}>cm</Text>
             </View>
-          </View>
-
-          {/* 성별 선택 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>성별</Text>
-            <View style={styles.genderContainer}>
-              {genderOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
+            <View style={styles.inputGroup}>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownHeader,
+                  isBodyTypeDropdownOpen && styles.dropdownHeaderActive,
+                ]}
+                onPress={() =>
+                  setIsBodyTypeDropdownOpen(!isBodyTypeDropdownOpen)
+                }
+              >
+                <Text
                   style={[
-                    styles.genderButton,
-                    gender === option && styles.genderButtonSelected,
+                    styles.dropdownHeaderText,
+                    bodyType === '' && { color: '#999' },
                   ]}
-                  onPress={() => setGender(option)}
                 >
-                  <Text
-                    style={[
-                      styles.genderText,
-                      gender === option && styles.genderTextSelected,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  {bodyType || '체형'}
+                </Text>
+              </TouchableOpacity>
+              {isBodyTypeDropdownOpen && (
+                <View style={styles.dropdownList}>
+                  {bodyTypeOptions.map(option => (
+                    <TouchableOpacity
+                      key={option}
+                      style={styles.dropdownOption}
+                      onPress={() => {
+                        setBodyType(option);
+                        setIsBodyTypeDropdownOpen(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownOptionText}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
           {/* 지역 선택 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>지역</Text>
-            <View style={styles.row}>
-              <View style={styles.regionContainer}>
-                <Text style={styles.dropdownLabel}>시/도</Text>
-                <View style={styles.dropdown}>
+          <Text style={styles.sectionTitle}>지역</Text>
+          <View style={[styles.section, styles.row]}>
+            <View style={styles.locationDropdownContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownHeader,
+                  isRegionDropdownOpen && styles.dropdownHeaderActive,
+                ]}
+                onPress={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
+              >
+                <Text
+                  style={[
+                    styles.dropdownHeaderText,
+                    region === '' && { color: '#999' },
+                  ]}
+                >
+                  {region || '시/도'}
+                </Text>
+              </TouchableOpacity>
+              {isRegionDropdownOpen && (
+                <View style={styles.dropdownList}>
                   {regionOptions.map(option => (
                     <TouchableOpacity
                       key={option}
-                      style={[
-                        styles.dropdownOption,
-                        region === option && styles.dropdownOptionSelected,
-                      ]}
+                      style={styles.dropdownOption}
                       onPress={() => {
                         setRegion(option);
                         setDistrict('');
+                        setIsRegionDropdownOpen(false);
+                        setIsDistrictDropdownOpen(false);
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.dropdownOptionText,
-                          region === option &&
-                            styles.dropdownOptionTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
+                      <Text style={styles.dropdownOptionText}>{option}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-              </View>
-
-              <View style={styles.regionContainer}>
-                <Text style={styles.dropdownLabel}>구/군</Text>
-                <View style={styles.dropdown}>
-                  {region &&
-                    districtOptions[region]?.map(option => (
-                      <TouchableOpacity
-                        key={option}
-                        style={[
-                          styles.dropdownOption,
-                          district === option && styles.dropdownOptionSelected,
-                        ]}
-                        onPress={() => setDistrict(option)}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownOptionText,
-                            district === option &&
-                              styles.dropdownOptionTextSelected,
-                          ]}
-                        >
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+              )}
+            </View>
+            <View style={styles.locationDropdownContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownHeader,
+                  isDistrictDropdownOpen && styles.dropdownHeaderActive,
+                ]}
+                onPress={() =>
+                  region && setIsDistrictDropdownOpen(!isDistrictDropdownOpen)
+                }
+              >
+                <Text
+                  style={[
+                    styles.dropdownHeaderText,
+                    district === '' && { color: '#999' },
+                  ]}
+                >
+                  {district || '구/군'}
+                </Text>
+              </TouchableOpacity>
+              {isDistrictDropdownOpen && region && (
+                <View style={styles.dropdownList}>
+                  {districtOptions[region]?.map(option => (
+                    <TouchableOpacity
+                      key={option}
+                      style={styles.dropdownOption}
+                      onPress={() => {
+                        setDistrict(option);
+                        setIsDistrictDropdownOpen(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownOptionText}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-              </View>
+              )}
             </View>
           </View>
 
           {/* MBTI 선택 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>MBTI (필수)</Text>
-            <View style={styles.mbtiContainer}>
-              {mbtiOptions.map((options, index) => (
-                <View key={index} style={styles.mbtiRow}>
-                  {options.map(option => (
-                    <TouchableOpacity
-                      key={option}
+          <Text style={styles.sectionTitle}>MBTI (필수)</Text>
+          <View style={styles.mbtiGrid}>
+            {mbtiOptions.map((options, index) => (
+              <View key={index} style={styles.mbtiRow}>
+                {options.map(option => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.mbtiButton,
+                      selectedMBTI[index] === option &&
+                        styles.mbtiButtonSelected,
+                    ]}
+                    onPress={() => handleMBTISelect(index, option)}
+                  >
+                    <Text
                       style={[
-                        styles.mbtiButton,
-                        selectedMBTI[index] === option &&
-                          styles.mbtiButtonSelected,
+                        styles.mbtiButtonText,
+                        selectedMBTI[index] === option
+                          ? styles.mbtiButtonTextSelected
+                          : styles.mbtiButtonTextUnselected,
                       ]}
-                      onPress={() => handleMBTISelect(index, option)}
                     >
-                      <Text
-                        style={[
-                          styles.mbtiButtonText,
-                          selectedMBTI[index] === option &&
-                            styles.mbtiButtonTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ))}
-            </View>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
           </View>
 
-          {/* 흡연/음주 습관 선택 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>흡연 습관</Text>
-            <View style={styles.habitContainer}>
-              {smokingOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.habitButton,
-                    smoking === option && styles.habitButtonSelected,
-                  ]}
-                  onPress={() => handleSmokingSelect(option)}
-                >
-                  <Text
-                    style={[
-                      styles.habitButtonText,
-                      smoking === option && styles.habitButtonTextSelected,
-                    ]}
-                  >
-                    {option === SmokingHabit.NON_SMOKER
-                      ? '비흡연'
-                      : option === SmokingHabit.VAPE_ONLY
-                      ? '전자담배'
-                      : '흡연'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* 흡연 슬라이더 */}
+          <Text style={styles.sectionTitle}>흡연</Text>
+          <View style={styles.sliderContainer}>
+            <Text style={styles.sliderLabel}>비흡연</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={2}
+              step={1}
+              value={getSmokingValue()}
+              onSlidingComplete={setSmokingFromValue}
+              minimumTrackTintColor="#FF6B6B"
+              maximumTrackTintColor="#D3D3D3"
+              thumbTintColor="#FF6B6B"
+            />
+            <Text style={styles.sliderLabel}>일반 담배</Text>
           </View>
+          <Text style={styles.sliderValue}>{getSmokingText()}</Text>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>음주 습관</Text>
-            <View style={styles.habitContainer}>
-              {drinkingOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.habitButton,
-                    drinking === option && styles.habitButtonSelected,
-                  ]}
-                  onPress={() => handleDrinkingSelect(option)}
-                >
-                  <Text
-                    style={[
-                      styles.habitButtonText,
-                      drinking === option && styles.habitButtonTextSelected,
-                    ]}
-                  >
-                    {option === DrinkingHabit.NON_DRINKER
-                      ? '안 마심'
-                      : option === DrinkingHabit.OCCASIONAL_DRINKER
-                      ? '가끔 음주'
-                      : '자주 음주'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* 음주 슬라이더 */}
+          <Text style={styles.sectionTitle}>음주</Text>
+          <View style={styles.sliderContainer}>
+            <Text style={styles.sliderLabel}>안 마심</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={2}
+              step={1}
+              value={getDrinkingValue()}
+              onSlidingComplete={setDrinkingFromValue}
+              minimumTrackTintColor="#FF6B6B"
+              maximumTrackTintColor="#D3D3D3"
+              thumbTintColor="#FF6B6B"
+            />
+            <Text style={styles.sliderLabel}>자주 음주</Text>
           </View>
+          <Text style={styles.sliderValue}>{getDrinkingText()}</Text>
 
           {/* 제출 버튼 */}
           <TouchableOpacity
             style={[
               styles.submitButton,
-              isFormValid()
+              isFormValid() && !isLoading
                 ? styles.submitButtonActive
                 : styles.submitButtonDisabled,
             ]}
@@ -388,12 +423,12 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Text
               style={[
                 styles.submitButtonText,
-                isFormValid()
+                isFormValid() && !isLoading
                   ? styles.submitButtonTextActive
                   : styles.submitButtonTextDisabled,
               ]}
             >
-              다음
+              {isLoading ? '저장 중...' : '다음'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -416,7 +451,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
   },
   title: {
     fontSize: 20,
@@ -434,18 +468,14 @@ const styles = StyleSheet.create({
     color: '#333333',
     marginBottom: 15,
   },
-  inputGroupContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
   inputGroup: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    marginRight: 10,
   },
-  inputRightMargin: {
-    marginRight: 15,
+  inputContainer: {
+    flex: 1,
   },
   input: {
     borderWidth: 1,
@@ -454,37 +484,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 12,
     fontSize: 16,
-    flex: 1,
     backgroundColor: '#FAFAFA',
-  },
-  ageInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    flex: 1,
-    backgroundColor: '#FAFAFA',
+    color: '#333333',
   },
   unit: {
     marginLeft: 10,
     fontSize: 16,
     color: '#666666',
   },
-  dropdownContainer: {
+  dropdownHeader: {
     flex: 1,
-  },
-  dropdownLabel: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
-  },
-  dropdown: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     backgroundColor: '#FAFAFA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownHeaderActive: {
+    borderColor: '#FF6B6B',
+  },
+  dropdownHeaderText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    marginTop: 5,
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    maxHeight: 200,
+    overflow: 'hidden',
   },
   dropdownOption: {
     paddingVertical: 12,
@@ -492,34 +530,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  dropdownOptionSelected: {
-    backgroundColor: '#FF6B6B',
-  },
   dropdownOptionText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333333',
   },
-  dropdownOptionTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  regionContainer: {
+  locationDropdownContainer: {
     flex: 1,
+    position: 'relative',
     marginHorizontal: 5,
   },
-  mbtiContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+  mbtiGrid: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   mbtiRow: {
     flexDirection: 'row',
     marginBottom: 10,
+    justifyContent: 'center',
   },
   mbtiButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#FFB6C1',
     justifyContent: 'center',
     alignItems: 'center',
@@ -529,11 +562,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B6B',
   },
   mbtiButtonText: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
   mbtiButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  mbtiButtonTextUnselected: {
     color: '#FFFFFF',
   },
   sliderContainer: {
@@ -541,21 +577,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  sliderLabel: {
-    fontSize: 12,
-    color: '#666666',
-    width: 60,
-    textAlign: 'center',
-  },
   slider: {
     flex: 1,
     height: 40,
     marginHorizontal: 10,
   },
+  sliderLabel: {
+    fontSize: 14,
+    color: '#666666',
+    width: 60,
+    textAlign: 'center',
+  },
   sliderValue: {
     textAlign: 'center',
-    fontSize: 12,
-    color: '#999999',
+    fontSize: 14,
+    color: '#FF6B6B',
+    marginTop: -5,
+    marginBottom: 15,
   },
   submitButton: {
     paddingVertical: 16,
@@ -579,56 +617,6 @@ const styles = StyleSheet.create({
   submitButtonTextDisabled: {
     color: '#999999',
   },
-  genderContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginLeft: 15,
-  },
-  genderButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  genderButtonSelected: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
-  genderText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  genderTextSelected: {
-    color: '#FFFFFF',
-  },
-  habitContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  habitButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  habitButtonSelected: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
-  habitButtonText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  habitButtonTextSelected: {
-    color: '#FFFFFF',
-  },
 });
+
 export default ProfileSetupScreen;

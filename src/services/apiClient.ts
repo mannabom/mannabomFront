@@ -1,20 +1,28 @@
 // src/services/apiClient.ts
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+import { getAuthTokens } from '../utils/AuthUtils';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10초 타임아웃
+  timeout: 15000, // 15초 타임아웃
 });
 
-// 요청 인터셉터
+// 요청 인터셉터 - 자동으로 JWT 토큰 추가
 apiClient.interceptors.request.use(
-  config => {
+  async config => {
     console.log('🌐 API 요청:', config.method?.toUpperCase(), config.url);
     console.log('📝 요청 데이터:', config.data);
+
+    // 인증이 필요한 요청에 토큰 추가
+    const { accessToken } = await getAuthTokens();
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+
     return config;
   },
   error => {
@@ -34,20 +42,28 @@ apiClient.interceptors.response.use(
     console.error('❌ API 에러:', error.response?.status, error.config?.url);
     console.error('📄 에러 데이터:', error.response?.data);
 
-    // 개발 모드에서는 Mock 응답 반환
-    if (__DEV__ && error.code === 'ECONNREFUSED') {
-      console.log('🔧 개발 모드: Mock 응답 반환');
-      return Promise.resolve({
-        data: {
-          success: true,
-          message: 'Mock 응답 (개발 모드)',
-          data: {
-            emailSent: true,
-            verified: true,
-            isAvailable: Math.random() > 0.5, // 50% 확률로 사용 가능
-          },
-        },
-      });
+    // 401 Unauthorized 처리
+    if (error.response?.status === 401) {
+      console.log('🔑 인증 만료 - 로그인 필요');
+      // 필요시 로그아웃 처리나 토큰 갱신 로직 추가
+    }
+
+    // 500번대 서버 에러 처리
+    if (error.response?.status >= 500) {
+      console.error('🔥 서버 오류 발생');
+    }
+
+    // 개발 모드에서 연결 실패시에만 Mock 응답 반환 (실제 테스트시에는 제거 가능)
+    if (
+      __DEV__ &&
+      (error.code === 'ECONNREFUSED' ||
+        error.code === 'NETWORK_ERROR' ||
+        error.message.includes('Network Error'))
+    ) {
+      console.log('🔧 개발 모드: 서버 연결 실패 - 실제 에러 처리');
+
+      // 실제 테스트를 위해 에러를 그대로 전달
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);

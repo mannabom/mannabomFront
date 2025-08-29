@@ -1,14 +1,14 @@
 // src/config/api.ts
 // 환경별 API 주소 설정
 const API_ENDPOINTS = {
-  development: 'http://localhost:8080', // 백엔드 로컬 개발 서버
+  development: 'http://13.125.168.179:8080', // 백엔드 개발 서버
   production: 'https://api.mannabom.com', // 실제 배포된 서버 주소 (여기를 실제 주소로 변경)
 };
 
 // 현재 환경 확인
 const getCurrentEnvironment = (): keyof typeof API_ENDPOINTS => {
   if (__DEV__) {
-    return 'development'; // React Native 개발 모드에서는 로컬 서버
+    return 'development'; // React Native 개발 모드에서는 개발 서버
   } else {
     return 'production'; // 릴리즈 빌드에서는 배포 서버
   }

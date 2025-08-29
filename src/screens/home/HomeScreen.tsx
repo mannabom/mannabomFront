@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/types'; // 경로는 프로젝트 구조에 맞게 조정
+import { RootStackParamList } from '../../navigation/types'; // 경로는 프로젝트 구조에 맞게 조정
 
 type HomeNav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
