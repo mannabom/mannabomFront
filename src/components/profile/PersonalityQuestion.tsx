@@ -128,12 +128,6 @@ const styles = StyleSheet.create({
   optionTextSelected: {
     color: '#000000',
   },
-  vsText: {
-    marginHorizontal: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#02113C',
-  },
 });
 
 export default PersonalityQuestion;
