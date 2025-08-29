@@ -13,7 +13,7 @@ import { getProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 import { RelationshipChoice } from '../../types/Profile';
 import { personalityQuestions } from '../../constants/personalityQuestions';
-import PersonalityQuestion from '../../components/common/PersonalityQuestion';
+import PersonalityQuestion from '../../components/profile/PersonalityQuestion';
 
 interface PersonalityTestScreenProps {
   onTestComplete: () => void;
