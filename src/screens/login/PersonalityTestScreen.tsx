@@ -52,21 +52,16 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
     setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
-  const isAllAnswered = () =>
-    personalityQuestions.every(
-      q => answers.hasOwnProperty(q.id) && answers[q.id] !== undefined,
-    );
-
   const handleSubmit = async () => {
-    // if (!isAllAnswered() || isLoading || !profileId) {
-    //   Alert.alert('알림', '모든 질문에 답변해주세요.');
+    // 저장 API를 사용할 때는 아래 주석을 풀고 사용하세요.
+    // if (isLoading || !profileId) {
+    //   Alert.alert('알림', '프로필 정보를 확인해주세요.');
     //   return;
     // }
     // setIsLoading(true);
     // const relationshipData = {
-    //   profileId: profileId,
-    //   // answers의 모든 키가 채워졌으므로 안전하게 타입 변환 가능
-    //   relationshipChoices: answers as RelationshipChoices,
+    //   profileId,
+    //   relationshipChoices: answers as RelationshipChoices, // 일부만 있어도 서버가 허용한다면 OK
     // };
     // try {
     //   const response = await apiClient.post(
@@ -110,27 +105,21 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
             />
           ))}
 
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              isAllAnswered() && !isLoading
-                ? styles.submitButtonActive
-                : styles.submitButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={!isAllAnswered() || isLoading}
-          >
-            <Text
+          <View style={styles.submitWrapper}>
+            <TouchableOpacity
               style={[
-                styles.submitButtonText,
-                isAllAnswered() && !isLoading
-                  ? styles.submitButtonTextActive
-                  : styles.submitButtonTextDisabled,
+                styles.submitButton,
+                isLoading && styles.submitButtonDisabled,
               ]}
+              onPress={handleSubmit}
+              disabled={isLoading} // 로딩중에만 비활성화
+              activeOpacity={0.8}
             >
-              {isLoading ? '저장 중...' : '회원가입 완료'}
-            </Text>
-          </TouchableOpacity>
+              <Text style={styles.submitButtonText}>
+                {isLoading ? '저장 중...' : '저장'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -148,47 +137,35 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  stepNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-    marginBottom: 10,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#02113C',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
 
-  // 버튼 스타일
-  submitButton: {
+  submitWrapper: {
+    alignItems: 'center',
     marginTop: 30,
     marginBottom: 10,
-    paddingVertical: 14,
-    borderRadius: 25,
+  },
+
+  submitButton: {
+    width: 125,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#FFB6C1',
+    opacity: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  submitButtonActive: {
-    backgroundColor: '#FF6B6B',
-  },
+
   submitButtonDisabled: {
-    backgroundColor: '#E0E0E0',
+    opacity: 0.6,
   },
+
   submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  submitButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  submitButtonTextDisabled: {
-    color: '#999999',
+    fontFamily: 'ABeeZee',
+    fontWeight: '400',
+    fontStyle: 'normal',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.23,
+    color: '#02113C',
   },
 });
 
