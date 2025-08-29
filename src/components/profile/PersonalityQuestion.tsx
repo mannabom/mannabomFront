@@ -107,11 +107,14 @@ const styles = StyleSheet.create({
   optionTextSelected: {
     color: '#FFFFFF',
   },
+<<<<<<< HEAD:src/components/common/PersonalityQuestion.tsx
   vsText: {
     fontSize: 16,
     color: '#999999',
     marginHorizontal: 10,
   },
+=======
+>>>>>>> b0bbedb60fe0d716d24de4fa1a8a747594047fc8:src/components/profile/PersonalityQuestion.tsx
 });
 
 export default PersonalityQuestion;
