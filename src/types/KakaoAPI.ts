@@ -9,19 +9,22 @@ export enum UserStatus {
 export enum Gender {
   MALE = 'MALE',
   FEMALE = 'FEMALE',
-}
-
-export interface KakaoLoginRequestDto {
-  authorizationCode: string; // 카카오 OAuth에서 받은 인증 코드
-  redirectUri: string; // 앱의 리다이렉트 URI
+  OTHER = 'OTHER',
 }
 
 export interface KakaoUserInfo {
   kakaoId: string;
   name: string; // 카카오에서 받은 실명
+  email?: string; // 이메일은 선택 제공
   birthYear: number;
   gender: Gender;
-  profileId: string;
+  profileId?: string;
+}
+
+export interface KakaoLoginRequestDto {
+  authorizationCode: string; // 카카오 OAuth에서 받은 인증 코드
+  redirectUri: string; // 앱의 리다이렉트 URI
+  kakaoUserInfo?: KakaoUserInfo; // 카카오 사용자 정보 (필요시)
 }
 
 export interface KakaoLoginResponseDto {

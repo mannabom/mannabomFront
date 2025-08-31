@@ -1,3 +1,4 @@
+// src/screens/PersonalityTestScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,14 +13,14 @@ import apiClient from '../../services/apiClient';
 import { getProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 import { RelationshipChoice } from '../../types/Profile';
-import { personalityQuestions } from '../../constants/personalityQuestions';
+import {
+  personalityQuestions,
+  Question,
+} from '../../constants/personalityQuestions';
 import PersonalityQuestion from '../../components/profile/PersonalityQuestion';
 
-interface PersonalityTestScreenProps {
-  onTestComplete: () => void;
-}
-
-interface RelationshipChoices {
+// 'RelationshipChoices' 인터페이스를 여기에 정의하여 타입 오류를 해결합니다.
+export interface RelationshipChoices {
   conflictResolution: RelationshipChoice;
   photoSharing: RelationshipChoice;
   relationshipPriority: RelationshipChoice;
@@ -28,6 +29,10 @@ interface RelationshipChoices {
   idealDay: RelationshipChoice;
   attraction: RelationshipChoice;
   friendInteraction: RelationshipChoice;
+}
+
+interface PersonalityTestScreenProps {
+  onTestComplete: () => void;
 }
 
 const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
@@ -52,40 +57,53 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
     setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
-  const handleSubmit = async () => {
-    // 저장 API를 사용할 때는 아래 주석을 풀고 사용하세요.
-    // if (isLoading || !profileId) {
-    //   Alert.alert('알림', '프로필 정보를 확인해주세요.');
-    //   return;
-    // }
-    // setIsLoading(true);
-    // const relationshipData = {
-    //   profileId,
-    //   relationshipChoices: answers as RelationshipChoices, // 일부만 있어도 서버가 허용한다면 OK
-    // };
-    // try {
-    //   const response = await apiClient.post(
-    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-    //     relationshipData,
-    //   );
-    //   if (response.data.success) {
-    //     Alert.alert('성향 분석 완료', '회원가입이 완료되었습니다!', [
-    //       { text: '확인', onPress: onTestComplete },
-    //     ]);
-    //   } else {
-    //     Alert.alert(
-    //       '오류',
-    //       response.data.message || '성향 테스트 저장 중 문제가 발생했습니다.',
-    //     );
-    //   }
-    // } catch (error) {
-    //   console.error('성향 테스트 설정 API 오류:', error);
-    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    // } finally {
-    //   setIsLoading(false);
-    // }
+  // isAllAnswered 함수 추가
+  const isAllAnswered = (): boolean => {
+    return personalityQuestions.every(
+      question => answers[question.id] !== undefined,
+    );
+  };
 
-    onTestComplete();
+  const handleSubmit = async () => {
+    if (!isAllAnswered() || isLoading || !profileId) {
+      Alert.alert('알림', '모든 질문에 답변해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const pointsEarned = Object.keys(answers).length * 5;
+
+    const relationshipData = {
+      profileId: profileId,
+      relationshipChoices: answers as RelationshipChoices,
+      pointsEarned: pointsEarned,
+    };
+
+    try {
+      const response = await apiClient.post(
+        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+        relationshipData,
+      );
+
+      if (response.data.success) {
+        Alert.alert(
+          '성향 분석 완료',
+          `총 ${pointsEarned} 포인트를 획득했습니다! 회원가입이 완료되었습니다.`,
+          [{ text: '확인', onPress: onTestComplete }],
+        );
+      } else {
+        Alert.alert(
+          '오류',
+          response.data.message || '성향 테스트 저장 중 문제가 발생했습니다.',
+        );
+      }
+    } catch (error) {
+      console.error('성향 테스트 설정 API 오류:', error);
+      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -95,11 +113,17 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {personalityQuestions.map((q, i) => (
+          <Text style={styles.headerTitle}>이(二)지선다 질문</Text>
+          <Text style={styles.headerSubtitle}>
+            {`\u25A0 선택한 답변은 색깔로 표시`}
+            {`\n`}
+            {`\u25A0 저장 버튼 터치 시 입력된 선택 질문들 계산하여 지급할 포인트 팅 계산`}
+          </Text>
+
+          {personalityQuestions.map(q => (
             <PersonalityQuestion
               key={q.id}
               question={q}
-              index={i}
               selected={answers[q.id]}
               onSelect={handleAnswer}
             />
@@ -112,7 +136,7 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
                 isLoading && styles.submitButtonDisabled,
               ]}
               onPress={handleSubmit}
-              disabled={isLoading} // 로딩중에만 비활성화
+              disabled={isLoading}
               activeOpacity={0.8}
             >
               <Text style={styles.submitButtonText}>
@@ -137,31 +161,36 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+  },
   submitWrapper: {
     alignItems: 'center',
     marginTop: 30,
     marginBottom: 10,
   },
-
   submitButton: {
     width: 125,
     height: 44,
     borderRadius: 8,
     backgroundColor: '#FFB6C1',
-    opacity: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   submitButtonDisabled: {
     opacity: 0.6,
   },
-
   submitButtonText: {
     fontFamily: 'ABeeZee',
     fontWeight: '400',
-    fontStyle: 'normal',
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.23,

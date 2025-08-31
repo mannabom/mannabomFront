@@ -9,7 +9,11 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { KakaoAPIService } from '../../services/KakaoAPIService';
+import {
+  KakaoLoginService,
+  MockKakaoLoginService,
+} from '../../services/KakaoLoginService';
+import { saveAuthTokens, saveProfileId } from '../../utils/AuthUtils';
 import AgeRestrictionModal from '../../components/login/AgeRestrictionModal';
 
 interface KakaoLoginScreenProps {
@@ -25,44 +29,84 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
   const [showAgeRestrictionModal, setShowAgeRestrictionModal] = useState(false);
 
   const handleKakaoLogin = async () => {
+    if (isLoading) return;
+
     try {
       setIsLoading(true);
+      console.log('카카오 로그인 시작');
 
-      // Mock 데이터 사용 (백엔드 API 연동 전까지)
-      const response = await KakaoAPIService.mockKakaoLogin();
+      let result;
 
-      const { nextStep, userData } =
-        KakaoAPIService.handleLoginResponse(response);
+      // 실제 카카오 로그인 사용
+      console.log('실제 카카오 로그인 사용');
+      result = await KakaoLoginService.performKakaoLogin();
 
-      switch (nextStep) {
+      // 사용자가 취소한 경우 (null 반환)
+      if (result === null) {
+        console.log('사용자가 카카오 로그인을 취소했습니다.');
+        return; // 조용히 종료 - 에러 메시지 표시하지 않음
+      }
+
+      console.log('카카오 로그인 결과:', result);
+
+      // 결과에 따라 처리
+      switch (result.nextStep) {
         case 'home':
-          // 기존 회원 - 토큰 저장 후 홈 화면으로
-          onLoginSuccess(userData);
+          // 기존 회원 - 토큰 저장 후 홈으로
+          if (result.userData.accessToken && result.userData.refreshToken) {
+            await saveAuthTokens(
+              result.userData.accessToken,
+              result.userData.refreshToken,
+            );
+          }
+
+          Alert.alert(
+            '로그인 성공',
+            `${result.userData.nickname}님, 환영합니다!`,
+            [
+              {
+                text: '확인',
+                onPress: () => onLoginSuccess(result.userData),
+              },
+            ],
+          );
           break;
 
         case 'signup':
           // 신규 사용자 - 회원가입 진행
-          onSignupRequired(userData.kakaoUserInfo);
+          if (result.userData.kakaoUserInfo.profileId) {
+            await saveProfileId(result.userData.kakaoUserInfo.profileId);
+          }
+
+          console.log('신규 사용자 - 회원가입 진행');
+          onSignupRequired(result.userData.kakaoUserInfo);
           break;
 
         case 'ageRestricted':
-          // 연령 제한 - 모달 표시 (바로 종료하지 않음)
+          // 연령 제한 - 모달 표시
+          console.log('연령 제한 사용자');
           setShowAgeRestrictionModal(true);
           break;
+
+        default:
+          throw new Error('알 수 없는 결과 타입');
       }
     } catch (error) {
       console.error('카카오 로그인 오류:', error);
-      Alert.alert(
-        '로그인 실패',
-        '로그인 중 오류가 발생했습니다. 다시 시도해주세요.',
-      );
+
+      // 사용자 취소가 아닌 실제 오류만 표시
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : '로그인 중 오류가 발생했습니다. 다시 시도해주세요.';
+
+      Alert.alert('로그인 실패', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleAgeRestrictionClose = () => {
-    // 팝업을 먼저 닫고, 앱 종료는 모달 내부의 버튼에서 처리
     setShowAgeRestrictionModal(false);
   };
 
@@ -70,9 +114,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#87CEEB" />
 
-      {/* 스플래시와 동일한 배경 */}
       <View style={styles.backgroundContainer}>
-        {/* 카카오 로그인 버튼만 중앙에 배치 */}
         <View style={styles.loginContainer}>
           <TouchableOpacity
             style={[
@@ -94,6 +136,13 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
               )}
             </View>
           </TouchableOpacity>
+
+          {/* 개발 모드 표시 */}
+          {__DEV__ && (
+            <Text style={styles.devModeText}>
+              개발 모드: 카카오 SDK 실패시 Mock 데이터 사용
+            </Text>
+          )}
         </View>
       </View>
 
@@ -112,11 +161,11 @@ const styles = StyleSheet.create({
   },
   backgroundContainer: {
     flex: 1,
-    backgroundColor: '#87CEEB', // 스플래시와 동일한 배경색
+    backgroundColor: '#87CEEB',
   },
   loginContainer: {
     position: 'absolute',
-    bottom: 200, // 화면 하단에서 200px 위
+    bottom: 200,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -136,7 +185,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   kakaoButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
+    backgroundColor: '#F0F0F0',
   },
   kakaoButtonContent: {
     flexDirection: 'row',
@@ -153,6 +203,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  devModeText: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    opacity: 0.8,
   },
 });
 

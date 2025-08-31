@@ -1,3 +1,4 @@
+// src/screens/DatingQuestionsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -27,6 +28,12 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
   const [idealDate, setIdealDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const [isMeaningOfLoveFocused, setIsMeaningOfLoveFocused] = useState(false);
+  const [isSoulFoodFocused, setIsSoulFoodFocused] = useState(false);
+  const [isDailyAndHolidayFocused, setIsDailyAndHolidayFocused] =
+    useState(false);
+  const [isIdealDateFocused, setIsIdealDateFocused] = useState(false);
+
   const characterLimit = 30;
 
   useEffect(() => {
@@ -38,83 +45,126 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
   }, []);
 
   const isFormValid = () => {
-    // 모든 필드가 선택 질문이므로, 필수 입력 체크는 필요에 따라 조정
-    // 현재는 모든 필드가 비어있지 않아야 유효한 것으로 간주
-    return (
-      meaningOfLove.trim().length > 0 &&
-      soulFood.trim().length > 0 &&
-      dailyAndHoliday.trim().length > 0 &&
-      idealDate.trim().length > 0
-    );
+    return true; // 모든 질문이 선택 사항이므로
   };
 
   const handleSubmit = async () => {
-    // if (!isFormValid()) {
-    //   Alert.alert('알림', '모든 항목을 입력해주세요.');
-    //   return;
-    // }
+    if (isLoading || !profileId) {
+      Alert.alert('오류', '잠시 후 다시 시도해주세요.');
+      return;
+    }
 
-    // if (isLoading || !profileId) {
-    //   Alert.alert('오류', '잠시 후 다시 시도해주세요.');
-    //   return;
-    // }
+    setIsLoading(true);
 
-    // setIsLoading(true);
+    // 각 입력의 글자수를 확인하여 포인트 계산
+    const completedAnswers = [
+      meaningOfLove.trim().length >= characterLimit ? 'meaningOfLove' : null,
+      soulFood.trim().length >= characterLimit ? 'soulFood' : null,
+      dailyAndHoliday.trim().length >= characterLimit
+        ? 'dailyAndHoliday'
+        : null,
+      idealDate.trim().length >= characterLimit ? 'idealDate' : null,
+    ].filter(Boolean);
 
-    // const questionsData = {
-    //   profileId: profileId,
-    //   optionalAnswers: {
-    //     meaningOfLove: meaningOfLove.trim() || undefined,
-    //     soulFood: soulFood.trim() || undefined,
-    //     dailyAndHoliday: dailyAndHoliday.trim() || undefined,
-    //     idealDate: idealDate.trim() || undefined,
-    //   },
-    // };
+    const pointsEarned = completedAnswers.length * 15; // 각 완료된 답변당 15포인트
 
-    // try {
-    //   const response = await apiClient.post(
-    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-    //     questionsData,
-    //   );
+    const questionsData = {
+      profileId: profileId,
+      optionalAnswers: {
+        meaningOfLove:
+          meaningOfLove.trim().length >= characterLimit
+            ? meaningOfLove.trim()
+            : undefined,
+        soulFood:
+          soulFood.trim().length >= characterLimit
+            ? soulFood.trim()
+            : undefined,
+        dailyAndHoliday:
+          dailyAndHoliday.trim().length >= characterLimit
+            ? dailyAndHoliday.trim()
+            : undefined,
+        idealDate:
+          idealDate.trim().length >= characterLimit
+            ? idealDate.trim()
+            : undefined,
+      },
+      pointsEarned: pointsEarned,
+    };
 
-    //   if (response.data.success) {
-    //     Alert.alert('질문 답변 완료', '다음 단계로 진행합니다.', [
-    //       { text: '확인', onPress: onQuestionsComplete },
-    //     ]);
-    //   } else {
-    //     Alert.alert(
-    //       '오류',
-    //       response.data.message || '질문 답변 저장 중 문제가 발생했습니다.',
-    //     );
-    //   }
-    // } catch (error) {
-    //   console.error('연애 질문 설정 API 오류:', error);
-    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    // } finally {
-    //   setIsLoading(false);
-    // }
-    onQuestionsComplete();
+    try {
+      const response = await apiClient.post(
+        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+        questionsData,
+      );
+
+      if (response.data.success) {
+        const message =
+          pointsEarned > 0
+            ? `선택 질문을 완료했습니다! ${pointsEarned} 포인트를 획득했습니다.`
+            : '선택 질문을 건너뜁니다.';
+
+        Alert.alert('질문 답변 완료', message, [
+          { text: '확인', onPress: onQuestionsComplete },
+        ]);
+      } else {
+        Alert.alert(
+          '오류',
+          response.data.message || '질문 답변 저장 중 문제가 발생했습니다.',
+        );
+      }
+    } catch (error) {
+      console.error('연애 질문 설정 API 오류:', error);
+      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const renderCharacterCountMessage = (currentLength: number) => {
+    const isUnderLimit = currentLength < characterLimit;
+    const message = `${characterLimit}자 이상 입력해주세요`;
+    return (
+      isUnderLimit && (
+        <Text style={[styles.characterCount, styles.characterCountError]}>
+          {message}
+        </Text>
+      )
+    );
   };
 
   const renderQuestionInput = (
     question: string,
     value: string,
     onChangeText: (text: string) => void,
+    isFocused: boolean,
+    onFocus: () => void,
+    onBlur: () => void,
   ) => (
     <View style={styles.section}>
-      <Text style={styles.questionText}>{question}</Text>
-      <View style={styles.answerContainer}>
+      <Text style={styles.questionText}>{question} (선택)</Text>
+      <View
+        style={[
+          styles.answerContainer,
+          isFocused ? styles.answerContainerFocused : null,
+        ]}
+      >
         <TextInput
           style={styles.answerInput}
-          placeholder="답변을 입력해주세요"
+          placeholder="입력 완료 시 15 포인트 팅 지급!"
           placeholderTextColor="#999"
           value={value}
           onChangeText={onChangeText}
           maxLength={characterLimit}
+          textAlignVertical="top"
+          onFocus={onFocus}
+          onBlur={onBlur}
         />
-        <Text style={styles.characterCount}>
-          {value.length}/{characterLimit}자
-        </Text>
+        <View style={styles.characterCountContainer}>
+          <Text style={styles.characterCount}>
+            {value.length}/{characterLimit}자
+          </Text>
+          {renderCharacterCountMessage(value.length)}
+        </View>
       </View>
     </View>
   );
@@ -128,9 +178,12 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.stepNumber}>3</Text>
-            <Text style={styles.title}>선택 질문</Text>
+            <Text style={styles.title}>
+              선택 질문들
+              <Text style={styles.titleSub}> (서술형)</Text>
+            </Text>
             <Text style={styles.subtitle}>
-              추가 질문은 프로필에 노출 정보를 선택할 수 있어요!
+              추가 질문을 완료하면 추가 팅을 받을 수 있어요!
             </Text>
           </View>
 
@@ -138,19 +191,38 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
             '나에게 연애란?',
             meaningOfLove,
             setMeaningOfLove,
+            isMeaningOfLoveFocused,
+            () => setIsMeaningOfLoveFocused(true),
+            () => setIsMeaningOfLoveFocused(false),
           )}
 
-          {renderQuestionInput('나의 소울 푸드는?', soulFood, setSoulFood)}
+          {renderQuestionInput(
+            '나의 소울 푸드는?',
+            soulFood,
+            setSoulFood,
+            isSoulFoodFocused,
+            () => setIsSoulFoodFocused(true),
+            () => setIsSoulFoodFocused(false),
+          )}
 
           {renderQuestionInput(
             '나의 하루, 그리고 나의 휴일은?',
             dailyAndHoliday,
             setDailyAndHoliday,
+            isDailyAndHolidayFocused,
+            () => setIsDailyAndHolidayFocused(true),
+            () => setIsDailyAndHolidayFocused(false),
           )}
 
-          {renderQuestionInput('하고 싶은 데이트는?', idealDate, setIdealDate)}
+          {renderQuestionInput(
+            '하고 싶은 데이트는?',
+            idealDate,
+            setIdealDate,
+            isIdealDateFocused,
+            () => setIsIdealDateFocused(true),
+            () => setIsIdealDateFocused(false),
+          )}
 
-          {/* 제출 버튼 */}
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -159,7 +231,7 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
                 : styles.submitButtonDisabled,
             ]}
             onPress={handleSubmit}
-            disabled={!isFormValid() || isLoading}
+            disabled={isLoading}
           >
             <Text
               style={[
@@ -203,12 +275,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
-    marginBottom: 10,
+    marginBottom: 5,
     textAlign: 'center',
+  },
+  titleSub: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: 'normal',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666666',
+    color: '#FF6B6B',
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -225,20 +302,35 @@ const styles = StyleSheet.create({
   answerContainer: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     padding: 15,
+  },
+  answerContainerFocused: {
+    borderColor: '#FF6B6B',
   },
   answerInput: {
     fontSize: 16,
     color: '#333333',
     minHeight: 50,
     textAlignVertical: 'top',
-    paddingVertical: 10,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  characterCountContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 5,
   },
   characterCount: {
     fontSize: 12,
-    color: '#FF6B6B',
+    color: '#999',
     textAlign: 'right',
-    marginTop: 5,
+  },
+  characterCountError: {
+    color: '#FF6B6B',
+    marginLeft: 10,
   },
   submitButton: {
     paddingVertical: 16,

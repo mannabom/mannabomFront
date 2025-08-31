@@ -11,6 +11,16 @@ export type RootStackParamList = {
   SelfIntroduction: undefined;
   DatingQuestions: undefined;
   PersonalityTest: undefined;
+
+  // 새로 추가된 회원가입 화면들
+  PhotoUpload: undefined;
+  TermsAgreement: undefined;
+  TermsDetail: {
+    termType: 'service' | 'privacy' | 'marketing';
+  };
+  Congratulations: undefined;
+
+  // 홈 관련 화면들
   Home: undefined;
   MyPage: undefined;
   ProfileDetail: undefined;

@@ -1,69 +1,58 @@
+// src/components/common/PersonalityQuestion.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { RelationshipChoice, RelationshipChoices } from '../../types/Profile';
 import { Question } from '../../constants/personalityQuestions';
 
-interface Props {
+interface PersonalityQuestionProps {
   question: Question;
-  index: number;
-  selected?: RelationshipChoice;
-  onSelect: (id: keyof RelationshipChoices, value: RelationshipChoice) => void;
+  selected: RelationshipChoice | undefined;
+  onSelect: (
+    questionId: keyof RelationshipChoices,
+    value: RelationshipChoice,
+  ) => void;
 }
 
-const PersonalityQuestion: React.FC<Props> = ({
+const PersonalityQuestion: React.FC<PersonalityQuestionProps> = ({
   question,
-  index,
   selected,
   onSelect,
 }) => {
   return (
-    <View style={styles.container}>
-      {/* 질문 */}
-      <Text style={styles.questionText}>{question.question}</Text>
-
-      {/* 옵션 2개 + vs */}
-      <View style={styles.optionsRow}>
-        {/* 첫 번째 옵션 */}
+    <View style={styles.questionContainer}>
+      <Text style={styles.questionText}>
+        {question.question}
+        <Text style={styles.subText}> (선택시 5포인트 팅)</Text>
+      </Text>
+      <View style={styles.optionsContainer}>
         <TouchableOpacity
           style={[
             styles.optionButton,
-            selected === question.choiceEnum[0]
-              ? styles.optionSelected
-              : styles.optionDefault,
+            selected === question.choiceEnum[0] && styles.optionButtonSelected,
           ]}
           onPress={() => onSelect(question.id, question.choiceEnum[0])}
         >
           <Text
             style={[
               styles.optionText,
-              selected === question.choiceEnum[0]
-                ? styles.optionTextSelected
-                : styles.optionTextDefault,
+              selected === question.choiceEnum[0] && styles.optionTextSelected,
             ]}
           >
             {question.options[0]}
           </Text>
         </TouchableOpacity>
-
-        {/* vs */}
         <Text style={styles.vsText}>vs</Text>
-
-        {/* 두 번째 옵션 */}
         <TouchableOpacity
           style={[
             styles.optionButton,
-            selected === question.choiceEnum[1]
-              ? styles.optionSelected
-              : styles.optionDefault,
+            selected === question.choiceEnum[1] && styles.optionButtonSelected,
           ]}
           onPress={() => onSelect(question.id, question.choiceEnum[1])}
         >
           <Text
             style={[
               styles.optionText,
-              selected === question.choiceEnum[1]
-                ? styles.optionTextSelected
-                : styles.optionTextDefault,
+              selected === question.choiceEnum[1] && styles.optionTextSelected,
             ]}
           >
             {question.options[1]}
@@ -75,58 +64,53 @@ const PersonalityQuestion: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 25,
+  questionContainer: {
+    marginBottom: 20,
+    paddingVertical: 10,
   },
   questionText: {
-    fontFamily: 'Inter 18pt SemiBold',
     fontSize: 16,
-    fontWeight: '600',
-    lineHeight: 21,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
     textAlign: 'center',
-    marginBottom: 10,
   },
-  vsText: {
-    marginHorizontal: 8,
-    fontFamily: 'Inter-Regular',
-    fontWeight: '400',
-    fontSize: 16,
-    lineHeight: Math.round(16 * 1.31),
-    letterSpacing: 0,
-    fontStyle: 'normal',
-    color: '#02113C',
+  subText: {
+    fontSize: 14,
+    fontWeight: 'normal',
+    color: '#FF6B6B',
   },
-
-  optionsRow: {
+  optionsContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   optionButton: {
-    width: 160,
-    height: 40,
-    borderRadius: 20,
+    flex: 1,
     borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 25,
+    paddingVertical: 12,
+    marginHorizontal: 5,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionDefault: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#B5B5B5',
   },
-  optionSelected: {
-    backgroundColor: '#FFCDCD',
-    borderColor: '#B5B5B5',
+  optionButtonSelected: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF6B6B',
   },
   optionText: {
     fontSize: 14,
+    color: '#333333',
     fontWeight: '500',
   },
-  optionTextDefault: {
-    color: '#000000',
-  },
   optionTextSelected: {
-    color: '#000000',
+    color: '#FFFFFF',
+  },
+  vsText: {
+    fontSize: 16,
+    color: '#999999',
+    marginHorizontal: 10,
   },
 });
 
