@@ -32,6 +32,11 @@ export const API_ENDPOINTS_LIST = {
 
   // 프로필 관련
   SAVE_PROFILE_RELATIONSHIP: '/profile/relationship',
+  PROFILE_PHOTOS: '/profile-photos', // 사진 업로드 엔드포인트
+
+  // 약관 관련
+  TERMS_CONTENT: '/api/signup/terms', // 약관 내용 조회
+  TERMS_AGREEMENT: '/terms-agreement', // 약관 동의
 
   // 사용자 관련
   USER_PROFILE: '/user/profile',

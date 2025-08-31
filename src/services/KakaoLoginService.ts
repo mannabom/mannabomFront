@@ -22,7 +22,7 @@ export class KakaoLoginService {
   static async performKakaoLogin(): Promise<{
     nextStep: 'home' | 'signup' | 'ageRestricted';
     userData?: any;
-  }> {
+  } | null> {
     try {
       console.log('카카오 로그인 시작');
 
@@ -64,8 +64,25 @@ export class KakaoLoginService {
       console.log('백엔드 로그인 응답:', response.data);
 
       return this.handleLoginResponse(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('카카오 로그인 오류:', error);
+
+      // 사용자 취소 에러 처리
+      if (error) {
+        const errorString = error.toString();
+        const errorMessage = error.message || '';
+
+        if (
+          errorString.includes('user cancelled') ||
+          errorString.includes('user canceled') ||
+          errorMessage.includes('cancelled') ||
+          errorMessage.includes('canceled')
+        ) {
+          console.log('사용자가 카카오 로그인을 취소했습니다.');
+          return null; // 취소한 경우 null 반환
+        }
+      }
+
       throw new Error('카카오 로그인에 실패했습니다. 다시 시도해주세요.');
     }
   }

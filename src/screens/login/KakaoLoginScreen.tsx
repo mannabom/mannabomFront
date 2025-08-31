@@ -41,6 +41,12 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
       console.log('실제 카카오 로그인 사용');
       result = await KakaoLoginService.performKakaoLogin();
 
+      // 사용자가 취소한 경우 (null 반환)
+      if (result === null) {
+        console.log('사용자가 카카오 로그인을 취소했습니다.');
+        return; // 조용히 종료 - 에러 메시지 표시하지 않음
+      }
+
       console.log('카카오 로그인 결과:', result);
 
       // 결과에 따라 처리
@@ -88,6 +94,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
     } catch (error) {
       console.error('카카오 로그인 오류:', error);
 
+      // 사용자 취소가 아닌 실제 오류만 표시
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -124,9 +131,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
               ) : (
                 <>
                   <Text style={styles.kakaoIcon}>💬</Text>
-                  <Text style={styles.kakaoButtonText}>
-                    {isLoading ? '로그인 중...' : '카카오 간편 로그인'}
-                  </Text>
+                  <Text style={styles.kakaoButtonText}>카카오 간편 로그인</Text>
                 </>
               )}
             </View>
