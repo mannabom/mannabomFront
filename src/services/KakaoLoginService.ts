@@ -38,20 +38,9 @@ export class KakaoLoginService {
         email: profile.email,
       });
 
-      // 3. 카카오 사용자 정보를 백엔드 형식으로 변환
-      const kakaoUserInfo: KakaoUserInfo = {
-        kakaoId: String(profile.id),
-        name: profile.nickname || '사용자',
-        email: profile.email,
-        birthYear: this.extractBirthYear(profile.birthday, profile.birthyear),
-        gender: this.mapKakaoGender(profile.gender),
-      };
-
-      // 4. 백엔드 서버로 카카오 로그인 요청
+      // 3. 백엔드 서버로 카카오 로그인 요청 (수정된 부분)
       const loginData: KakaoLoginRequestDto = {
-        authorizationCode: token.accessToken,
-        redirectUri: KAKAO_CONFIG.REDIRECT_URI,
-        kakaoUserInfo: kakaoUserInfo,
+        accessToken: token.accessToken, // authorizationCode 대신 accessToken 사용
       };
 
       console.log('백엔드 로그인 요청');

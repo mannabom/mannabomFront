@@ -1,10 +1,10 @@
 // src/config/kakao.ts
 export const KAKAO_CONFIG = {
   // 카카오 디벨로퍼스에서 받은 앱 키
-  KAKAO_APP_KEY: 'd2adb1b780d8c7260ffd12e0d6bf9640', // 실제 앱 키로 교체 필요
+  KAKAO_APP_KEY: '1dcde956df0ac717b794b42d7aa470d6',
 
   // 리다이렉트 URI (카카오 디벨로퍼스에서 설정한 것과 동일해야 함)
-  REDIRECT_URI: 'kakaod2adb1b780d8c7260ffd12e0d6bf9640://oauth',
+  REDIRECT_URI: 'kakao1dcde956df0ac717b794b42d7aa470d6://oauth',
 };
 
 // 개발용 Mock 설정

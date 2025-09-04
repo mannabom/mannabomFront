@@ -40,6 +40,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       // 실제 카카오 로그인 사용
       result = await KakaoLoginService.performKakaoLogin();
 
+      if (result === null) {
+        console.log('사용자가 카카오 로그인을 취소했습니다.');
+        return; // 조용히 종료
+      }
+
       console.log('카카오 로그인 결과:', result);
 
       switch (result.nextStep) {

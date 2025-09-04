@@ -28,6 +28,8 @@ export const API_ENDPOINTS_LIST = {
   EMAIL_VERIFICATION: '/auth/email/send',
   EMAIL_VERIFY: '/auth/email/verify',
   NICKNAME_CHECK: '/auth/nickname/check',
+  SET_NICKNAME: '/set-nickname',
+  SIGNUP_COMPLETE: '/complete',
   REGISTER: '/auth/register', // 이 엔드포인트는 실제 회원가입 완료 시 사용될 것
 
   // 프로필 관련

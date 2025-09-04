@@ -1,5 +1,5 @@
 // src/screens/login/CongratulationsScreen.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,18 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
+import { getProfileId, saveAuthTokens } from '../../utils/AuthUtils';
+import {
+  SignupCompleteRequestDto,
+  SignupCompleteResponseDto,
+} from '../../types/NicknameAPI';
 
 interface CongratulationsScreenProps {
-  onComplete: () => void;
+  onComplete: (userData: any) => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -18,6 +26,9 @@ const { width, height } = Dimensions.get('window');
 const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
   onComplete,
 }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [initialPoints, setInitialPoints] = useState(100); // 기본값
+
   // 배경 도형들을 위한 랜덤 위치와 색상
   const backgroundShapes = [
     // 컬러풀한 작은 도형들
@@ -143,6 +154,70 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     },
   ];
 
+  const handleCompleteSignup = async () => {
+    try {
+      setIsLoading(true);
+
+      // 저장된 profileId 가져오기
+      const profileId = await getProfileId();
+      if (!profileId) {
+        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+      }
+
+      // 회원가입 완료 API 호출
+      const requestData: SignupCompleteRequestDto = {
+        profileId,
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData),
+        },
+      );
+
+      const responseData: SignupCompleteResponseDto = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          responseData.message || '회원가입 완료 중 오류가 발생했습니다.',
+        );
+      }
+
+      // 토큰 저장
+      await saveAuthTokens(
+        responseData.data.accessToken,
+        responseData.data.refreshToken,
+      );
+
+      // 포인트 정보 업데이트
+      setInitialPoints(responseData.data.initialPoints);
+
+      // 완료 처리
+      const userData = {
+        userId: responseData.data.userId,
+        accessToken: responseData.data.accessToken,
+        refreshToken: responseData.data.refreshToken,
+        initialPoints: responseData.data.initialPoints,
+      };
+
+      onComplete(userData);
+    } catch (error) {
+      console.error('회원가입 완료 오류:', error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : '회원가입 완료 중 오류가 발생했습니다.';
+      Alert.alert('오류', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const renderShape = (shape: any, index: number) => {
     const shapeStyle = {
       position: 'absolute' as const,
@@ -211,7 +286,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
 
           <View style={styles.pointContainer}>
             <Text style={styles.pointMainText}>포인트링</Text>
-            <Text style={styles.pointAmountText}>100P 지급!</Text>
+            <Text style={styles.pointAmountText}>{initialPoints}P 지급!</Text>
           </View>
 
           <View style={styles.detailsContainer}>
@@ -234,8 +309,19 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
           </View>
         </View>
 
-        <TouchableOpacity style={styles.confirmButton} onPress={onComplete}>
-          <Text style={styles.confirmButtonText}>확인</Text>
+        <TouchableOpacity
+          style={[
+            styles.confirmButton,
+            isLoading && styles.confirmButtonDisabled,
+          ]}
+          onPress={handleCompleteSignup}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.confirmButtonText}>확인</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -335,6 +421,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
   },
   confirmButtonText: {
     fontSize: 18,

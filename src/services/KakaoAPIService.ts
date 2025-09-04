@@ -3,35 +3,34 @@ import {
   KakaoLoginRequestDto,
   KakaoLoginResponseDto,
   UserStatus,
+  Gender,
 } from '../types/KakaoAPI';
-
-// 임시로 직접 설정 (config 파일 생성 전까지)
-const API_BASE_URL = 'http://localhost:8080'; // 백엔드 로컬 서버
-const KAKAO_LOGIN_ENDPOINT = '/login/kakao';
+import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
 
 export class KakaoAPIService {
   /**
-   * 카카오 로그인 API 호출
+   * 카카오 로그인 API 호출 (수정된 부분)
    */
   static async loginWithKakao(
-    authorizationCode: string,
-    redirectUri: string,
+    accessToken: string, // authorizationCode 대신 accessToken 사용
   ): Promise<KakaoLoginResponseDto> {
     try {
       const requestData: KakaoLoginRequestDto = {
-        authorizationCode,
-        redirectUri,
+        accessToken, // 수정된 부분
       };
 
       console.log('카카오 로그인 API 호출:', requestData);
 
-      const response = await fetch(`${API_BASE_URL}${KAKAO_LOGIN_ENDPOINT}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS_LIST.KAKAO_LOGIN}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData),
         },
-        body: JSON.stringify(requestData),
-      });
+      );
 
       const responseData: KakaoLoginResponseDto = await response.json();
 
@@ -95,12 +94,12 @@ export class KakaoAPIService {
 
   /**
    * 임시 카카오 로그인 (SDK 연동 전까지 사용)
-   * 실제로는 카카오 SDK에서 authorizationCode를 받아와야 함
+   * 수정된 부분: accessToken으로 변경
    */
   static async mockKakaoLogin(): Promise<KakaoLoginResponseDto> {
-    // 실제로는 카카오 SDK 연동 필요
+    // 실제로는 카카오 SDK에서 accessToken을 받아와야 함
     // const result = await KakaoLogin.login();
-    // return this.loginWithKakao(result.authorizationCode, REDIRECT_URI);
+    // return this.loginWithKakao(result.accessToken);
 
     // 임시 Mock 데이터
     const mockResponses = [
@@ -124,8 +123,9 @@ export class KakaoAPIService {
           kakaoUserInfo: {
             kakaoId: '12345',
             name: '김신규',
+            email: 'test@example.com',
             birthYear: 2000,
-            gender: 'MALE' as const,
+            gender: Gender.MALE,
             profileId: 'eeeeee',
           },
         },

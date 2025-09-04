@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">mannabomfront</string>
+    <string name="app_name">Mannabom</string>
+    <string name="kakao_app_key">1dcde956df0ac717b794b42d7aa470d6</string>
 </resources>

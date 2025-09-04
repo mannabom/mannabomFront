@@ -8,7 +8,14 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
+import { getProfileId } from '../../utils/AuthUtils';
+import {
+  SetNicknameRequestDto,
+  SetNicknameResponseDto,
+} from '../../types/NicknameAPI';
 
 interface NicknameScreenProps {
   onNicknameComplete: () => void;
@@ -20,6 +27,8 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
   const [nickname, setNickname] = useState('');
   const [isNicknameValid, setIsNicknameValid] = useState(false);
   const [nicknameError, setNicknameError] = useState('');
+  const [isDuplicateChecked, setIsDuplicateChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const validateNickname = (text: string) => {
     // 닉네임 검증 로직: 2-14자, 한글/영문/숫자 허용
@@ -29,6 +38,7 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
 
   const handleNicknameChange = (text: string) => {
     setNickname(text);
+    setIsDuplicateChecked(false); // 닉네임이 변경되면 중복 확인 초기화
 
     if (text.length === 0) {
       setNicknameError('');
@@ -54,45 +64,113 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
       return;
     }
 
-    // 실제로는 닉네임 중복 검사 API 호출
     try {
-      // 임시 중복 검사 로직
-      const isDuplicate = Math.random() > 0.7; // 30% 확률로 중복
+      setIsLoading(true);
 
-      if (isDuplicate) {
+      // 닉네임 중복 검사 API 호출
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS_LIST.NICKNAME_CHECK}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ nickname }),
+        },
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          responseData.message || '중복 검사 중 오류가 발생했습니다.',
+        );
+      }
+
+      if (responseData.isDuplicate) {
         Alert.alert('중복', '이미 사용 중인 닉네임입니다.');
         setNicknameError('*이미 사용 중인 닉네임입니다.');
         setIsNicknameValid(false);
+        setIsDuplicateChecked(false);
       } else {
         Alert.alert('확인', '사용 가능한 닉네임입니다!');
+        setIsDuplicateChecked(true);
       }
     } catch (error) {
+      console.error('닉네임 중복 검사 오류:', error);
       Alert.alert('오류', '중복 검사 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleComplete = () => {
-    if (!isNicknameValid) {
-      Alert.alert('오류', '닉네임을 확인해주세요.');
+  const handleComplete = async () => {
+    if (!isNicknameValid || !isDuplicateChecked) {
+      Alert.alert('오류', '닉네임 중복 확인을 완료해주세요.');
       return;
     }
 
-    Alert.alert(
-      '닉네임 설정 완료',
-      `"${nickname}" 닉네임으로 설정하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
+    try {
+      setIsLoading(true);
+
+      // 저장된 profileId 가져오기
+      const profileId = await getProfileId();
+      if (!profileId) {
+        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+      }
+
+      // 닉네임 설정 API 호출
+      const requestData: SetNicknameRequestDto = {
+        profileId,
+        nickname,
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS_LIST.SET_NICKNAME}`,
         {
-          text: '확인',
-          onPress: () => {
-            // 닉네임 저장 로직
-            console.log('닉네임 설정:', nickname);
-            onNicknameComplete();
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify(requestData),
         },
-      ],
-    );
+      );
+
+      const responseData: SetNicknameResponseDto = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          responseData.message || '닉네임 설정 중 오류가 발생했습니다.',
+        );
+      }
+
+      Alert.alert(
+        '완료',
+        `${responseData.message || '닉네임이 설정되었습니다.'}`,
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              console.log('닉네임 설정 완료:', nickname);
+              onNicknameComplete();
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('닉네임 설정 오류:', error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : '닉네임 설정 중 오류가 발생했습니다.';
+      Alert.alert('오류', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const isCompleteButtonEnabled =
+    isNicknameValid && isDuplicateChecked && !isLoading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,34 +188,41 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
               maxLength={14}
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isLoading}
             />
             <View style={styles.inputActions}>
               <TouchableOpacity
                 style={[
                   styles.duplicateButton,
-                  isNicknameValid
+                  isNicknameValid && !isLoading
                     ? styles.duplicateButtonActive
                     : styles.duplicateButtonDisabled,
                 ]}
                 onPress={handleCheckDuplicate}
-                disabled={!isNicknameValid}
+                disabled={!isNicknameValid || isLoading}
               >
-                <Text
-                  style={[
-                    styles.duplicateButtonText,
-                    isNicknameValid
-                      ? styles.duplicateButtonTextActive
-                      : styles.duplicateButtonTextDisabled,
-                  ]}
-                >
-                  중복 확인
-                </Text>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.duplicateButtonText,
+                      isNicknameValid && !isLoading
+                        ? styles.duplicateButtonTextActive
+                        : styles.duplicateButtonTextDisabled,
+                    ]}
+                  >
+                    중복 확인
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
 
           {nicknameError ? (
             <Text style={styles.errorText}>{nicknameError}</Text>
+          ) : isDuplicateChecked ? (
+            <Text style={styles.successText}>✓ 사용 가능한 닉네임입니다</Text>
           ) : (
             <Text style={styles.helperText}>
               *닉네임은 한글 또는 영어, 2~14자 사이어야 합니다.
@@ -149,23 +234,27 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
           <TouchableOpacity
             style={[
               styles.completeButton,
-              isNicknameValid
+              isCompleteButtonEnabled
                 ? styles.completeButtonActive
                 : styles.completeButtonDisabled,
             ]}
             onPress={handleComplete}
-            disabled={!isNicknameValid}
+            disabled={!isCompleteButtonEnabled}
           >
-            <Text
-              style={[
-                styles.completeButtonText,
-                isNicknameValid
-                  ? styles.completeButtonTextActive
-                  : styles.completeButtonTextDisabled,
-              ]}
-            >
-              설정하기
-            </Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text
+                style={[
+                  styles.completeButtonText,
+                  isCompleteButtonEnabled
+                    ? styles.completeButtonTextActive
+                    : styles.completeButtonTextDisabled,
+                ]}
+              >
+                설정하기
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -236,6 +325,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#FF6B6B',
+    fontSize: 12,
+    marginTop: 5,
+    marginLeft: 5,
+  },
+  successText: {
+    color: '#4ECDC4',
     fontSize: 12,
     marginTop: 5,
     marginLeft: 5,

@@ -21,10 +21,9 @@ export interface KakaoUserInfo {
   profileId?: string;
 }
 
+// 수정된 DTO: accessToken만 전송
 export interface KakaoLoginRequestDto {
-  authorizationCode: string; // 카카오 OAuth에서 받은 인증 코드
-  redirectUri: string; // 앱의 리다이렉트 URI
-  kakaoUserInfo?: KakaoUserInfo; // 카카오 사용자 정보 (필요시)
+  accessToken: string; // 카카오 OAuth에서 받은 accessToken
 }
 
 export interface KakaoLoginResponseDto {
