@@ -18,6 +18,11 @@ import {
   Question,
 } from '../../constants/personalityQuestions';
 import PersonalityQuestion from '../../components/profile/PersonalityQuestion';
+import {
+  saveRelationshipChoices,
+  RelationshipChoicesData,
+  getCombinedProfileData,
+} from '../../utils/ProfileStorage';
 
 // 'RelationshipChoices' 인터페이스를 여기에 정의하여 타입 오류를 해결합니다.
 export interface RelationshipChoices {
@@ -72,21 +77,37 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
 
     setIsLoading(true);
 
-    const pointsEarned = Object.keys(answers).length * 5;
-
-    const relationshipData = {
-      profileId: profileId,
-      relationshipChoices: answers as RelationshipChoices,
-      pointsEarned: pointsEarned,
-    };
-
     try {
+      // 1. 연애관 데이터를 AsyncStorage에 저장
+      const relationshipChoicesData: RelationshipChoicesData = {
+        conflictResolution: answers.conflictResolution!,
+        photoSharing: answers.photoSharing!,
+        relationshipPriority: answers.relationshipPriority!,
+        datePlace: answers.datePlace!,
+        jealousyAttitude: answers.jealousyAttitude!,
+        idealDay: answers.idealDay!,
+        attraction: answers.attraction!,
+        friendInteraction: answers.friendInteraction!,
+      };
+
+      await saveRelationshipChoices(relationshipChoicesData);
+
+      // 2. 모든 저장된 데이터를 합치기
+      const combinedData = await getCombinedProfileData(profileId);
+
+      if (!combinedData) {
+        Alert.alert('오류', '저장된 프로필 데이터를 불러올 수 없습니다.');
+        return;
+      }
+
+      // 3. 최종 API 호출
       const response = await apiClient.post(
         API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        relationshipData,
+        combinedData,
       );
 
       if (response.data.success) {
+        const pointsEarned = Object.keys(answers).length * 5;
         Alert.alert(
           '성향 분석 완료',
           `총 ${pointsEarned} 포인트를 획득했습니다! 회원가입이 완료되었습니다.`,

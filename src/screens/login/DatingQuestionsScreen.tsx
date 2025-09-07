@@ -1,5 +1,5 @@
 // src/screens/DatingQuestionsScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
-import { API_ENDPOINTS_LIST } from '../../config/api';
+import {
+  saveOptionalAnswers,
+  OptionalAnswersData,
+} from '../../utils/ProfileStorage';
 
 interface DatingQuestionsScreenProps {
   onQuestionsComplete: () => void;
@@ -21,7 +22,6 @@ interface DatingQuestionsScreenProps {
 const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
   onQuestionsComplete,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [meaningOfLove, setMeaningOfLove] = useState('');
   const [soulFood, setSoulFood] = useState('');
   const [dailyAndHoliday, setDailyAndHoliday] = useState('');
@@ -36,41 +36,33 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
 
   const characterLimit = 30;
 
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      const id = await getProfileId();
-      setProfileId(id);
-    };
-    fetchProfileId();
-  }, []);
-
   const isFormValid = () => {
     return true; // 모든 질문이 선택 사항이므로
   };
 
   const handleSubmit = async () => {
-    if (isLoading || !profileId) {
+    if (isLoading) {
       Alert.alert('오류', '잠시 후 다시 시도해주세요.');
       return;
     }
 
     setIsLoading(true);
 
-    // 각 입력의 글자수를 확인하여 포인트 계산
-    const completedAnswers = [
-      meaningOfLove.trim().length >= characterLimit ? 'meaningOfLove' : null,
-      soulFood.trim().length >= characterLimit ? 'soulFood' : null,
-      dailyAndHoliday.trim().length >= characterLimit
-        ? 'dailyAndHoliday'
-        : null,
-      idealDate.trim().length >= characterLimit ? 'idealDate' : null,
-    ].filter(Boolean);
+    try {
+      // 각 입력의 글자수를 확인하여 포인트 계산
+      const completedAnswers = [
+        meaningOfLove.trim().length >= characterLimit ? 'meaningOfLove' : null,
+        soulFood.trim().length >= characterLimit ? 'soulFood' : null,
+        dailyAndHoliday.trim().length >= characterLimit
+          ? 'dailyAndHoliday'
+          : null,
+        idealDate.trim().length >= characterLimit ? 'idealDate' : null,
+      ].filter(Boolean);
 
-    const pointsEarned = completedAnswers.length * 15; // 각 완료된 답변당 15포인트
+      const pointsEarned = completedAnswers.length * 15; // 각 완료된 답변당 15포인트
 
-    const questionsData = {
-      profileId: profileId,
-      optionalAnswers: {
+      // AsyncStorage에 선택 질문 답변 저장
+      const questionsData: OptionalAnswersData = {
         meaningOfLove:
           meaningOfLove.trim().length >= characterLimit
             ? meaningOfLove.trim()
@@ -87,34 +79,21 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           idealDate.trim().length >= characterLimit
             ? idealDate.trim()
             : undefined,
-      },
-      pointsEarned: pointsEarned,
-    };
+      };
 
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        questionsData,
-      );
+      await saveOptionalAnswers(questionsData);
 
-      if (response.data.success) {
-        const message =
-          pointsEarned > 0
-            ? `선택 질문을 완료했습니다! ${pointsEarned} 포인트를 획득했습니다.`
-            : '선택 질문을 건너뜁니다.';
+      const message =
+        pointsEarned > 0
+          ? `선택 질문을 완료했습니다! ${pointsEarned} 포인트를 획득했습니다.`
+          : '선택 질문을 건너뜁니다.';
 
-        Alert.alert('질문 답변 완료', message, [
-          { text: '확인', onPress: onQuestionsComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '질문 답변 저장 중 문제가 발생했습니다.',
-        );
-      }
+      Alert.alert('질문 답변 완료', message, [
+        { text: '확인', onPress: onQuestionsComplete },
+      ]);
     } catch (error) {
-      console.error('연애 질문 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      console.error('선택 질문 저장 오류:', error);
+      Alert.alert('오류', '질문 답변 저장 중 문제가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }

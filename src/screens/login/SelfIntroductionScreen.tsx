@@ -10,9 +10,10 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
-import { API_ENDPOINTS_LIST } from '../../config/api';
+import {
+  saveSelfIntroduction,
+  SelfIntroductionData,
+} from '../../utils/ProfileStorage';
 
 interface SelfIntroductionScreenProps {
   onIntroductionComplete: () => void;
@@ -21,7 +22,6 @@ interface SelfIntroductionScreenProps {
 const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
   onIntroductionComplete,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [introduction, setIntroduction] = useState('');
   const [charm, setCharm] = useState('');
   const [ideal, setIdeal] = useState('');
@@ -35,14 +35,6 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
   const charmLimit = 30;
   const idealLimit = 30;
 
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      const id = await getProfileId();
-      setProfileId(id);
-    };
-    fetchProfileId();
-  }, []);
-
   const isFormValid = () => {
     return (
       introduction.trim().length >= introductionLimit &&
@@ -52,39 +44,29 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!isFormValid() || isLoading || !profileId) {
+    if (!isFormValid() || isLoading) {
       Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
       return;
     }
 
     setIsLoading(true);
 
-    const introductionData = {
-      profileId: profileId,
-      selfIntroduction: introduction.trim(),
-      attractivePartnerTrait: charm.trim(),
-      desiredPartnerTrait: ideal.trim(),
-    };
-
     try {
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-        introductionData,
-      );
+      // AsyncStorage에 자기소개 데이터 저장
+      const introductionData: SelfIntroductionData = {
+        selfIntroduction: introduction.trim(),
+        attractivePartnerTrait: charm.trim(),
+        desiredPartnerTrait: ideal.trim(),
+      };
 
-      if (response.data.success) {
-        Alert.alert('자기소개 작성 완료', '다음 단계로 진행합니다.', [
-          { text: '확인', onPress: onIntroductionComplete },
-        ]);
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '자기소개 저장 중 문제가 발생했습니다.',
-        );
-      }
+      await saveSelfIntroduction(introductionData);
+
+      Alert.alert('자기소개 작성 완료', '다음 단계로 진행합니다.', [
+        { text: '확인', onPress: onIntroductionComplete },
+      ]);
     } catch (error) {
-      console.error('자기소개 설정 API 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      console.error('자기소개 저장 오류:', error);
+      Alert.alert('오류', '자기소개 저장 중 문제가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }

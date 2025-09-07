@@ -12,7 +12,7 @@
         android:supportsRtl="true"
         android:networkSecurityConfig="@xml/network_security_config">
         
-        <!-- 카카오 앱 키 - 새로운 키로 수정 -->
+        <!-- 카카오 앱 키 -->
         <meta-data
             android:name="com.kakao.sdk.AppKey"
             android:value="1dcde956df0ac717b794b42d7aa470d6" />
@@ -30,7 +30,7 @@
             </intent-filter>
         </activity>
         
-        <!-- 카카오 로그인을 위한 Activity - 새로운 키로 수정 -->
+        <!-- 카카오 로그인을 위한 Activity -->
         <activity
             android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
             android:exported="true">

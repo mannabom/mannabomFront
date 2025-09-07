@@ -7,60 +7,330 @@ import {
   TouchableOpacity,
   SafeAreaView,
   TextInput,
+  Alert,
 } from 'react-native';
-
-import { getProfileId } from '../../utils/AuthUtils';
-import apiClient from '../../services/apiClient';
-import { SmokingHabit, DrinkingHabit } from '../../types/Profile';
-import { API_ENDPOINTS_LIST } from '../../config/api';
+import Slider from '@react-native-community/slider';
+import {
+  savePhysicalProfile,
+  PhysicalProfileData,
+} from '../../utils/ProfileStorage';
 
 interface ProfileSetupScreenProps {
   onProfileComplete: () => void;
 }
 
+// Enum 정의 (서버 스키마와 일치)
+enum BodyType {
+  SLIM = 'SLIM',
+  AVERAGE = 'AVERAGE',
+  CHUBBY = 'CHUBBY',
+}
+
+enum SmokingHabit {
+  NON_SMOKER = 'NON_SMOKER',
+  VAPE_ONLY = 'VAPE_ONLY',
+  REGULAR_SMOKER = 'REGULAR_SMOKER',
+}
+
+enum DrinkingHabit {
+  NON_DRINKER = 'NON_DRINKER',
+  OCCASIONAL_DRINKER = 'OCCASIONAL_DRINKER',
+  FREQUENT_DRINKER = 'FREQUENT_DRINKER',
+}
+
 const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onProfileComplete,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
-  const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
-  const [bodyType, setBodyType] = useState('');
+  const [bodyType, setBodyType] = useState<BodyType | ''>('');
   const [region, setRegion] = useState('');
   const [district, setDistrict] = useState('');
   const [selectedMBTI, setSelectedMBTI] = useState<string[]>(['', '', '', '']);
-  const [smoking, setSmoking] = useState<SmokingHabit | null>(null);
-  const [drinking, setDrinking] = useState<DrinkingHabit | null>(null);
-  const [gender, setGender] = useState(''); // gender 상태 추가
+  const [smoking, setSmoking] = useState<number>(0); // 0: 비흡연, 1: 전자담배, 2: 흡연
+  const [drinking, setDrinking] = useState<number>(0); // 0: 안마심, 1: 가끔, 2: 자주
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      const id = await getProfileId();
-      setProfileId(id);
-    };
-    fetchProfileId();
-  }, []);
+  // 드롭다운 상태
+  const [showBodyTypeDropdown, setShowBodyTypeDropdown] = useState(false);
+  const [showRegionDropdown, setShowRegionDropdown] = useState(false);
+  const [showDistrictDropdown, setShowDistrictDropdown] = useState(false);
 
-  const genderOptions = ['남성', '여성', '기타'];
-  const regionOptions = ['서울특별시', '경기도', '인천광역시', '부산광역시'];
-  const districtOptions: Record<string, string[]> = {
-    서울특별시: ['강남구', '서초구', '송파구', '강서구'],
-    경기도: ['수원시', '성남시', '고양시', '안양시'],
-    인천광역시: ['연수구', '남동구', '부평구', '서구'],
-    부산광역시: ['해운대구', '부산진구', '동래구', '서면구'],
-  };
-  const mbtiOptions = [
-    ['E', 'I'],
-    ['S', 'N'],
-    ['F', 'T'],
-    ['J', 'P'],
+  const bodyTypeOptions = [
+    { label: '마른', value: BodyType.SLIM },
+    { label: '보통', value: BodyType.AVERAGE },
+    { label: '통통', value: BodyType.CHUBBY },
   ];
-  const smokingOptions = [
+
+  // 대한민국 지역 데이터
+  const regionOptions = [
+    '서울특별시',
+    '부산광역시',
+    '대구광역시',
+    '인천광역시',
+    '광주광역시',
+    '대전광역시',
+    '울산광역시',
+    '세종특별자치시',
+    '경기도',
+    '강원특별자치도',
+    '충청북도',
+    '충청남도',
+    '전북특별자치도',
+    '전라남도',
+    '경상북도',
+    '경상남도',
+    '제주특별자치도',
+  ];
+
+  const districtOptions: Record<string, string[]> = {
+    서울특별시: [
+      '종로구',
+      '중구',
+      '용산구',
+      '성동구',
+      '광진구',
+      '동대문구',
+      '중랑구',
+      '성북구',
+      '강북구',
+      '도봉구',
+      '노원구',
+      '은평구',
+      '서대문구',
+      '마포구',
+      '양천구',
+      '강서구',
+      '구로구',
+      '금천구',
+      '영등포구',
+      '동작구',
+      '관악구',
+      '서초구',
+      '강남구',
+      '송파구',
+      '강동구',
+    ],
+    부산광역시: [
+      '중구',
+      '서구',
+      '동구',
+      '영도구',
+      '부산진구',
+      '동래구',
+      '남구',
+      '북구',
+      '해운대구',
+      '사하구',
+      '금정구',
+      '강서구',
+      '연제구',
+      '수영구',
+      '사상구',
+      '기장군',
+    ],
+    대구광역시: [
+      '중구',
+      '동구',
+      '서구',
+      '남구',
+      '북구',
+      '수성구',
+      '달서구',
+      '달성군',
+    ],
+    인천광역시: [
+      '중구',
+      '동구',
+      '미추홀구',
+      '연수구',
+      '남동구',
+      '부평구',
+      '계양구',
+      '서구',
+      '강화군',
+      '옹진군',
+    ],
+    광주광역시: ['동구', '서구', '남구', '북구', '광산구'],
+    대전광역시: ['동구', '중구', '서구', '유성구', '대덕구'],
+    울산광역시: ['중구', '남구', '동구', '북구', '울주군'],
+    세종특별자치시: ['세종시'],
+    경기도: [
+      '수원시',
+      '성남시',
+      '안양시',
+      '안산시',
+      '용인시',
+      '평택시',
+      '과천시',
+      '오산시',
+      '시흥시',
+      '군포시',
+      '의왕시',
+      '하남시',
+      '이천시',
+      '안성시',
+      '김포시',
+      '화성시',
+      '광주시',
+      '양주시',
+      '포천시',
+      '여주시',
+      '연천군',
+      '가평군',
+      '양평군',
+      '고양시',
+      '부천시',
+      '광명시',
+      '동두천시',
+      '구리시',
+      '남양주시',
+      '의정부시',
+      '파주시',
+    ],
+    강원특별자치도: [
+      '춘천시',
+      '원주시',
+      '강릉시',
+      '동해시',
+      '태백시',
+      '속초시',
+      '삼척시',
+      '홍천군',
+      '횡성군',
+      '영월군',
+      '평창군',
+      '정선군',
+      '철원군',
+      '화천군',
+      '양구군',
+      '인제군',
+      '고성군',
+      '양양군',
+    ],
+    충청북도: [
+      '청주시',
+      '충주시',
+      '제천시',
+      '보은군',
+      '옥천군',
+      '영동군',
+      '증평군',
+      '진천군',
+      '괴산군',
+      '음성군',
+      '단양군',
+    ],
+    충청남도: [
+      '천안시',
+      '공주시',
+      '보령시',
+      '아산시',
+      '서산시',
+      '논산시',
+      '계룡시',
+      '당진시',
+      '금산군',
+      '부여군',
+      '서천군',
+      '청양군',
+      '홍성군',
+      '예산군',
+      '태안군',
+    ],
+    전북특별자치도: [
+      '전주시',
+      '군산시',
+      '익산시',
+      '정읍시',
+      '남원시',
+      '김제시',
+      '완주군',
+      '진안군',
+      '무주군',
+      '장수군',
+      '임실군',
+      '순창군',
+      '고창군',
+      '부안군',
+    ],
+    전라남도: [
+      '목포시',
+      '여수시',
+      '순천시',
+      '나주시',
+      '광양시',
+      '담양군',
+      '곡성군',
+      '구례군',
+      '고흥군',
+      '보성군',
+      '화순군',
+      '장흥군',
+      '강진군',
+      '해남군',
+      '영암군',
+      '무안군',
+      '함평군',
+      '영광군',
+      '장성군',
+      '완도군',
+      '진도군',
+      '신안군',
+    ],
+    경상북도: [
+      '포항시',
+      '경주시',
+      '김천시',
+      '안동시',
+      '구미시',
+      '영주시',
+      '영천시',
+      '상주시',
+      '문경시',
+      '경산시',
+      '군위군',
+      '의성군',
+      '청송군',
+      '영양군',
+      '영덕군',
+      '청도군',
+      '고령군',
+      '성주군',
+      '칠곡군',
+      '예천군',
+      '봉화군',
+      '울진군',
+      '울릉군',
+    ],
+    경상남도: [
+      '창원시',
+      '진주시',
+      '통영시',
+      '사천시',
+      '김해시',
+      '밀양시',
+      '거제시',
+      '양산시',
+      '의령군',
+      '함안군',
+      '창녕군',
+      '고성군',
+      '남해군',
+      '하동군',
+      '산청군',
+      '함양군',
+      '거창군',
+      '합천군',
+    ],
+    제주특별자치도: ['제주시', '서귀포시'],
+  };
+
+  const smokingHabits = [
     SmokingHabit.NON_SMOKER,
     SmokingHabit.VAPE_ONLY,
     SmokingHabit.REGULAR_SMOKER,
   ];
-  const drinkingOptions = [
+  const drinkingHabits = [
     DrinkingHabit.NON_DRINKER,
     DrinkingHabit.OCCASIONAL_DRINKER,
     DrinkingHabit.FREQUENT_DRINKER,
@@ -72,74 +342,132 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setSelectedMBTI(newMBTI);
   };
 
-  const handleSmokingSelect = (value: SmokingHabit) => {
-    setSmoking(value);
-  };
-
-  const handleDrinkingSelect = (value: DrinkingHabit) => {
-    setDrinking(value);
-  };
-
   const isFormValid = () => {
     return (
-      age.length > 0 &&
       height.length > 0 &&
-      bodyType.length > 0 &&
-      gender.length > 0 && // gender 유효성 검사 추가
+      bodyType !== '' &&
       region.length > 0 &&
       district.length > 0 &&
-      selectedMBTI.every(item => item.length > 0) &&
-      smoking !== null &&
-      drinking !== null
+      selectedMBTI.every(item => item.length > 0)
     );
   };
 
   const handleSubmit = async () => {
-    // if (!isFormValid() || isLoading || !profileId) {
-    //   Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
-    //   return;
-    // }
-    // setIsLoading(true);
-    // const profileData = {
-    //   profileId: profileId,
-    //   height: parseInt(height, 10),
-    //   bodyType: bodyType,
-    //   region: {
-    //     sido: region,
-    //     sigungu: district,
-    //   },
-    //   mbti: selectedMBTI.join(''),
-    //   smokingHabit: smoking,
-    //   drinkingHabit: drinking,
-    //   // DTO에 없는 항목들은 제거 또는 빈 값으로 처리
-    //   selfIntroduction: '',
-    //   attractivePartnerTrait: '',
-    //   desiredPartnerTrait: '',
-    //   optionalAnswers: {},
-    //   relationshipChoices: {},
-    // };
-    // try {
-    //   const response = await apiClient.post(
-    //     API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
-    //     profileData,
-    //   );
-    //   if (response.data.success) {
-    //     Alert.alert('프로필 설정 완료', '다음 단계로 진행합니다.', [
-    //       { text: '확인', onPress: onProfileComplete },
-    //     ]);
-    //   } else {
-    //     Alert.alert(
-    //       '오류',
-    //       response.data.message || '프로필 설정 중 문제가 발생했습니다.',
-    //     );
-    //   }
-    // } catch (error) {
-    //   console.error('프로필 설정 API 오류:', error);
-    //   Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    // } finally {
-    //   setIsLoading(false);
-    // }
-    onProfileComplete();
+    if (!isFormValid() || isLoading) {
+      Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // AsyncStorage에 신체 프로필 데이터 저장
+      const profileData: PhysicalProfileData = {
+        height: parseInt(height, 10),
+        bodyType: bodyType as string,
+        region: {
+          sido: region,
+          sigungu: district,
+        },
+        mbti: selectedMBTI.join(''),
+        smokingHabit: smokingHabits[smoking],
+        drinkingHabit: drinkingHabits[drinking],
+      };
+
+      await savePhysicalProfile(profileData);
+
+      Alert.alert('신체 프로필 저장 완료', '다음 단계로 진행합니다.', [
+        { text: '확인', onPress: onProfileComplete },
+      ]);
+    } catch (error) {
+      console.error('프로필 저장 오류:', error);
+      Alert.alert('오류', '프로필 저장 중 문제가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getBodyTypeLabel = (value: BodyType | '') => {
+    const option = bodyTypeOptions.find(opt => opt.value === value);
+    return option ? option.label : '';
+  };
+
+  const renderDropdown = (
+    visible: boolean,
+    options: string[] | { label: string; value: string }[],
+    selectedValue: string,
+    onSelect: (value: string) => void,
+    onClose: () => void,
+  ) => {
+    if (!visible) return null;
+
+    return (
+      <View style={styles.dropdownMenu}>
+        <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
+          {options.slice(0, 4).map((option, index) => {
+            const isObjectArray = typeof option === 'object';
+            const label = isObjectArray ? option.label : option;
+            const value = isObjectArray ? option.value : option;
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.dropdownItem,
+                  selectedValue === value && styles.dropdownItemSelected,
+                ]}
+                onPress={() => {
+                  onSelect(value);
+                  onClose();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    selectedValue === value && styles.dropdownItemTextSelected,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {options.length > 4 && (
+            <ScrollView style={styles.scrollableItems} nestedScrollEnabled>
+              {options.slice(4).map((option, index) => {
+                const isObjectArray = typeof option === 'object';
+                const label = isObjectArray ? option.label : option;
+                const value = isObjectArray ? option.value : option;
+
+                return (
+                  <TouchableOpacity
+                    key={index + 4}
+                    style={[
+                      styles.dropdownItem,
+                      selectedValue === value && styles.dropdownItemSelected,
+                    ]}
+                    onPress={() => {
+                      onSelect(value);
+                      onClose();
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        selectedValue === value &&
+                          styles.dropdownItemTextSelected,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+        </ScrollView>
+      </View>
+    );
   };
 
   return (
@@ -151,73 +479,53 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         <View style={styles.content}>
           <Text style={styles.title}>신체 프로필</Text>
 
-          {/* 나이/키/몸무게 입력 섹션 */}
+          {/* 키와 체형을 같은 행에 배치 */}
           <View style={styles.section}>
-            <View style={styles.inputGroupContainer}>
-              {/* 나이 입력 */}
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
-                  placeholder="나이"
-                  value={age}
-                  onChangeText={setAge}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
-                <Text style={styles.unit}>세</Text>
-              </View>
-
+            <View style={styles.row}>
               {/* 키 입력 */}
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
-                  placeholder="키"
-                  value={height}
-                  onChangeText={setHeight}
-                  keyboardType="numeric"
-                  maxLength={3}
-                />
-                <Text style={styles.unit}>cm</Text>
+              <View style={styles.heightContainer}>
+                <Text style={styles.fieldLabel}>키</Text>
+                <View style={styles.inputGroup}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="키"
+                    value={height}
+                    onChangeText={setHeight}
+                    keyboardType="numeric"
+                    maxLength={3}
+                  />
+                  <Text style={styles.unit}>cm</Text>
+                </View>
               </View>
 
-              {/* 몸무게 입력 */}
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, styles.inputRightMargin]}
-                  placeholder="몸무게"
-                  value={bodyType}
-                  onChangeText={setBodyType}
-                  keyboardType="numeric"
-                  maxLength={3}
-                />
-                <Text style={styles.unit}>kg</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 성별 선택 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>성별</Text>
-            <View style={styles.genderContainer}>
-              {genderOptions.map(option => (
+              {/* 체형 선택 */}
+              <View style={styles.bodyTypeContainer}>
+                <Text style={styles.fieldLabel}>체형</Text>
                 <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.genderButton,
-                    gender === option && styles.genderButtonSelected,
-                  ]}
-                  onPress={() => setGender(option)}
+                  style={styles.dropdown}
+                  onPress={() => {
+                    setShowBodyTypeDropdown(!showBodyTypeDropdown);
+                    setShowRegionDropdown(false);
+                    setShowDistrictDropdown(false);
+                  }}
                 >
                   <Text
                     style={[
-                      styles.genderText,
-                      gender === option && styles.genderTextSelected,
+                      styles.dropdownText,
+                      !bodyType && styles.placeholder,
                     ]}
                   >
-                    {option}
+                    {getBodyTypeLabel(bodyType) || '체형'}
                   </Text>
                 </TouchableOpacity>
-              ))}
+                {renderDropdown(
+                  showBodyTypeDropdown,
+                  bodyTypeOptions,
+                  bodyType,
+                  value => setBodyType(value as BodyType),
+                  () => setShowBodyTypeDropdown(false),
+                )}
+              </View>
             </View>
           </View>
 
@@ -227,58 +535,62 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <View style={styles.row}>
               <View style={styles.regionContainer}>
                 <Text style={styles.dropdownLabel}>시/도</Text>
-                <View style={styles.dropdown}>
-                  {regionOptions.map(option => (
-                    <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.dropdownOption,
-                        region === option && styles.dropdownOptionSelected,
-                      ]}
-                      onPress={() => {
-                        setRegion(option);
-                        setDistrict('');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownOptionText,
-                          region === option &&
-                            styles.dropdownOptionTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <TouchableOpacity
+                  style={styles.dropdown}
+                  onPress={() => {
+                    setShowRegionDropdown(!showRegionDropdown);
+                    setShowBodyTypeDropdown(false);
+                    setShowDistrictDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[styles.dropdownText, !region && styles.placeholder]}
+                  >
+                    {region || '시/도'}
+                  </Text>
+                </TouchableOpacity>
+                {renderDropdown(
+                  showRegionDropdown,
+                  regionOptions,
+                  region,
+                  value => {
+                    setRegion(value);
+                    setDistrict('');
+                  },
+                  () => setShowRegionDropdown(false),
+                )}
               </View>
 
               <View style={styles.regionContainer}>
-                <Text style={styles.dropdownLabel}>구/군</Text>
-                <View style={styles.dropdown}>
-                  {region &&
-                    districtOptions[region]?.map(option => (
-                      <TouchableOpacity
-                        key={option}
-                        style={[
-                          styles.dropdownOption,
-                          district === option && styles.dropdownOptionSelected,
-                        ]}
-                        onPress={() => setDistrict(option)}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownOptionText,
-                            district === option &&
-                              styles.dropdownOptionTextSelected,
-                          ]}
-                        >
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                </View>
+                <Text style={styles.dropdownLabel}>시/군/구</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, !region && styles.dropdownDisabled]}
+                  onPress={() => {
+                    if (region) {
+                      setShowDistrictDropdown(!showDistrictDropdown);
+                      setShowBodyTypeDropdown(false);
+                      setShowRegionDropdown(false);
+                    }
+                  }}
+                  disabled={!region}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      !district && styles.placeholder,
+                    ]}
+                  >
+                    {district || '시/군/구'}
+                  </Text>
+                </TouchableOpacity>
+                {region &&
+                  renderDropdown(
+                    showDistrictDropdown,
+                    districtOptions[region] || [],
+                    district,
+                    setDistrict,
+                    () => setShowDistrictDropdown(false),
+                  )}
               </View>
             </View>
           </View>
@@ -287,90 +599,200 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>MBTI (필수)</Text>
             <View style={styles.mbtiContainer}>
-              {mbtiOptions.map((options, index) => (
-                <View key={index} style={styles.mbtiRow}>
-                  {options.map(option => (
-                    <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.mbtiButton,
-                        selectedMBTI[index] === option &&
-                          styles.mbtiButtonSelected,
-                      ]}
-                      onPress={() => handleMBTISelect(index, option)}
-                    >
-                      <Text
-                        style={[
-                          styles.mbtiButtonText,
-                          selectedMBTI[index] === option &&
-                            styles.mbtiButtonTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.mbtiRow}>
+                {/* 첫 번째 줄: E S F J */}
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[0] === 'E' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(0, 'E')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[0] === 'E' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    E
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[1] === 'S' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(1, 'S')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[1] === 'S' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    S
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[2] === 'F' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(2, 'F')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[2] === 'F' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    F
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[3] === 'J' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(3, 'J')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[3] === 'J' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    J
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.mbtiRow}>
+                {/* 두 번째 줄: I N T P */}
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[0] === 'I' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(0, 'I')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[0] === 'I' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    I
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[1] === 'N' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(1, 'N')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[1] === 'N' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    N
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[2] === 'T' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(2, 'T')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[2] === 'T' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    T
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mbtiButton,
+                    selectedMBTI[3] === 'P' && styles.mbtiButtonSelected,
+                  ]}
+                  onPress={() => handleMBTISelect(3, 'P')}
+                >
+                  <Text
+                    style={[
+                      styles.mbtiButtonText,
+                      selectedMBTI[3] === 'P' && styles.mbtiButtonTextSelected,
+                    ]}
+                  >
+                    P
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* 흡연 슬라이더 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>흡연</Text>
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderLabelsContainer}>
+                <Text style={styles.sliderLabel}>비흡연</Text>
+                <Text style={styles.sliderLabel}>전자담배</Text>
+                <Text style={styles.sliderLabel}>흡연</Text>
+              </View>
+              <View style={styles.customSliderContainer}>
+                <View style={styles.sliderTrack}>
+                  <View style={styles.sliderMarkLeft} />
+                  <View style={styles.sliderMarkCenter} />
+                  <View style={styles.sliderMarkRight} />
                 </View>
-              ))}
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={2}
+                  value={smoking}
+                  onValueChange={setSmoking}
+                  step={1}
+                  minimumTrackTintColor="transparent"
+                  maximumTrackTintColor="transparent"
+                  thumbTintColor="#FFFFFF"
+                />
+              </View>
             </View>
           </View>
 
-          {/* 흡연/음주 습관 선택 */}
+          {/* 음주 슬라이더 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>흡연 습관</Text>
-            <View style={styles.habitContainer}>
-              {smokingOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.habitButton,
-                    smoking === option && styles.habitButtonSelected,
-                  ]}
-                  onPress={() => handleSmokingSelect(option)}
-                >
-                  <Text
-                    style={[
-                      styles.habitButtonText,
-                      smoking === option && styles.habitButtonTextSelected,
-                    ]}
-                  >
-                    {option === SmokingHabit.NON_SMOKER
-                      ? '비흡연'
-                      : option === SmokingHabit.VAPE_ONLY
-                      ? '전자담배'
-                      : '흡연'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>음주 습관</Text>
-            <View style={styles.habitContainer}>
-              {drinkingOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.habitButton,
-                    drinking === option && styles.habitButtonSelected,
-                  ]}
-                  onPress={() => handleDrinkingSelect(option)}
-                >
-                  <Text
-                    style={[
-                      styles.habitButtonText,
-                      drinking === option && styles.habitButtonTextSelected,
-                    ]}
-                  >
-                    {option === DrinkingHabit.NON_DRINKER
-                      ? '안 마심'
-                      : option === DrinkingHabit.OCCASIONAL_DRINKER
-                      ? '가끔 음주'
-                      : '자주 음주'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <Text style={styles.sectionTitle}>음주</Text>
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderLabelsContainer}>
+                <Text style={styles.sliderLabel}>안 마심</Text>
+                <Text style={styles.sliderLabel}>가끔 음주</Text>
+                <Text style={styles.sliderLabel}>자주 음주</Text>
+              </View>
+              <View style={styles.customSliderContainer}>
+                <View style={styles.sliderTrack}>
+                  <View style={styles.sliderMarkLeft} />
+                  <View style={styles.sliderMarkCenter} />
+                  <View style={styles.sliderMarkRight} />
+                </View>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={2}
+                  value={drinking}
+                  onValueChange={setDrinking}
+                  step={1}
+                  minimumTrackTintColor="transparent"
+                  maximumTrackTintColor="transparent"
+                  thumbTintColor="#FFFFFF"
+                />
+              </View>
             </View>
           </View>
 
@@ -378,7 +800,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           <TouchableOpacity
             style={[
               styles.submitButton,
-              isFormValid()
+              isFormValid() && !isLoading
                 ? styles.submitButtonActive
                 : styles.submitButtonDisabled,
             ]}
@@ -388,12 +810,12 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Text
               style={[
                 styles.submitButtonText,
-                isFormValid()
+                isFormValid() && !isLoading
                   ? styles.submitButtonTextActive
                   : styles.submitButtonTextDisabled,
               ]}
             >
-              다음
+              {isLoading ? '저장 중...' : '다음'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -413,128 +835,158 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
     marginBottom: 30,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   section: {
     marginBottom: 30,
+    position: 'relative',
   },
   sectionTitle: {
-    paddingHorizontal: 16,
-    fontFamily: 'ABeeZee',
-    fontWeight: '400',
-    fontStyle: 'normal',
     fontSize: 17,
-    lineHeight: 22,
-    letterSpacing: -0.43,
+    fontWeight: '400',
     color: '#102A43',
-    marginBottom: 3,
+    marginBottom: 15,
+    textAlign: 'left',
   },
-  inputGroupContainer: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  heightContainer: {
+    flex: 1,
+    marginRight: 10,
+  },
+  bodyTypeContainer: {
+    flex: 1,
+    marginLeft: 10,
+    position: 'relative',
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 8,
   },
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  inputRightMargin: {
-    marginRight: 15,
   },
   input: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 12,
     fontSize: 16,
-    flex: 1,
     backgroundColor: '#FAFAFA',
-  },
-  ageInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    flex: 1,
-    backgroundColor: '#FAFAFA',
+    marginRight: 10,
   },
   unit: {
-    marginLeft: 10,
     fontSize: 16,
     color: '#666666',
   },
-  dropdownContainer: {
+  dropdown: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#FAFAFA',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  dropdownDisabled: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#D0D0D0',
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  placeholder: {
+    color: '#999999',
+  },
+  regionContainer: {
     flex: 1,
+    marginHorizontal: 5,
+    position: 'relative',
   },
   dropdownLabel: {
     fontSize: 14,
     color: '#666666',
     marginBottom: 8,
   },
-  dropdown: {
+  dropdownMenu: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
-    backgroundColor: '#FAFAFA',
+    marginTop: 2,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
-  dropdownOption: {
+  dropdownScrollView: {
+    maxHeight: 160,
+  },
+  scrollableItems: {
+    maxHeight: 120,
+  },
+  dropdownItem: {
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  dropdownOptionSelected: {
-    backgroundColor: '#FF6B6B',
+  dropdownItemSelected: {
+    backgroundColor: '#F08080',
   },
-  dropdownOptionText: {
-    fontSize: 14,
+  dropdownItemText: {
+    fontSize: 16,
     color: '#333333',
   },
-  dropdownOptionTextSelected: {
+  dropdownItemTextSelected: {
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  regionContainer: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
   mbtiContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   mbtiRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    justifyContent: 'center',
+    marginBottom: 15,
   },
   mbtiButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#FFB6C1',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 5,
+    marginHorizontal: 12, // 간격을 더 넓게 설정
   },
   mbtiButtonSelected: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#F08080',
   },
   mbtiButtonText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
@@ -542,32 +994,77 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   sliderContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  sliderLabelsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
     marginBottom: 10,
   },
   sliderLabel: {
-    fontSize: 12,
-    color: '#666666',
-    width: 60,
-    textAlign: 'center',
+    fontSize: 14,
+    color: '#000000',
+    fontWeight: '400',
+  },
+  customSliderContainer: {
+    width: '100%',
+    position: 'relative',
+    alignItems: 'center',
+  },
+  sliderTrack: {
+    width: '100%',
+    height: 30, // 더 크게 변경
+    backgroundColor: '#D9D9D9',
+    borderRadius: 15,
+    position: 'relative',
+    marginBottom: 10,
+  },
+  sliderLine: {
+    position: 'absolute',
+    left: 15,
+    right: 15,
+    top: 14,
+    height: 2,
+    backgroundColor: '#000000',
+  },
+  sliderMarkLeft: {
+    position: 'absolute',
+    left: 15,
+    top: 8,
+    bottom: 8,
+    width: 2,
+    backgroundColor: '#000000',
+  },
+  sliderMarkCenter: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -1,
+    top: 8,
+    bottom: 8,
+    width: 2,
+    backgroundColor: '#000000',
+  },
+  sliderMarkRight: {
+    position: 'absolute',
+    right: 15,
+    top: 8,
+    bottom: 8,
+    width: 2,
+    backgroundColor: '#000000',
   },
   slider: {
-    flex: 1,
+    width: '100%',
     height: 40,
-    marginHorizontal: 10,
-  },
-  sliderValue: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#999999',
+    position: 'absolute',
+    top: -10,
   },
   submitButton: {
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 1,
+    marginTop: 20,
   },
   submitButtonActive: {
     backgroundColor: '#FF6B6B',
@@ -577,7 +1074,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   submitButtonTextActive: {
     color: '#FFFFFF',
@@ -585,56 +1082,6 @@ const styles = StyleSheet.create({
   submitButtonTextDisabled: {
     color: '#999999',
   },
-  genderContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginLeft: 15,
-  },
-  genderButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  genderButtonSelected: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
-  genderText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  genderTextSelected: {
-    color: '#FFFFFF',
-  },
-  habitContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  habitButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  habitButtonSelected: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
-  habitButtonText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  habitButtonTextSelected: {
-    color: '#FFFFFF',
-  },
 });
+
 export default ProfileSetupScreen;

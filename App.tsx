@@ -9,6 +9,10 @@ import ProfileSetupScreen from './src/screens/login/ProfileSetupScreen';
 import SelfIntroductionScreen from './src/screens/login/SelfIntroductionScreen';
 import DatingQuestionsScreen from './src/screens/login/DatingQuestionsScreen';
 import PersonalityTestScreen from './src/screens/login/PersonalityTestScreen';
+import PhotoUploadScreen from './src/screens/login/PhotoUploadScreen';
+import TermsAgreementScreen from './src/screens/login/TermsAgreementScreen';
+import TermsDetailScreen from './src/screens/login/TermsDetailScreen';
+import CongratulationsScreen from './src/screens/login/CongratulationsScreen';
 import HomeScreen from './src/screens/home/HomeScreen';
 import MyPage from './src/screens/MyPage/MyPage';
 import ProfileDetail from './src/screens/MyPage/ProfileDetail';
@@ -26,10 +30,21 @@ type AppState =
   | 'selfIntroduction'
   | 'datingQuestions'
   | 'personalityTest'
+  | 'photoUpload'
+  | 'termsAgreement'
+  | 'termsDetail'
+  | 'congratulations'
   | 'home';
+
+interface TermsDetailState {
+  termType: 'service' | 'privacy' | 'marketing';
+}
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('splash');
+  const [termsDetailState, setTermsDetailState] = useState<TermsDetailState>({
+    termType: 'service',
+  });
 
   const handleSplashComplete = async () => {
     try {
@@ -43,6 +58,17 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await AuthManager.logout();
     setAppState('login');
+  };
+
+  const handleViewTermsDetail = (
+    termType: 'service' | 'privacy' | 'marketing',
+  ) => {
+    setTermsDetailState({ termType });
+    setAppState('termsDetail');
+  };
+
+  const handleCloseTermsDetail = () => {
+    setAppState('termsAgreement');
   };
 
   if (appState === 'splash') {
@@ -126,7 +152,53 @@ const App: React.FC = () => {
             {props => (
               <PersonalityTestScreen
                 {...props}
-                onTestComplete={() => setAppState('home')}
+                onTestComplete={() => setAppState('photoUpload')}
+              />
+            )}
+          </Stack.Screen>
+        )}
+
+        {appState === 'photoUpload' && (
+          <Stack.Screen name="PhotoUpload">
+            {props => (
+              <PhotoUploadScreen
+                {...props}
+                onUploadComplete={() => setAppState('termsAgreement')}
+              />
+            )}
+          </Stack.Screen>
+        )}
+
+        {appState === 'termsAgreement' && (
+          <Stack.Screen name="TermsAgreement">
+            {props => (
+              <TermsAgreementScreen
+                {...props}
+                onAgreementComplete={() => setAppState('congratulations')}
+                onViewTermsDetail={handleViewTermsDetail}
+              />
+            )}
+          </Stack.Screen>
+        )}
+
+        {appState === 'termsDetail' && (
+          <Stack.Screen name="TermsDetail">
+            {props => (
+              <TermsDetailScreen
+                {...props}
+                termType={termsDetailState.termType}
+                onClose={handleCloseTermsDetail}
+              />
+            )}
+          </Stack.Screen>
+        )}
+
+        {appState === 'congratulations' && (
+          <Stack.Screen name="Congratulations">
+            {props => (
+              <CongratulationsScreen
+                {...props}
+                onComplete={() => setAppState('home')}
               />
             )}
           </Stack.Screen>

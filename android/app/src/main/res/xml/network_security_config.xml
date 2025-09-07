@@ -4,6 +4,8 @@
         <domain includeSubdomains="true">kauth.kakao.com</domain>
         <domain includeSubdomains="true">kapi.kakao.com</domain>
         <domain includeSubdomains="true">13.125.168.179</domain>
+        <!-- EC2 도메인 -->
+        <domain includeSubdomains="true">ec2-13-125-168-179.ap-northeast-2.compute.amazonaws.com</domain>
         <!-- Metro 서버를 위한 localhost 추가 -->
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
