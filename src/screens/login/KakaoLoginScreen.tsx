@@ -1,5 +1,5 @@
 // src/screens/login/KakaoLoginScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ImageBackground,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {
   KakaoLoginService,
@@ -17,6 +18,9 @@ import {
 } from '../../services/KakaoLoginService';
 import { saveAuthTokens, saveProfileId } from '../../utils/AuthUtils';
 import AgeRestrictionModal from '../../components/login/AgeRestrictionModal';
+
+// ✅ FCM
+import messaging from '@react-native-firebase/messaging';
 
 interface KakaoLoginScreenProps {
   onLoginSuccess: (userData?: any) => void;
@@ -31,6 +35,43 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgeRestrictionModal, setShowAgeRestrictionModal] = useState(false);
+
+  // ✅ FCM 초기화: 화면 진입 시 자동 로그
+  useEffect(() => {
+    let unsubscribeTokenRefresh: (() => void) | null = null;
+
+    const initFCM = async () => {
+      try {
+        console.log('📌 FCM 초기화 시작');
+
+        // Android 13+ 알림 권한 (RNFirebase가 내부적으로 처리하지만, 로그 목적)
+        // iOS도 requestPermission 필요
+        const authStatus = await messaging().requestPermission();
+        const enabled =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+        console.log('🔔 알림 권한 상태:', authStatus, 'enabled:', enabled);
+
+        // ✅ FCM 토큰 가져오기
+        const token = await messaging().getToken();
+        console.log('✅ FCM TOKEN:', token);
+
+        // ✅ 토큰 갱신 리스너
+        unsubscribeTokenRefresh = messaging().onTokenRefresh(newToken => {
+          console.log('🔄 FCM TOKEN REFRESH:', newToken);
+        });
+      } catch (e) {
+        console.error('❌ FCM 초기화 오류:', e);
+      }
+    };
+
+    initFCM();
+
+    return () => {
+      if (unsubscribeTokenRefresh) unsubscribeTokenRefresh();
+    };
+  }, []);
 
   const handleKakaoLogin = async () => {
     if (isLoading) return;
@@ -131,10 +172,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
         {/* 메인 콘텐츠 - 카카오 로그인 버튼만 */}
         <View style={styles.contentContainer}>
           <TouchableOpacity
-            style={[
-              styles.kakaoButton,
-              isLoading && styles.kakaoButtonDisabled,
-            ]}
+            style={[styles.kakaoButton, isLoading && styles.kakaoButtonDisabled]}
             onPress={handleKakaoLogin}
             activeOpacity={0.8}
             disabled={isLoading}

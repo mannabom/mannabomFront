@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -46,8 +46,11 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [region, setRegion] = useState('');
   const [district, setDistrict] = useState('');
   const [selectedMBTI, setSelectedMBTI] = useState<string[]>(['', '', '', '']);
-  const [smoking, setSmoking] = useState<number>(0); // 0: 비흡연, 1: 전자담배, 2: 흡연
-  const [drinking, setDrinking] = useState<number>(0); // 0: 안마심, 1: 가끔, 2: 자주
+
+  // ✅ 퍼센트 느낌으로 연속값 (0~100)
+  const [smoking, setSmoking] = useState<number>(0);
+  const [drinking, setDrinking] = useState<number>(0);
+
   const [isLoading, setIsLoading] = useState(false);
 
   // 드롭다운 상태
@@ -56,12 +59,12 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [showDistrictDropdown, setShowDistrictDropdown] = useState(false);
 
   const bodyTypeOptions = [
-    { label: '마른', value: BodyType.SLIM },
+    { label: '마름', value: BodyType.SLIM },
     { label: '보통', value: BodyType.AVERAGE },
     { label: '통통', value: BodyType.CHUBBY },
   ];
 
-  // 대한민국 지역 데이터
+  // 대한민국 지역 데이터 (큰 지역 전체)
   const regionOptions = [
     '서울특별시',
     '부산광역시',
@@ -82,6 +85,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     '제주특별자치도',
   ];
 
+  // ✅ 시/군/구 단위 (읍/면/동 같은 너무 세세한 건 없음)
   const districtOptions: Record<string, string[]> = {
     서울특별시: [
       '종로구',
@@ -325,17 +329,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     제주특별자치도: ['제주시', '서귀포시'],
   };
 
-  const smokingHabits = [
-    SmokingHabit.NON_SMOKER,
-    SmokingHabit.VAPE_ONLY,
-    SmokingHabit.REGULAR_SMOKER,
-  ];
-  const drinkingHabits = [
-    DrinkingHabit.NON_DRINKER,
-    DrinkingHabit.OCCASIONAL_DRINKER,
-    DrinkingHabit.FREQUENT_DRINKER,
-  ];
-
   const handleMBTISelect = (index: number, value: string) => {
     const newMBTI = [...selectedMBTI];
     newMBTI[index] = value;
@@ -352,6 +345,24 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     );
   };
 
+  const getBodyTypeLabel = (value: BodyType | '') => {
+    const option = bodyTypeOptions.find(opt => opt.value === value);
+    return option ? option.label : '';
+  };
+
+  // ✅ 연속 슬라이더(0~100)를 서버 enum으로 매핑(구간)
+  const mapSmoking = (value: number): SmokingHabit => {
+    if (value < 34) return SmokingHabit.NON_SMOKER;
+    if (value < 67) return SmokingHabit.VAPE_ONLY;
+    return SmokingHabit.REGULAR_SMOKER;
+  };
+
+  const mapDrinking = (value: number): DrinkingHabit => {
+    if (value < 34) return DrinkingHabit.NON_DRINKER;
+    if (value < 67) return DrinkingHabit.OCCASIONAL_DRINKER;
+    return DrinkingHabit.FREQUENT_DRINKER;
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid() || isLoading) {
       Alert.alert('알림', '모든 항목을 올바르게 입력해주세요.');
@@ -361,7 +372,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // AsyncStorage에 신체 프로필 데이터 저장
       const profileData: PhysicalProfileData = {
         height: parseInt(height, 10),
         bodyType: bodyType as string,
@@ -370,8 +380,8 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           sigungu: district,
         },
         mbti: selectedMBTI.join(''),
-        smokingHabit: smokingHabits[smoking],
-        drinkingHabit: drinkingHabits[drinking],
+        smokingHabit: mapSmoking(smoking),
+        drinkingHabit: mapDrinking(drinking),
       };
 
       await savePhysicalProfile(profileData);
@@ -387,11 +397,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     }
   };
 
-  const getBodyTypeLabel = (value: BodyType | '') => {
-    const option = bodyTypeOptions.find(opt => opt.value === value);
-    return option ? option.label : '';
-  };
-
   const renderDropdown = (
     visible: boolean,
     options: string[] | { label: string; value: string }[],
@@ -404,7 +409,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     return (
       <View style={styles.dropdownMenu}>
         <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
-          {options.slice(0, 4).map((option, index) => {
+          {(options as any[]).map((option, index) => {
             const isObjectArray = typeof option === 'object';
             const label = isObjectArray ? option.label : option;
             const value = isObjectArray ? option.value : option;
@@ -432,75 +437,68 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </TouchableOpacity>
             );
           })}
-          {options.length > 4 && (
-            <ScrollView style={styles.scrollableItems} nestedScrollEnabled>
-              {options.slice(4).map((option, index) => {
-                const isObjectArray = typeof option === 'object';
-                const label = isObjectArray ? option.label : option;
-                const value = isObjectArray ? option.value : option;
-
-                return (
-                  <TouchableOpacity
-                    key={index + 4}
-                    style={[
-                      styles.dropdownItem,
-                      selectedValue === value && styles.dropdownItemSelected,
-                    ]}
-                    onPress={() => {
-                      onSelect(value);
-                      onClose();
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        selectedValue === value &&
-                          styles.dropdownItemTextSelected,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
         </ScrollView>
+      </View>
+    );
+  };
+
+  // ✅ 흡연/음주 공통 슬라이더 UI (트랙 안에만 선, 양끝 | 제거, thumb 중앙 정렬)
+  const renderPercentSlider = (
+    value: number,
+    onChange: (v: number) => void,
+  ) => {
+    return (
+      <View style={styles.customSliderContainer}>
+        {/* 트랙(배경) */}
+        <View style={styles.sliderTrack} />
+
+        {/* 가운데 가로선 */}
+        <View style={styles.sliderCenterLine} />
+
+        {/* 가운데 세로선(딱 하나) */}
+        <View style={styles.sliderCenterTick} />
+
+        {/* 실제 Slider(트랙은 투명 처리해서 우리가 만든 트랙만 보이게) */}
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={100}
+          value={value}
+          onValueChange={onChange}
+          minimumTrackTintColor="transparent"
+          maximumTrackTintColor="transparent"
+          thumbTintColor="#FFFFFF"
+        />
       </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           <Text style={styles.title}>신체 프로필</Text>
 
-          {/* 키와 체형을 같은 행에 배치 */}
+          {/* 키 + 체형 */}
           <View style={styles.section}>
             <View style={styles.row}>
-              {/* 키 입력 */}
+              {/* ✅ 키 입력: cm까지 같은 박스 안 */}
               <View style={styles.heightContainer}>
-                <Text style={styles.fieldLabel}>키</Text>
-                <View style={styles.inputGroup}>
+                <View style={styles.inputWithUnit}>
                   <TextInput
-                    style={styles.input}
+                    style={styles.heightInput}
                     placeholder="키"
                     value={height}
                     onChangeText={setHeight}
                     keyboardType="numeric"
                     maxLength={3}
                   />
-                  <Text style={styles.unit}>cm</Text>
+                  <Text style={styles.unitInside}>cm</Text>
                 </View>
               </View>
 
-              {/* 체형 선택 */}
+              {/* ✅ 체형: 라벨 제거, 버튼만 */}
               <View style={styles.bodyTypeContainer}>
-                <Text style={styles.fieldLabel}>체형</Text>
                 <TouchableOpacity
                   style={styles.dropdown}
                   onPress={() => {
@@ -518,6 +516,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     {getBodyTypeLabel(bodyType) || '체형'}
                   </Text>
                 </TouchableOpacity>
+
                 {renderDropdown(
                   showBodyTypeDropdown,
                   bodyTypeOptions,
@@ -529,12 +528,12 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </View>
 
-          {/* 지역 선택 */}
+          {/* ✅ 지역 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>지역</Text>
+
             <View style={styles.row}>
               <View style={styles.regionContainer}>
-                <Text style={styles.dropdownLabel}>시/도</Text>
                 <TouchableOpacity
                   style={styles.dropdown}
                   onPress={() => {
@@ -544,11 +543,15 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   }}
                 >
                   <Text
-                    style={[styles.dropdownText, !region && styles.placeholder]}
+                    style={[
+                      styles.dropdownText,
+                      !region && styles.placeholder,
+                    ]}
                   >
                     {region || '시/도'}
                   </Text>
                 </TouchableOpacity>
+
                 {renderDropdown(
                   showRegionDropdown,
                   regionOptions,
@@ -562,7 +565,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </View>
 
               <View style={styles.regionContainer}>
-                <Text style={styles.dropdownLabel}>시/군/구</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, !region && styles.dropdownDisabled]}
                   onPress={() => {
@@ -583,6 +585,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     {district || '시/군/구'}
                   </Text>
                 </TouchableOpacity>
+
                 {region &&
                   renderDropdown(
                     showDistrictDropdown,
@@ -595,12 +598,12 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </View>
 
-          {/* MBTI 선택 */}
+          {/* MBTI */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>MBTI (필수)</Text>
+
             <View style={styles.mbtiContainer}>
               <View style={styles.mbtiRow}>
-                {/* 첫 번째 줄: E S F J */}
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -617,6 +620,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     E
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -633,6 +637,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     S
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -649,6 +654,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     F
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -666,8 +672,8 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   </Text>
                 </TouchableOpacity>
               </View>
+
               <View style={styles.mbtiRow}>
-                {/* 두 번째 줄: I N T P */}
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -684,6 +690,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     I
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -700,6 +707,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     N
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -716,6 +724,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     T
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.mbtiButton,
@@ -736,67 +745,37 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </View>
 
-          {/* 흡연 슬라이더 */}
+          {/* ✅ 흡연 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>흡연</Text>
+
             <View style={styles.sliderContainer}>
               <View style={styles.sliderLabelsContainer}>
                 <Text style={styles.sliderLabel}>비흡연</Text>
                 <Text style={styles.sliderLabel}>전자담배</Text>
                 <Text style={styles.sliderLabel}>흡연</Text>
               </View>
-              <View style={styles.customSliderContainer}>
-                <View style={styles.sliderTrack}>
-                  <View style={styles.sliderMarkLeft} />
-                  <View style={styles.sliderMarkCenter} />
-                  <View style={styles.sliderMarkRight} />
-                </View>
-                <Slider
-                  style={styles.slider}
-                  minimumValue={0}
-                  maximumValue={2}
-                  value={smoking}
-                  onValueChange={setSmoking}
-                  step={1}
-                  minimumTrackTintColor="transparent"
-                  maximumTrackTintColor="transparent"
-                  thumbTintColor="#FFFFFF"
-                />
-              </View>
+
+              {renderPercentSlider(smoking, setSmoking)}
             </View>
           </View>
 
-          {/* 음주 슬라이더 */}
+          {/* ✅ 음주 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>음주</Text>
+
             <View style={styles.sliderContainer}>
               <View style={styles.sliderLabelsContainer}>
                 <Text style={styles.sliderLabel}>안 마심</Text>
                 <Text style={styles.sliderLabel}>가끔 음주</Text>
                 <Text style={styles.sliderLabel}>자주 음주</Text>
               </View>
-              <View style={styles.customSliderContainer}>
-                <View style={styles.sliderTrack}>
-                  <View style={styles.sliderMarkLeft} />
-                  <View style={styles.sliderMarkCenter} />
-                  <View style={styles.sliderMarkRight} />
-                </View>
-                <Slider
-                  style={styles.slider}
-                  minimumValue={0}
-                  maximumValue={2}
-                  value={drinking}
-                  onValueChange={setDrinking}
-                  step={1}
-                  minimumTrackTintColor="transparent"
-                  maximumTrackTintColor="transparent"
-                  thumbTintColor="#FFFFFF"
-                />
-              </View>
+
+              {renderPercentSlider(drinking, setDrinking)}
             </View>
           </View>
 
-          {/* 제출 버튼 */}
+          {/* 제출 */}
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -824,17 +803,14 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   );
 };
 
+const TRACK_HEIGHT = 30;
+const TRACK_RADIUS = 15;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  scrollView: { flex: 1 },
+  content: { padding: 20 },
+
   title: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -842,10 +818,9 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     textAlign: 'left',
   },
-  section: {
-    marginBottom: 30,
-    position: 'relative',
-  },
+
+  section: { marginBottom: 30, position: 'relative' },
+
   sectionTitle: {
     fontSize: 17,
     fontWeight: '400',
@@ -853,44 +828,38 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'left',
   },
+
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  heightContainer: {
-    flex: 1,
-    marginRight: 10,
-  },
-  bodyTypeContainer: {
-    flex: 1,
-    marginLeft: 10,
-    position: 'relative',
-  },
-  fieldLabel: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
-  },
-  inputGroup: {
+
+  heightContainer: { flex: 1, marginRight: 10 },
+  bodyTypeContainer: { flex: 1, marginLeft: 10, position: 'relative' },
+
+  inputWithUnit: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  input: {
-    flex: 1,
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
     backgroundColor: '#FAFAFA',
-    marginRight: 10,
+    paddingHorizontal: 15,
+    minHeight: 48,
   },
-  unit: {
+  heightInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 12,
+    color: '#333333',
+  },
+  unitInside: {
     fontSize: 16,
     color: '#666666',
+    marginLeft: 8,
   },
+
   dropdown: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -905,23 +874,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderColor: '#D0D0D0',
   },
-  dropdownText: {
-    fontSize: 16,
-    color: '#333333',
-  },
-  placeholder: {
-    color: '#999999',
-  },
+  dropdownText: { fontSize: 16, color: '#333333' },
+  placeholder: { color: '#999999' },
+
   regionContainer: {
     flex: 1,
     marginHorizontal: 5,
     position: 'relative',
   },
-  dropdownLabel: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
-  },
+
   dropdownMenu: {
     position: 'absolute',
     top: '100%',
@@ -935,39 +896,23 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 5,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  dropdownScrollView: {
-    maxHeight: 160,
-  },
-  scrollableItems: {
-    maxHeight: 120,
-  },
+  dropdownScrollView: { maxHeight: 240 },
+
   dropdownItem: {
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  dropdownItemSelected: {
-    backgroundColor: '#F08080',
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: '#333333',
-  },
-  dropdownItemTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  mbtiContainer: {
-    alignItems: 'center',
-  },
+  dropdownItemSelected: { backgroundColor: '#F08080' },
+  dropdownItemText: { fontSize: 16, color: '#333333' },
+  dropdownItemTextSelected: { color: '#FFFFFF', fontWeight: '600' },
+
+  mbtiContainer: { alignItems: 'center' },
   mbtiRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -980,19 +925,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFB6C1',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 12, // 간격을 더 넓게 설정
+    marginHorizontal: 12,
   },
-  mbtiButtonSelected: {
-    backgroundColor: '#F08080',
-  },
-  mbtiButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  mbtiButtonTextSelected: {
-    color: '#FFFFFF',
-  },
+  mbtiButtonSelected: { backgroundColor: '#F08080' },
+  mbtiButtonText: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
+  mbtiButtonTextSelected: { color: '#FFFFFF' },
+
   sliderContainer: {
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1003,85 +941,66 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 10,
   },
-  sliderLabel: {
-    fontSize: 14,
-    color: '#000000',
-    fontWeight: '400',
-  },
+  sliderLabel: { fontSize: 14, color: '#000000', fontWeight: '400' },
+
+  // ✅ 핵심: 슬라이더 컨테이너를 중앙정렬로 잡아서 thumb가 트랙 중앙에 오게
   customSliderContainer: {
     width: '100%',
-    position: 'relative',
-    alignItems: 'center',
+    height: 44, // thumb 높이 감안
+    justifyContent: 'center',
   },
+
+  // ✅ 회색 트랙(연하게)
   sliderTrack: {
-    width: '100%',
-    height: 30, // 더 크게 변경
-    backgroundColor: '#D9D9D9',
-    borderRadius: 15,
-    position: 'relative',
-    marginBottom: 10,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: TRACK_HEIGHT,
+    borderRadius: TRACK_RADIUS,
+    backgroundColor: '#D9D9D940', // 요청 색
   },
-  sliderLine: {
+
+  // ✅ 가운데 가로선(트랙 중앙)
+  sliderCenterLine: {
     position: 'absolute',
     left: 15,
     right: 15,
-    top: 14,
     height: 2,
-    backgroundColor: '#000000',
+    top: '50%',
+    marginTop: -1,
+    backgroundColor: '#00000033', // 너무 진하지 않게
   },
-  sliderMarkLeft: {
-    position: 'absolute',
-    left: 15,
-    top: 8,
-    bottom: 8,
-    width: 2,
-    backgroundColor: '#000000',
-  },
-  sliderMarkCenter: {
+
+  // ✅ 가운데 세로선(딱 하나) — 양끝은 제거
+  sliderCenterTick: {
     position: 'absolute',
     left: '50%',
     marginLeft: -1,
-    top: 8,
-    bottom: 8,
     width: 2,
-    backgroundColor: '#000000',
+    height: 14,
+    top: '50%',
+    marginTop: -7,
+    backgroundColor: '#00000066', // 기존보다 연하게
+    borderRadius: 1,
   },
-  sliderMarkRight: {
-    position: 'absolute',
-    right: 15,
-    top: 8,
-    bottom: 8,
-    width: 2,
-    backgroundColor: '#000000',
-  },
+
+  // ✅ Slider는 absolute/top 조작 안 함 → thumb가 가운데 뜨는 문제 해결
   slider: {
     width: '100%',
-    height: 40,
-    position: 'absolute',
-    top: -10,
+    height: 44,
   },
+
   submitButton: {
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
   },
-  submitButtonActive: {
-    backgroundColor: '#FF6B6B',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#E0E0E0',
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  submitButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  submitButtonTextDisabled: {
-    color: '#999999',
-  },
+  submitButtonActive: { backgroundColor: '#FF6B6B' },
+  submitButtonDisabled: { backgroundColor: '#E0E0E0' },
+  submitButtonText: { fontSize: 16, fontWeight: '600' },
+  submitButtonTextActive: { color: '#FFFFFF' },
+  submitButtonTextDisabled: { color: '#999999' },
 });
 
 export default ProfileSetupScreen;

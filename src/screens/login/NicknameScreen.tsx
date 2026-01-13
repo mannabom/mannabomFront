@@ -21,6 +21,9 @@ interface NicknameScreenProps {
   onNicknameComplete: () => void;
 }
 
+const BUTTON_PINK = '#FFB6C1';
+const HELPER_PINK = '#FF6B9A';
+
 const NicknameScreen: React.FC<NicknameScreenProps> = ({
   onNicknameComplete,
 }) => {
@@ -31,14 +34,14 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const validateNickname = (text: string) => {
-    // 닉네임 검증 로직: 2-14자, 한글/영문/숫자 허용
+    // 2-14자, 한글/영문/숫자 허용
     const nicknameRegex = /^[가-힣a-zA-Z0-9]{2,14}$/;
     return nicknameRegex.test(text);
   };
 
   const handleNicknameChange = (text: string) => {
     setNickname(text);
-    setIsDuplicateChecked(false); // 닉네임이 변경되면 중복 확인 초기화
+    setIsDuplicateChecked(false);
 
     if (text.length === 0) {
       setNicknameError('');
@@ -67,14 +70,11 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
     try {
       setIsLoading(true);
 
-      // 닉네임 중복 검사 API 호출
       const response = await fetch(
         `${API_BASE_URL}${API_ENDPOINTS_LIST.NICKNAME_CHECK}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nickname }),
         },
       );
@@ -113,13 +113,11 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
     try {
       setIsLoading(true);
 
-      // 저장된 profileId 가져오기
       const profileId = await getProfileId();
       if (!profileId) {
         throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
       }
 
-      // 닉네임 설정 API 호출
       const requestData: SetNicknameRequestDto = {
         profileId,
         nickname,
@@ -129,9 +127,7 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
         `${API_BASE_URL}${API_ENDPOINTS_LIST.SET_NICKNAME}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestData),
         },
       );
@@ -144,19 +140,15 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
         );
       }
 
-      Alert.alert(
-        '완료',
-        `${responseData.message || '닉네임이 설정되었습니다.'}`,
-        [
-          {
-            text: '확인',
-            onPress: () => {
-              console.log('닉네임 설정 완료:', nickname);
-              onNicknameComplete();
-            },
+      Alert.alert('완료', `${responseData.message || '닉네임이 설정되었습니다.'}`, [
+        {
+          text: '확인',
+          onPress: () => {
+            console.log('닉네임 설정 완료:', nickname);
+            onNicknameComplete();
           },
-        ],
-      );
+        },
+      ]);
     } catch (error) {
       console.error('닉네임 설정 오류:', error);
       const errorMessage =
@@ -169,55 +161,28 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
     }
   };
 
+  const isCheckButtonEnabled = isNicknameValid && !isLoading;
   const isCompleteButtonEnabled =
     isNicknameValid && isDuplicateChecked && !isLoading;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.inputSection}>
+      <View style={styles.centerWrap}>
+        <View style={styles.card}>
+          {/* ✅ 라벨: 입력칸 위, 왼쪽 정렬 */}
           <Text style={styles.label}>사용하실 닉네임을 입력해주세요</Text>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={[styles.input, nicknameError ? styles.inputError : null]}
-              placeholder="닉네임 입력"
-              placeholderTextColor="#999"
-              value={nickname}
-              onChangeText={handleNicknameChange}
-              maxLength={14}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-            <View style={styles.inputActions}>
-              <TouchableOpacity
-                style={[
-                  styles.duplicateButton,
-                  isNicknameValid && !isLoading
-                    ? styles.duplicateButtonActive
-                    : styles.duplicateButtonDisabled,
-                ]}
-                onPress={handleCheckDuplicate}
-                disabled={!isNicknameValid || isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text
-                    style={[
-                      styles.duplicateButtonText,
-                      isNicknameValid && !isLoading
-                        ? styles.duplicateButtonTextActive
-                        : styles.duplicateButtonTextDisabled,
-                    ]}
-                  >
-                    중복 확인
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TextInput
+            style={[styles.input, nicknameError ? styles.inputError : null]}
+            placeholder=""
+            placeholderTextColor="#999"
+            value={nickname}
+            onChangeText={handleNicknameChange}
+            maxLength={14}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+          />
 
           {nicknameError ? (
             <Text style={styles.errorText}>{nicknameError}</Text>
@@ -225,37 +190,47 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
             <Text style={styles.successText}>✓ 사용 가능한 닉네임입니다</Text>
           ) : (
             <Text style={styles.helperText}>
-              *닉네임은 한글 또는 영어, 2~14자 사이어야 합니다.
+              *닉네임은 한글 또는 영어, 2~14자 사이어야합니다.
             </Text>
           )}
-        </View>
 
-        <View style={styles.actionContainer}>
-          <TouchableOpacity
-            style={[
-              styles.completeButton,
-              isCompleteButtonEnabled
-                ? styles.completeButtonActive
-                : styles.completeButtonDisabled,
-            ]}
-            onPress={handleComplete}
-            disabled={!isCompleteButtonEnabled}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text
-                style={[
-                  styles.completeButtonText,
-                  isCompleteButtonEnabled
-                    ? styles.completeButtonTextActive
-                    : styles.completeButtonTextDisabled,
-                ]}
-              >
-                설정하기
-              </Text>
-            )}
-          </TouchableOpacity>
+          {/* ✅ 버튼: 서로 안 닿게 + 가로만 살짝 줄임 */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.actionButtonLeft,
+                isCheckButtonEnabled
+                  ? styles.actionButtonActive
+                  : styles.actionButtonDisabled,
+              ]}
+              onPress={handleCheckDuplicate}
+              disabled={!isCheckButtonEnabled}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#333333" />
+              ) : (
+                <Text style={styles.actionButtonText}>중복 확인</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                isCompleteButtonEnabled
+                  ? styles.actionButtonActive
+                  : styles.actionButtonDisabled,
+              ]}
+              onPress={handleComplete}
+              disabled={!isCompleteButtonEnabled}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#333333" />
+              ) : (
+                <Text style={styles.actionButtonText}>설정하기</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -265,105 +240,85 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF', // ✅ 배경 흰색
   },
-  content: {
+  centerWrap: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 100,
+    justifyContent: 'center', // ✅ 세로 가운데
+    alignItems: 'center', // ✅ 가로 가운데
+    paddingHorizontal: 24,
   },
-  inputSection: {
-    flex: 1,
+  card: {
+    width: '100%',
+    maxWidth: 360,
   },
   label: {
-    fontSize: 18,
-    color: '#333333',
-    marginBottom: 30,
+    width: '100%',
+    textAlign: 'left', // ✅ 왼쪽 정렬
+    fontSize: 16,
+    color: '#666666',
+    marginBottom: 14,
     fontWeight: '500',
-  },
-  inputContainer: {
-    marginBottom: 15,
   },
   input: {
+    width: '100%',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 15,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    backgroundColor: '#FAFAFA',
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
   },
   inputError: {
-    borderColor: '#FF6B6B',
-  },
-  inputActions: {
-    alignItems: 'flex-end',
-  },
-  duplicateButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  duplicateButtonActive: {
-    backgroundColor: '#87CEEB',
-  },
-  duplicateButtonDisabled: {
-    backgroundColor: '#E0E0E0',
-  },
-  duplicateButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  duplicateButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  duplicateButtonTextDisabled: {
-    color: '#999999',
-  },
-  errorText: {
-    color: '#FF6B6B',
-    fontSize: 12,
-    marginTop: 5,
-    marginLeft: 5,
-  },
-  successText: {
-    color: '#4ECDC4',
-    fontSize: 12,
-    marginTop: 5,
-    marginLeft: 5,
+    borderColor: HELPER_PINK,
   },
   helperText: {
-    color: '#666666',
+    width: '100%',
+    color: HELPER_PINK, // ✅ 안내문 분홍
     fontSize: 12,
-    marginTop: 5,
-    marginLeft: 5,
+    marginTop: 10,
+    textAlign: 'left',
   },
-  actionContainer: {
-    paddingBottom: 40,
+  errorText: {
+    width: '100%',
+    color: HELPER_PINK,
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'left',
   },
-  completeButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
+  successText: {
+    width: '100%',
+    color: '#2DBE9D',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'left',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginTop: 16,
+    justifyContent: 'center',
+  },
+  actionButton: {
+    width: '46%', // ✅ 가로만 살짝 줄임(서로 안 닿게)
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  completeButtonActive: {
-    backgroundColor: '#FF6B6B',
+  actionButtonLeft: {
+    marginRight: 12, // ✅ 버튼 간격
   },
-  completeButtonDisabled: {
-    backgroundColor: '#E0E0E0',
+  actionButtonActive: {
+    backgroundColor: BUTTON_PINK, // ✅ 버튼 색
   },
-  completeButtonText: {
-    fontSize: 16,
+  actionButtonDisabled: {
+    backgroundColor: '#F2D1D8',
+  },
+  actionButtonText: {
+    color: '#333333',
+    fontSize: 14,
     fontWeight: '600',
-  },
-  completeButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  completeButtonTextDisabled: {
-    color: '#999999',
   },
 });
 
