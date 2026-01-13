@@ -1,9 +1,8 @@
 // src/config/api.ts
 // 환경별 API 주소 설정
 const API_ENDPOINTS = {
-  development:
-    'http://ec2-13-125-168-179.ap-northeast-2.compute.amazonaws.com:8080', // 수정된 백엔드 개발 서버
-  production: 'https://api.mannabom.com', // 실제 배포된 서버 주소 (여기를 실제 주소로 변경)
+  development: 'http://3.35.234.95:8080',
+  production: 'https://api.mannabom.com',
 };
 
 // 현재 환경 확인
@@ -43,6 +42,11 @@ export const API_ENDPOINTS_LIST = {
   // 사용자 관련
   USER_PROFILE: '/user/profile',
   USER_UPDATE: '/user/update',
+
+  // 데이팅 관련 (새로 추가)
+  PROFILE_MATCH_SIMPLE: '/api/match/profile/simple', // 프로필 매칭 요청
+  PROFILE_RATE: '/api/match/profile/rate', // 프로필 평가
+  LOVEVIEW_MATCH_SIMPLE: '/api/match/loveview/simple', // 연애관 매칭 요청
 } as const;
 
 // API 호출 헬퍼
@@ -60,6 +64,11 @@ export const getApiUrlWithParams = (
     url = url.replace(`{${key}}`, value);
   });
   return `${API_BASE_URL}${url}`;
+};
+
+// 데이팅 API URL 생성 헬퍼 (새로 추가)
+export const getDatingApiUrl = (endpoint: string): string => {
+  return `${API_BASE_URL}${endpoint}`;
 };
 
 // 현재 설정 확인용 (개발시에만 사용)

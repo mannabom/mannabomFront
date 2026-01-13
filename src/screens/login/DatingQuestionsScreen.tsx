@@ -36,10 +36,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
 
   const characterLimit = 30;
 
-  const isFormValid = () => {
-    return true; // 모든 질문이 선택 사항이므로
-  };
-
   const handleSubmit = async () => {
     if (isLoading) {
       Alert.alert('오류', '잠시 후 다시 시도해주세요.');
@@ -49,7 +45,7 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // 각 입력의 글자수를 확인하여 포인트 계산
+      // 30자 이상 작성한 것만 저장 + 포인트 계산
       const completedAnswers = [
         meaningOfLove.trim().length >= characterLimit ? 'meaningOfLove' : null,
         soulFood.trim().length >= characterLimit ? 'soulFood' : null,
@@ -59,9 +55,8 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
         idealDate.trim().length >= characterLimit ? 'idealDate' : null,
       ].filter(Boolean);
 
-      const pointsEarned = completedAnswers.length * 15; // 각 완료된 답변당 15포인트
+      const pointsEarned = completedAnswers.length * 15;
 
-      // AsyncStorage에 선택 질문 답변 저장
       const questionsData: OptionalAnswersData = {
         meaningOfLove:
           meaningOfLove.trim().length >= characterLimit
@@ -99,16 +94,11 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
     }
   };
 
-  const renderCharacterCountMessage = (currentLength: number) => {
-    const isUnderLimit = currentLength < characterLimit;
-    const message = `${characterLimit}자 이상 입력해주세요`;
-    return (
-      isUnderLimit && (
-        <Text style={[styles.characterCount, styles.characterCountError]}>
-          {message}
-        </Text>
-      )
-    );
+  const renderMinCharsHint = (value: string) => {
+    const under = value.trim().length < characterLimit;
+    return under ? (
+      <Text style={styles.hintText}>{characterLimit}자 이상 입력해주세요</Text>
+    ) : null;
   };
 
   const renderQuestionInput = (
@@ -120,7 +110,11 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
     onBlur: () => void,
   ) => (
     <View style={styles.section}>
-      <Text style={styles.questionText}>{question} (선택)</Text>
+      <Text style={styles.questionText}>
+        {question}
+        <Text style={styles.optionalText}> (선택)</Text>
+      </Text>
+
       <View
         style={[
           styles.answerContainer,
@@ -133,39 +127,27 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           placeholderTextColor="#999"
           value={value}
           onChangeText={onChangeText}
-          maxLength={characterLimit}
+          // ✅ 30자 이상도 입력 가능하게 (maxLength 제거)
+          multiline
           textAlignVertical="top"
           onFocus={onFocus}
           onBlur={onBlur}
         />
-        <View style={styles.characterCountContainer}>
-          <Text style={styles.characterCount}>
-            {value.length}/{characterLimit}자
-          </Text>
-          {renderCharacterCountMessage(value.length)}
-        </View>
       </View>
+
+      {/* ✅ “30자 이상…”은 박스 밖 + 왼쪽 아래 + 핑크 */}
+      {renderMinCharsHint(value)}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.stepNumber}>3</Text>
-            <Text style={styles.title}>
-              선택 질문들
-              <Text style={styles.titleSub}> (서술형)</Text>
-            </Text>
-            <Text style={styles.subtitle}>
-              추가 질문을 완료하면 추가 팅을 받을 수 있어요!
-            </Text>
-          </View>
-
+      <View style={styles.page}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {renderQuestionInput(
             '나에게 연애란?',
             meaningOfLove,
@@ -201,21 +183,23 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
             () => setIsIdealDateFocused(true),
             () => setIsIdealDateFocused(false),
           )}
+        </ScrollView>
 
+        {/* ✅ 다음 버튼: 아래 고정 + 가로 1/3 + 가운데 */}
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[
               styles.submitButton,
-              isFormValid() && !isLoading
-                ? styles.submitButtonActive
-                : styles.submitButtonDisabled,
+              !isLoading ? styles.submitButtonActive : styles.submitButtonDisabled,
             ]}
             onPress={handleSubmit}
             disabled={isLoading}
+            activeOpacity={0.85}
           >
             <Text
               style={[
                 styles.submitButtonText,
-                isFormValid() && !isLoading
+                !isLoading
                   ? styles.submitButtonTextActive
                   : styles.submitButtonTextDisabled,
               ]}
@@ -224,7 +208,7 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -234,101 +218,88 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  page: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
-  content: {
-    padding: 20,
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    // ✅ 버튼이 아래 고정이라 스크롤 내용이 버튼에 가리지 않게 여유
+    paddingBottom: 120,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  stepNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-    marginBottom: 10,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 5,
-    textAlign: 'center',
-  },
-  titleSub: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: 'normal',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+
   section: {
-    marginBottom: 30,
+    marginBottom: 34, // ✅ 질문끼리 거리 좀 줌
   },
+
   questionText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333333',
-    marginBottom: 15,
+    marginBottom: 12,
     lineHeight: 22,
   },
+  optionalText: {
+    color: '#BDBDBD', // ✅ (선택) 연한 회색
+    fontWeight: '400',
+  },
+
   answerContainer: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    padding: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   answerContainerFocused: {
-    borderColor: '#FF6B6B',
+    borderColor: '#FFB6C1',
   },
   answerInput: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#333333',
-    minHeight: 50,
-    textAlignVertical: 'top',
+    minHeight: 44,
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
-  characterCountContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  characterCount: {
+
+  hintText: {
+    marginTop: 8,
+    marginLeft: 2,
     fontSize: 12,
-    color: '#999',
-    textAlign: 'right',
+    color: '#FF6B6B', // ✅ 핑크 경고 문구
+    textAlign: 'left', // ✅ 왼쪽 하단
   },
-  characterCountError: {
-    color: '#FF6B6B',
-    marginLeft: 10,
+
+  footer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 10,
+    backgroundColor: '#FFFFFF',
   },
+
   submitButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
+    alignSelf: 'center',
+    width: '33%',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
   },
   submitButtonActive: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#FFB6C1',
   },
   submitButtonDisabled: {
     backgroundColor: '#E0E0E0',
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   submitButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#333333',
   },
   submitButtonTextDisabled: {
     color: '#999999',
