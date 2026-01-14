@@ -38,6 +38,8 @@ enum DrinkingHabit {
   FREQUENT_DRINKER = 'FREQUENT_DRINKER',
 }
 
+const PINK = '#FFB6C1';
+
 const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onProfileComplete,
 }) => {
@@ -442,23 +444,17 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     );
   };
 
-  // ✅ 흡연/음주 공통 슬라이더 UI (트랙 안에만 선, 양끝 | 제거, thumb 중앙 정렬)
+  // ✅ 흡연/음주 공통 슬라이더 UI
   const renderPercentSlider = (
     value: number,
     onChange: (v: number) => void,
   ) => {
     return (
       <View style={styles.customSliderContainer}>
-        {/* 트랙(배경) */}
         <View style={styles.sliderTrack} />
-
-        {/* 가운데 가로선 */}
         <View style={styles.sliderCenterLine} />
-
-        {/* 가운데 세로선(딱 하나) */}
         <View style={styles.sliderCenterTick} />
 
-        {/* 실제 Slider(트랙은 투명 처리해서 우리가 만든 트랙만 보이게) */}
         <Slider
           style={styles.slider}
           minimumValue={0}
@@ -482,7 +478,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           {/* 키 + 체형 */}
           <View style={styles.section}>
             <View style={styles.row}>
-              {/* ✅ 키 입력: cm까지 같은 박스 안 */}
               <View style={styles.heightContainer}>
                 <View style={styles.inputWithUnit}>
                   <TextInput
@@ -497,7 +492,6 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 </View>
               </View>
 
-              {/* ✅ 체형: 라벨 제거, 버튼만 */}
               <View style={styles.bodyTypeContainer}>
                 <TouchableOpacity
                   style={styles.dropdown}
@@ -775,7 +769,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </View>
 
-          {/* 제출 */}
+          {/* 제출: ✅ 저장 버튼과 동일한 크기/색 */}
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -785,6 +779,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             ]}
             onPress={handleSubmit}
             disabled={!isFormValid() || isLoading}
+            activeOpacity={0.85}
           >
             <Text
               style={[
@@ -943,24 +938,21 @@ const styles = StyleSheet.create({
   },
   sliderLabel: { fontSize: 14, color: '#000000', fontWeight: '400' },
 
-  // ✅ 핵심: 슬라이더 컨테이너를 중앙정렬로 잡아서 thumb가 트랙 중앙에 오게
   customSliderContainer: {
     width: '100%',
-    height: 44, // thumb 높이 감안
+    height: 44,
     justifyContent: 'center',
   },
 
-  // ✅ 회색 트랙(연하게)
   sliderTrack: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: TRACK_HEIGHT,
     borderRadius: TRACK_RADIUS,
-    backgroundColor: '#D9D9D940', // 요청 색
+    backgroundColor: '#D9D9D940',
   },
 
-  // ✅ 가운데 가로선(트랙 중앙)
   sliderCenterLine: {
     position: 'absolute',
     left: 15,
@@ -968,10 +960,9 @@ const styles = StyleSheet.create({
     height: 2,
     top: '50%',
     marginTop: -1,
-    backgroundColor: '#00000033', // 너무 진하지 않게
+    backgroundColor: '#00000033',
   },
 
-  // ✅ 가운데 세로선(딱 하나) — 양끝은 제거
   sliderCenterTick: {
     position: 'absolute',
     left: '50%',
@@ -980,26 +971,33 @@ const styles = StyleSheet.create({
     height: 14,
     top: '50%',
     marginTop: -7,
-    backgroundColor: '#00000066', // 기존보다 연하게
+    backgroundColor: '#00000066',
     borderRadius: 1,
   },
 
-  // ✅ Slider는 absolute/top 조작 안 함 → thumb가 가운데 뜨는 문제 해결
   slider: {
     width: '100%',
     height: 44,
   },
 
+  // ✅ "다음" 버튼: 저장 버튼과 동일한 사이즈/톤
   submitButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
+    width: '33%',
+    alignSelf: 'center',
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 20,
   },
-  submitButtonActive: { backgroundColor: '#FF6B6B' },
-  submitButtonDisabled: { backgroundColor: '#E0E0E0' },
-  submitButtonText: { fontSize: 16, fontWeight: '600' },
-  submitButtonTextActive: { color: '#FFFFFF' },
+  submitButtonActive: { backgroundColor: PINK },
+  submitButtonDisabled: { backgroundColor: '#EAEAEA' },
+
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  submitButtonTextActive: { color: '#333333' },
   submitButtonTextDisabled: { color: '#999999' },
 });
 

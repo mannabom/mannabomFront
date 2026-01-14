@@ -1,4 +1,4 @@
-// src/screens/DatingQuestionsScreen.tsx
+// src/screens/login/DatingQuestionsScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -18,6 +18,9 @@ import {
 interface DatingQuestionsScreenProps {
   onQuestionsComplete: () => void;
 }
+
+const FOOTER_HEIGHT = 92;
+const PINK = '#FFB6C1';
 
 const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
   onQuestionsComplete,
@@ -45,7 +48,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // 30자 이상 작성한 것만 저장 + 포인트 계산
       const completedAnswers = [
         meaningOfLove.trim().length >= characterLimit ? 'meaningOfLove' : null,
         soulFood.trim().length >= characterLimit ? 'soulFood' : null,
@@ -108,8 +110,9 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
     isFocused: boolean,
     onFocus: () => void,
     onBlur: () => void,
+    isLast?: boolean,
   ) => (
-    <View style={styles.section}>
+    <View style={[styles.section, isLast ? styles.sectionLast : null]}>
       <Text style={styles.questionText}>
         {question}
         <Text style={styles.optionalText}> (선택)</Text>
@@ -127,7 +130,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           placeholderTextColor="#999"
           value={value}
           onChangeText={onChangeText}
-          // ✅ 30자 이상도 입력 가능하게 (maxLength 제거)
           multiline
           textAlignVertical="top"
           onFocus={onFocus}
@@ -135,7 +137,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
         />
       </View>
 
-      {/* ✅ “30자 이상…”은 박스 밖 + 왼쪽 아래 + 핑크 */}
       {renderMinCharsHint(value)}
     </View>
   );
@@ -147,45 +148,50 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {renderQuestionInput(
-            '나에게 연애란?',
-            meaningOfLove,
-            setMeaningOfLove,
-            isMeaningOfLoveFocused,
-            () => setIsMeaningOfLoveFocused(true),
-            () => setIsMeaningOfLoveFocused(false),
-          )}
+          {/* ✅ 남는 세로 공간을 적당히 분산해서 “꽉 찬 느낌” */}
+          <View style={styles.form}>
+            {renderQuestionInput(
+              '나에게 연애란?',
+              meaningOfLove,
+              setMeaningOfLove,
+              isMeaningOfLoveFocused,
+              () => setIsMeaningOfLoveFocused(true),
+              () => setIsMeaningOfLoveFocused(false),
+            )}
 
-          {renderQuestionInput(
-            '나의 소울 푸드는?',
-            soulFood,
-            setSoulFood,
-            isSoulFoodFocused,
-            () => setIsSoulFoodFocused(true),
-            () => setIsSoulFoodFocused(false),
-          )}
+            {renderQuestionInput(
+              '나의 소울 푸드는?',
+              soulFood,
+              setSoulFood,
+              isSoulFoodFocused,
+              () => setIsSoulFoodFocused(true),
+              () => setIsSoulFoodFocused(false),
+            )}
 
-          {renderQuestionInput(
-            '나의 하루, 그리고 나의 휴일은?',
-            dailyAndHoliday,
-            setDailyAndHoliday,
-            isDailyAndHolidayFocused,
-            () => setIsDailyAndHolidayFocused(true),
-            () => setIsDailyAndHolidayFocused(false),
-          )}
+            {renderQuestionInput(
+              '나의 하루, 그리고 나의 휴일은?',
+              dailyAndHoliday,
+              setDailyAndHoliday,
+              isDailyAndHolidayFocused,
+              () => setIsDailyAndHolidayFocused(true),
+              () => setIsDailyAndHolidayFocused(false),
+            )}
 
-          {renderQuestionInput(
-            '하고 싶은 데이트는?',
-            idealDate,
-            setIdealDate,
-            isIdealDateFocused,
-            () => setIsIdealDateFocused(true),
-            () => setIsIdealDateFocused(false),
-          )}
+            {renderQuestionInput(
+              '하고 싶은 데이트는?',
+              idealDate,
+              setIdealDate,
+              isIdealDateFocused,
+              () => setIsIdealDateFocused(true),
+              () => setIsIdealDateFocused(false),
+              true,
+            )}
+          </View>
         </ScrollView>
 
-        {/* ✅ 다음 버튼: 아래 고정 + 가로 1/3 + 가운데 */}
+        {/* ✅ 다음 버튼: 하단 고정 */}
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
@@ -220,65 +226,88 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
+    position: 'relative',
   },
   scrollView: {
     flex: 1,
   },
+
+  // ✅ 핵심: flexGrow + footer 높이만큼 paddingBottom
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    // ✅ 버튼이 아래 고정이라 스크롤 내용이 버튼에 가리지 않게 여유
-    paddingBottom: 120,
+    paddingTop: 22,
+    paddingBottom: FOOTER_HEIGHT + 12,
+  },
+
+  // ✅ 남는 세로 공간을 적당히 분배
+  form: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
   },
 
   section: {
-    marginBottom: 34, // ✅ 질문끼리 거리 좀 줌
+    marginBottom: 18, // 너무 벌어지지 않게 조절 (space-between이 남는 공간 분산)
+  },
+  sectionLast: {
+    marginBottom: 0,
   },
 
+  // ✅ 타이포 살짝 키워서 꽉 찬 느낌
   questionText: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 17,
+    fontWeight: '600',
     color: '#333333',
-    marginBottom: 12,
-    lineHeight: 22,
+    marginBottom: 10,
+    lineHeight: 24,
   },
   optionalText: {
-    color: '#BDBDBD', // ✅ (선택) 연한 회색
+    color: '#BDBDBD',
     fontWeight: '400',
   },
 
+  // ✅ 입력 박스 자체 높이를 키워서 “내용이 있어 보이게”
   answerContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    minHeight: 84,
   },
   answerContainerFocused: {
-    borderColor: '#FFB6C1',
+    borderColor: PINK,
   },
   answerInput: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#333333',
-    minHeight: 44,
+    minHeight: 56,
     paddingVertical: 0,
     paddingHorizontal: 0,
+    lineHeight: 22,
   },
 
   hintText: {
-    marginTop: 8,
+    marginTop: 10,
     marginLeft: 2,
     fontSize: 12,
-    color: '#FF6B6B', // ✅ 핑크 경고 문구
-    textAlign: 'left', // ✅ 왼쪽 하단
+    color: '#FF6B6B',
+    textAlign: 'left',
   },
 
+  // ✅ footer 하단 고정
   footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 20,
     paddingBottom: 20,
-    paddingTop: 10,
+    paddingTop: 12,
     backgroundColor: '#FFFFFF',
+    height: FOOTER_HEIGHT,
+    justifyContent: 'center',
   },
 
   submitButton: {
@@ -289,7 +318,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonActive: {
-    backgroundColor: '#FFB6C1',
+    backgroundColor: PINK,
   },
   submitButtonDisabled: {
     backgroundColor: '#E0E0E0',

@@ -1,4 +1,4 @@
-// src/screens/ThisOrThatQuestionsScreen.tsx
+// src/screens/login/PersonalityTestScreen.tsx
 import React, { useMemo, useState } from 'react';
 import {
   View,
@@ -11,15 +11,19 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  saveRelationshipChoices,
+  RelationshipChoicesData,
+} from '../../utils/ProfileStorage';
 
-interface ThisOrThatQuestionsScreenProps {
-  onQuestionsComplete: () => void;
+interface PersonalityTestScreenProps {
+  onTestComplete: () => void;
 }
 
 type Choice = 'LEFT' | 'RIGHT';
 type AnswerMap = Record<string, Choice | null>;
 
-const STORAGE_KEY = 'optional_this_or_that_answers_v1';
+const RAW_STORAGE_KEY = 'optional_this_or_that_answers_v1';
 
 const QUESTIONS = [
   {
@@ -72,8 +76,31 @@ const QUESTIONS = [
   },
 ] as const;
 
-const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
-  onQuestionsComplete,
+const toText = (q: (typeof QUESTIONS)[number], choice: Choice | null) => {
+  if (!choice) return '';
+  return choice === 'LEFT' ? q.left : q.right;
+};
+
+const buildRelationshipChoices = (
+  answers: AnswerMap,
+): RelationshipChoicesData => {
+  const byId = (id: (typeof QUESTIONS)[number]['id']) =>
+    QUESTIONS.find(q => q.id === id)!;
+
+  return {
+    conflictResolution: toText(byId('fight'), answers.fight),
+    photoSharing: toText(byId('photo'), answers.photo),
+    relationshipPriority: toText(byId('important'), answers.important),
+    datePlace: toText(byId('date'), answers.date),
+    jealousyAttitude: toText(byId('jealousy'), answers.jealousy),
+    idealDay: toText(byId('idealDay'), answers.idealDay),
+    attraction: toText(byId('attracted'), answers.attracted),
+    friendInteraction: toText(byId('friends'), answers.friends),
+  };
+};
+
+const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
+  onTestComplete,
 }) => {
   const [answers, setAnswers] = useState<AnswerMap>(() => {
     const init: AnswerMap = {};
@@ -90,29 +117,33 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
   const handleSelect = (id: string, choice: Choice) => {
     setAnswers(prev => ({
       ...prev,
-      [id]: prev[id] === choice ? null : choice, // 다시 누르면 선택 해제(선택사항 느낌)
+      [id]: prev[id] === choice ? null : choice,
     }));
   };
 
   const handleSave = async () => {
     if (isLoading) return;
-
     setIsLoading(true);
+
     try {
-      // 선택사항이므로 0개여도 저장/다음 가능
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(answers));
+      // 1) 원본 답변도 저장 (원하면 나중에 그대로 복원 가능)
+      await AsyncStorage.setItem(RAW_STORAGE_KEY, JSON.stringify(answers));
+
+      // 2) 서버 제출용 형태로 변환해서 ProfileStorage에 저장 (⭐ 핵심)
+      const relationshipChoices = buildRelationshipChoices(answers);
+      await saveRelationshipChoices(relationshipChoices);
 
       const pointsEarned = answeredCount * 5;
       const msg =
         pointsEarned > 0
-          ? `선택한 질문 ${answeredCount}개 저장 완료! +${pointsEarned} 포인트`
+          ? `선택한 질문 ${answeredCount}개 저장 완료! +${pointsEarned}P`
           : '선택 없이 넘어갈게요!';
 
       Alert.alert('저장 완료', msg, [
-        { text: '확인', onPress: onQuestionsComplete },
+        { text: '확인', onPress: onTestComplete },
       ]);
     } catch (e) {
-      console.error('이지선다 저장 오류:', e);
+      console.error('성향 테스트 저장 오류:', e);
       Alert.alert('오류', '저장 중 문제가 발생했어요.');
     } finally {
       setIsLoading(false);
@@ -121,14 +152,13 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
 
   const renderQuestion = (q: (typeof QUESTIONS)[number]) => {
     const selected = answers[q.id];
-
     const leftSelected = selected === 'LEFT';
     const rightSelected = selected === 'RIGHT';
 
     return (
       <View key={q.id} style={styles.questionBlock}>
         <Text style={styles.questionTitle}>
-          {q.title} <Text style={styles.optionalText}>(선택시 5포인트 팅)</Text>
+          {q.title} <Text style={styles.optionalText}>(선택 시 5P)</Text>
         </Text>
 
         <View style={styles.choiceRow}>
@@ -137,13 +167,17 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
             onPress={() => handleSelect(q.id, 'LEFT')}
             style={[
               styles.choiceButton,
-              leftSelected ? styles.choiceButtonSelected : styles.choiceButtonIdle,
+              leftSelected
+                ? styles.choiceButtonSelected
+                : styles.choiceButtonIdle,
             ]}
           >
             <Text
               style={[
                 styles.choiceText,
-                leftSelected ? styles.choiceTextSelected : styles.choiceTextIdle,
+                leftSelected
+                  ? styles.choiceTextSelected
+                  : styles.choiceTextIdle,
               ]}
               numberOfLines={1}
             >
@@ -166,7 +200,9 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
             <Text
               style={[
                 styles.choiceText,
-                rightSelected ? styles.choiceTextSelected : styles.choiceTextIdle,
+                rightSelected
+                  ? styles.choiceTextSelected
+                  : styles.choiceTextIdle,
               ]}
               numberOfLines={1}
             >
@@ -181,7 +217,6 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.page}>
-        {/* 스크롤은 유지하되, 간격을 최대한 줄여서 한 화면에 보이게 */}
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -190,7 +225,6 @@ const ThisOrThatQuestionsScreen: React.FC<ThisOrThatQuestionsScreenProps> = ({
           {QUESTIONS.map(renderQuestion)}
         </ScrollView>
 
-        {/* 저장 버튼 아래 고정 */}
         <View style={styles.bottomBar}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -217,37 +251,25 @@ const PINK = '#FFB6C1';
 const BORDER = '#D9D9D9';
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  page: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  page: { flex: 1 },
+  scroll: { flex: 1 },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 88, // 아래 고정 버튼에 가리지 않게
+    paddingTop: 20,
+    paddingBottom: 100,
   },
 
-  questionBlock: {
-    marginBottom: 12, // 한 화면에 최대한 우겨넣기
-  },
+  questionBlock: { marginBottom: 18 },
   questionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222222',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#222',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  optionalText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222222', // ✅ 핑크 제거(그냥 동일 톤)
-  },
+  optionalText: { fontSize: 13, fontWeight: '600', color: '#666' },
 
   choiceRow: {
     flexDirection: 'row',
@@ -255,40 +277,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   vsText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#666666',
-    marginHorizontal: 10,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#666',
+    marginHorizontal: 12,
   },
 
   choiceButton: {
     flex: 1,
     borderRadius: 999,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 40,
+    minHeight: 48,
   },
-  choiceButtonIdle: {
-    backgroundColor: '#FFFFFF',
-    borderColor: BORDER,
-  },
-  choiceButtonSelected: {
-    backgroundColor: PINK, // ✅ 선택 색
-    borderColor: PINK,
-  },
-  choiceText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  choiceTextIdle: {
-    color: '#222222',
-  },
-  choiceTextSelected: {
-    color: '#222222', // 첫 사진 느낌(핑크 배경 + 진한 글자)
-  },
+  choiceButtonIdle: { backgroundColor: '#FFF', borderColor: BORDER },
+  choiceButtonSelected: { backgroundColor: PINK, borderColor: PINK },
+
+  choiceText: { fontSize: 14, fontWeight: '700' },
+  choiceTextIdle: { color: '#222' },
+  choiceTextSelected: { color: '#222' },
 
   bottomBar: {
     position: 'absolute',
@@ -301,23 +311,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButton: {
-    width: '33%', // ✅ 한 페이지 하단 가운데 1/3
+    width: '33%',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveButtonActive: {
-    backgroundColor: PINK,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#EAEAEA',
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333333',
-  },
+  saveButtonActive: { backgroundColor: PINK },
+  saveButtonDisabled: { backgroundColor: '#EAEAEA' },
+  saveButtonText: { fontSize: 14, fontWeight: '700', color: '#333' },
 });
 
-export default ThisOrThatQuestionsScreen;
+export default PersonalityTestScreen;

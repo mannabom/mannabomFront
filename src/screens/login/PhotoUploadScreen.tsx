@@ -1,16 +1,16 @@
 // src/screens/login/PhotoUploadScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
   Alert,
   Image,
   Dimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import {
   launchImageLibrary,
@@ -38,8 +38,21 @@ interface PhotoItem {
   fileSize?: number;
 }
 
-const { width: screenWidth } = Dimensions.get('window');
-const photoWidth = screenWidth - 80; // 좌우 패딩 40씩 제외
+const { width: SCREEN_W } = Dimensions.get('window');
+
+const MAX_PHOTOS = 5;
+
+const CARD_W = Math.round(SCREEN_W * 0.62);
+const CARD_H = Math.round(CARD_W * 1.15);
+
+// ✅ “겹쳐 보이게” 하는 핵심: 아이템 슬롯 폭을 카드 폭보다 좁게 (약 2/3)
+// 그러면 옆 카드가 뒤에 1/3 정도 겹쳐서 보임
+const ITEM_W = Math.round(CARD_W * 0.67);
+
+const SIDE_PADDING = Math.round((SCREEN_W - ITEM_W) / 2);
+
+const PINK = '#FFB6C1';
+const PINK_STRONG = '#FF6B6B';
 
 const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   onUploadComplete,
@@ -50,6 +63,11 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
 
+  // ✅ TS 타입 충돌 피하기: Animated.FlatList는 FlatList랑 타입이 달라서 any가 가장 안전
+  const listRef = useRef<any>(null);
+
+  const scrollX = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     const fetchProfileId = async () => {
       const id = await getProfileId();
@@ -57,6 +75,9 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
     };
     fetchProfileId();
   }, []);
+
+  const canUploadMore = photos.length < MAX_PHOTOS && !isLoading;
+  const canSubmit = photos.length > 0 && !!profileId && !isLoading;
 
   const showImagePickerOptions = () => {
     Alert.alert(
@@ -74,19 +95,42 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   const openGallery = () => {
     const options = {
       mediaType: 'photo' as MediaType,
-      quality: 0.8 as any, // 타입 호환성을 위해 any로 캐스팅
-      selectionLimit: 5 - photos.length, // 최대 5장까지
+      quality: 0.8 as any,
+      selectionLimit: MAX_PHOTOS - photos.length,
     };
 
     launchImageLibrary(options, (response: ImagePickerResponse) => {
+      if (response.didCancel) return;
+
+      if (response.errorCode) {
+        Alert.alert('오류', '갤러리 접근 중 문제가 발생했어요.');
+        return;
+      }
+
       if (response.assets && response.assets.length > 0) {
-        const newPhotos = response.assets.map(asset => ({
-          uri: asset.uri!,
-          fileName: asset.fileName,
-          type: asset.type,
-          fileSize: asset.fileSize,
-        }));
-        setPhotos(prev => [...prev, ...newPhotos]);
+        const newPhotos = response.assets
+          .filter(a => !!a.uri)
+          .map(asset => ({
+            uri: asset.uri!,
+            fileName: asset.fileName,
+            type: asset.type,
+            fileSize: asset.fileSize,
+          }));
+
+        setPhotos(prev => {
+          const merged = [...prev, ...newPhotos].slice(0, MAX_PHOTOS);
+          const nextIndex = Math.max(0, merged.length - 1);
+
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({
+              offset: nextIndex * ITEM_W,
+              animated: true,
+            });
+            setCurrentPhotoIndex(nextIndex);
+          }, 50);
+
+          return merged;
+        });
       }
     });
   };
@@ -94,40 +138,82 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   const openCamera = () => {
     const options = {
       mediaType: 'photo' as MediaType,
-      quality: 0.8 as any, // 타입 호환성을 위해 any로 캐스팅
+      quality: 0.8 as any,
     };
 
     launchCamera(options, (response: ImagePickerResponse) => {
-      if (response.assets && response.assets[0]) {
+      if (response.didCancel) return;
+
+      if (response.errorCode) {
+        Alert.alert('오류', '카메라 실행 중 문제가 발생했어요.');
+        return;
+      }
+
+      if (response.assets && response.assets[0]?.uri) {
         const asset = response.assets[0];
-        const newPhoto = {
+        const newPhoto: PhotoItem = {
           uri: asset.uri!,
           fileName: asset.fileName,
           type: asset.type,
           fileSize: asset.fileSize,
         };
-        setPhotos(prev => [...prev, newPhoto]);
+
+        setPhotos(prev => {
+          const merged = [...prev, newPhoto].slice(0, MAX_PHOTOS);
+          const nextIndex = Math.max(0, merged.length - 1);
+
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({
+              offset: nextIndex * ITEM_W,
+              animated: true,
+            });
+            setCurrentPhotoIndex(nextIndex);
+          }, 50);
+
+          return merged;
+        });
       }
     });
   };
 
   const removePhoto = (index: number) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index));
-    if (currentPhotoIndex >= photos.length - 1 && currentPhotoIndex > 0) {
-      setCurrentPhotoIndex(currentPhotoIndex - 1);
-    }
+    setPhotos(prev => {
+      const merged = prev.filter((_, i) => i !== index);
+      const nextIndex = Math.max(0, Math.min(index, merged.length - 1));
+
+      setTimeout(() => {
+        listRef.current?.scrollToOffset({
+          offset: nextIndex * ITEM_W,
+          animated: true,
+        });
+        setCurrentPhotoIndex(nextIndex);
+      }, 50);
+
+      return merged;
+    });
+  };
+
+  const goPrev = () => {
+    if (photos.length <= 1) return;
+    const next = Math.max(0, currentPhotoIndex - 1);
+    setCurrentPhotoIndex(next);
+    listRef.current?.scrollToOffset({ offset: next * ITEM_W, animated: true });
+  };
+
+  const goNext = () => {
+    if (photos.length <= 1) return;
+    const next = Math.min(photos.length - 1, currentPhotoIndex + 1);
+    setCurrentPhotoIndex(next);
+    listRef.current?.scrollToOffset({ offset: next * ITEM_W, animated: true });
   };
 
   const handleSubmit = async () => {
-    if (!profileId || photos.length === 0 || isLoading) {
-      return;
-    }
+    if (!canSubmit) return;
 
     setIsLoading(true);
-
     try {
       const formData = new FormData();
-      formData.append('profileId', profileId);
+      formData.append('profileId', profileId as string);
 
       photos.forEach((photo, index) => {
         formData.append('photos', {
@@ -140,11 +226,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
       const response = await apiClient.post(
         API_ENDPOINTS_LIST.PROFILE_PHOTOS,
         formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        },
+        { headers: { 'Content-Type': 'multipart/form-data' } },
       );
 
       if (response.data.success) {
@@ -168,325 +250,321 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
     }
   };
 
-  const renderPhotoSlider = () => {
-    if (photos.length === 0) {
-      // 기본 투명한 사람 실루엣
-      return (
-        <View style={styles.emptyPhotoContainer}>
-          <View style={styles.emptyPhoto}>
-            <Text style={styles.emptyPhotoIcon}>👤</Text>
-          </View>
+  const onMomentumEnd = (x: number) => {
+    const index = Math.round(x / ITEM_W);
+    const clamped = Math.max(
+      0,
+      Math.min(index, Math.max(0, photos.length - 1)),
+    );
+    setCurrentPhotoIndex(clamped);
+  };
+
+  const renderEmptyCard = () => {
+    return (
+      <View style={styles.sliderWrap}>
+        <View style={styles.card}>
+          <Text style={styles.placeholderIcon}>👤</Text>
         </View>
-      );
-    }
+      </View>
+    );
+  };
+
+  const renderItem = ({ item, index }: { item: PhotoItem; index: number }) => {
+    const inputRange = [
+      (index - 1) * ITEM_W,
+      index * ITEM_W,
+      (index + 1) * ITEM_W,
+    ];
+
+    // ✅ 뒤에 있다가 튀어나오는 느낌
+    const scale = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.86, 1, 0.86],
+      extrapolate: 'clamp',
+    });
+
+    const translateY = scrollX.interpolate({
+      inputRange,
+      outputRange: [18, 0, 18],
+      extrapolate: 'clamp',
+    });
+
+    const opacity = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.75, 1, 0.75],
+      extrapolate: 'clamp',
+    });
+
+    const isCenter = index === currentPhotoIndex;
 
     return (
-      <View style={styles.photoSliderContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={event => {
-            const index = Math.round(
-              event.nativeEvent.contentOffset.x / photoWidth,
-            );
-            setCurrentPhotoIndex(index);
-          }}
+      <View style={styles.itemSlot}>
+        <Animated.View
+          style={[
+            styles.card,
+            styles.cardShadow,
+            {
+              opacity,
+              transform: [{ translateY }, { scale }],
+              zIndex: isCenter ? 20 : 1,
+            },
+          ]}
         >
-          {photos.map((photo, index) => (
-            <View key={index} style={styles.photoContainer}>
-              <Image source={{ uri: photo.uri }} style={styles.photo} />
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => removePhoto(index)}
-              >
-                <Text style={styles.removeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
+          <Image source={{ uri: item.uri }} style={styles.photo} />
 
-        {/* 페이지 인디케이터 */}
-        {photos.length > 1 && (
-          <View style={styles.pageIndicator}>
-            {photos.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.dot,
-                  currentPhotoIndex === index && styles.activeDot,
-                ]}
-              />
-            ))}
-          </View>
-        )}
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => removePhoto(index)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.removeButtonText}>×</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    );
+  };
+
+  const renderCarousel = () => {
+    if (photos.length === 0) return renderEmptyCard();
+
+    return (
+      <View style={styles.sliderWrap}>
+        <TouchableOpacity
+          style={[
+            styles.arrowBtn,
+            styles.arrowLeft,
+            currentPhotoIndex === 0 && styles.arrowBtnDisabled,
+          ]}
+          onPress={goPrev}
+          disabled={currentPhotoIndex === 0}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.arrowText}>‹</Text>
+        </TouchableOpacity>
+
+        <Animated.FlatList
+          ref={listRef}
+          data={photos}
+          keyExtractor={(p, i) => `${p.uri}-${i}`}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          decelerationRate="fast"
+          snapToInterval={ITEM_W}
+          snapToAlignment="start"
+          contentContainerStyle={{ paddingHorizontal: SIDE_PADDING }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: true },
+          )}
+          onMomentumScrollEnd={e =>
+            onMomentumEnd(e.nativeEvent.contentOffset.x)
+          }
+          scrollEventThrottle={16}
+          renderItem={renderItem}
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.arrowBtn,
+            styles.arrowRight,
+            currentPhotoIndex === photos.length - 1 && styles.arrowBtnDisabled,
+          ]}
+          onPress={goNext}
+          disabled={currentPhotoIndex === photos.length - 1}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.arrowText}>›</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <Text style={styles.title}>프로필 사진 등록</Text>
-          <Text style={styles.subtitle}>
-            매력적인 프로필 사진을 등록해주세요!
-          </Text>
+      {/* ✅ 상단 글씨 삭제 + 전체를 정중앙 */}
+      <View style={styles.page}>
+        <View style={styles.centerGroup}>
+          {renderCarousel()}
 
-          {/* 사진 슬라이더 */}
-          {renderPhotoSlider()}
-
-          {/* 업로드 가이드 */}
-          <View style={styles.guideContainer}>
-            <Text style={styles.guideTitle}>사진 등록 가이드</Text>
-            <View style={styles.guideItem}>
-              <Text style={styles.guideBullet}>1</Text>
-              <View>
-                <Text style={styles.guideText}>사진 등록 최대</Text>
-                <Text style={styles.guideSubText}>
-                  • 사진 한 장에 사람 한 명이 나와야 함
-                </Text>
-                <Text style={styles.guideSubText}>
-                  • 등록된 사진이 여러 장이면 옆으로 넘기며 확인
-                </Text>
-                <Text style={styles.guideSubText}>
-                  • 정면에는 본인만 다른 사진이 나와야 함
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.guideItem}>
-              <Text style={styles.guideBullet}>2</Text>
-              <View>
-                <Text style={styles.guideText}>사진 업로드 버튼</Text>
-                <Text style={styles.guideSubText}>
-                  • 누를 시 갤러리 목록 또는 사진 찍기 팝업
-                </Text>
-                <Text style={styles.guideSubText}>• 선택한 사진 업로드</Text>
-              </View>
-            </View>
-
-            <View style={styles.guideItem}>
-              <Text style={styles.guideBullet}>3</Text>
-              <Text style={styles.guideText}>완료하기 버튼</Text>
-              <Text style={styles.guideSubText}>
-                사진이 한 장 이상 등록되기 전까지는 비활성화
-              </Text>
-            </View>
+          <View style={styles.noticeArea}>
+            <Text style={styles.helperText}>프로필 사진을 등록해주세요</Text>
+            <Text style={styles.warnText}>*최소 한 장은 등록해야 합니다.</Text>
           </View>
 
-          {/* 버튼들 */}
-          <View style={styles.buttonContainer}>
+          <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={styles.uploadButton}
+              style={[
+                styles.smallButton,
+                canUploadMore
+                  ? styles.uploadButtonActive
+                  : styles.buttonDisabled,
+              ]}
               onPress={showImagePickerOptions}
-              disabled={isLoading || photos.length >= 5}
+              disabled={!canUploadMore}
+              activeOpacity={0.85}
             >
-              <Text style={styles.uploadButtonText}>
-                사진 업로드하기 ({photos.length}/5)
-              </Text>
+              <Text style={styles.smallButtonTextDark}>사진 업로드하기</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                styles.completeButton,
-                photos.length === 0 || isLoading
-                  ? styles.completeButtonDisabled
-                  : styles.completeButtonActive,
+                styles.smallButton,
+                canSubmit ? styles.completeButtonActive : styles.buttonDisabled,
               ]}
               onPress={handleSubmit}
-              disabled={photos.length === 0 || isLoading}
+              disabled={!canSubmit}
+              activeOpacity={0.85}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text
-                  style={[
-                    styles.completeButtonText,
-                    photos.length === 0
-                      ? styles.completeButtonTextDisabled
-                      : styles.completeButtonTextActive,
-                  ]}
-                >
-                  완료하기
-                </Text>
+                <Text style={styles.smallButtonTextLight}>완료하기</Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+
+  page: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333333',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  emptyPhotoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  emptyPhoto: {
-    width: photoWidth,
-    height: photoWidth * 1.2,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    borderStyle: 'dashed',
   },
-  emptyPhotoIcon: {
-    fontSize: 80,
-    color: '#CCCCCC',
-  },
-  photoSliderContainer: {
+  centerGroup: {
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 30,
   },
-  photoContainer: {
-    width: photoWidth,
-    height: photoWidth * 1.2,
-    marginHorizontal: 0,
-    position: 'relative',
+
+  sliderWrap: {
+    width: '100%',
+    height: CARD_H + 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
   },
+
+  itemSlot: {
+    width: ITEM_W,
+    height: CARD_H,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+
+  card: {
+    width: CARD_W,
+    height: CARD_H,
+    borderRadius: 18,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  cardShadow: {
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+
+  placeholderIcon: {
+    fontSize: 58,
+    color: '#BDBDBD',
+  },
+
   photo: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
     resizeMode: 'cover',
   },
+
   removeButton: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   removeButtonText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    marginTop: -1,
   },
-  pageIndicator: {
-    flexDirection: 'row',
-    marginTop: 15,
+
+  arrowBtn: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E6E6E6',
+    zIndex: 50,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#E0E0E0',
-    marginHorizontal: 3,
-  },
-  activeDot: {
-    backgroundColor: '#FF6B6B',
-  },
-  guideContainer: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 30,
-  },
-  guideTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  arrowLeft: { left: 2 },
+  arrowRight: { right: 2 },
+  arrowBtnDisabled: { opacity: 0.3 },
+  arrowText: {
+    fontSize: 28,
+    fontWeight: '700',
     color: '#333333',
-    marginBottom: 12,
+    marginTop: -2,
   },
-  guideItem: {
+
+  noticeArea: {
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  helperText: { fontSize: 13, color: '#333333', marginBottom: 6 },
+  warnText: { fontSize: 12, color: PINK_STRONG, fontWeight: '800' },
+
+  buttonRow: {
+    width: '100%',
     flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'flex-start',
-  },
-  guideBullet: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FF6B6B',
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginRight: 12,
-    marginTop: 2,
-  },
-  guideText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  guideSubText: {
-    fontSize: 12,
-    color: '#666666',
-    lineHeight: 16,
-  },
-  buttonContainer: {
+    justifyContent: 'center',
     gap: 12,
   },
-  uploadButton: {
-    backgroundColor: '#FFB6C1',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  uploadButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-  },
-  completeButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
+  smallButton: {
+    width: '40%',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  completeButtonActive: {
-    backgroundColor: '#FF6B6B',
+  uploadButtonActive: { backgroundColor: PINK },
+  completeButtonActive: { backgroundColor: PINK_STRONG },
+  buttonDisabled: { backgroundColor: '#E0E0E0' },
+
+  smallButtonTextDark: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#333333',
   },
-  completeButtonDisabled: {
-    backgroundColor: '#E0E0E0',
-  },
-  completeButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  completeButtonTextActive: {
+  smallButtonTextLight: {
+    fontSize: 14,
+    fontWeight: '800',
     color: '#FFFFFF',
-  },
-  completeButtonTextDisabled: {
-    color: '#999999',
   },
 });
 
