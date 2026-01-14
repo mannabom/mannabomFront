@@ -1,6 +1,8 @@
+// App.tsx
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import SplashScreen from './src/components/login/SplashScreen';
 import KakaoLoginScreen from './src/screens/login/KakaoLoginScreen';
 import EmailVerificationScreen from './src/screens/login/EmailVerificationScreen';
@@ -13,11 +15,13 @@ import PhotoUploadScreen from './src/screens/login/PhotoUploadScreen';
 import TermsAgreementScreen from './src/screens/login/TermsAgreementScreen';
 import TermsDetailScreen from './src/screens/login/TermsDetailScreen';
 import CongratulationsScreen from './src/screens/login/CongratulationsScreen';
-import HomeScreen from './src/screens/home/HomeScreen';
-import MyPage from './src/screens/MyPage/MyPage';
+
 import ProfileDetail from './src/screens/MyPage/ProfileDetail';
 import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
+
+// ✅ 바텀탭 네비
+import MainTabNavigator from './src/navigation/MainTabNavigator';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -204,12 +208,13 @@ const App: React.FC = () => {
           </Stack.Screen>
         )}
 
+        {/* ✅ home 상태면 MainTabs를 루트로 깔고, 상세는 스택으로 올림 */}
         {appState === 'home' && (
           <>
-            <Stack.Screen name="Home">
-              {props => <HomeScreen {...props} onLogout={handleLogout} />}
+            <Stack.Screen name="MainTabs">
+              {() => <MainTabNavigator onLogout={handleLogout} />}
             </Stack.Screen>
-            <Stack.Screen name="MyPage" component={MyPage} />
+
             <Stack.Screen name="ProfileDetail" component={ProfileDetail} />
           </>
         )}

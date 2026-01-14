@@ -1,14 +1,14 @@
 // src/screens/login/CongratulationsScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Dimensions,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
 import { getProfileId, saveAuthTokens } from '../../utils/AuthUtils';
@@ -16,229 +16,140 @@ import {
   SignupCompleteRequestDto,
   SignupCompleteResponseDto,
 } from '../../types/NicknameAPI';
+import { getCombinedProfileData } from '../../utils/ProfileStorage';
 
 interface CongratulationsScreenProps {
   onComplete: (userData: any) => void;
 }
 
-const { width, height } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
+const CARD_W = Math.min(420, SCREEN_W - 48);
+
+type ConfettiShape =
+  | {
+      type: 'circle';
+      size: number;
+      color: string;
+      top: number;
+      left: number;
+      rotate?: string;
+      opacity?: number;
+    }
+  | {
+      type: 'square';
+      size: number;
+      color: string;
+      top: number;
+      left: number;
+      rotate?: string;
+      opacity?: number;
+    }
+  | {
+      type: 'triangle';
+      size: number;
+      color: string;
+      top: number;
+      left: number;
+      rotate?: string;
+      opacity?: number;
+    };
+
+const COLORS = [
+  '#FFD93D',
+  '#4D96FF',
+  '#FF9F43',
+  '#A55EEA',
+  '#26C0C7',
+  '#6BCF7F',
+  '#FD5E53',
+  '#FF6B9D',
+] as const;
+
+// fetch 응답 안전 파서(로그용)
+const readResponseBody = async (res: Response) => {
+  const text = await res.text();
+  try {
+    return { text, json: text ? JSON.parse(text) : null };
+  } catch {
+    return { text, json: null };
+  }
+};
 
 const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
   onComplete,
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [initialPoints, setInitialPoints] = useState(100); // 기본값
+  const [isPreparing, setIsPreparing] = useState(true);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [initialPoints, setInitialPoints] = useState<number>(0);
+  const [pendingUserData, setPendingUserData] = useState<any | null>(null);
 
-  // 배경 도형들을 위한 랜덤 위치와 색상
-  const backgroundShapes = [
-    // 컬러풀한 작은 도형들
-    {
-      type: 'circle',
-      size: 8,
-      color: '#FFD93D',
-      top: '15%',
-      left: '10%',
-      rotation: '0deg',
-    },
-    {
-      type: 'triangle',
-      size: 12,
-      color: '#6BCF7F',
-      top: '20%',
-      right: '15%',
-      rotation: '45deg',
-    },
-    {
-      type: 'square',
-      size: 10,
-      color: '#4D96FF',
-      top: '25%',
-      left: '20%',
-      rotation: '30deg',
-    },
-    {
-      type: 'circle',
-      size: 6,
-      color: '#FF6B9D',
-      top: '30%',
-      right: '25%',
-      rotation: '0deg',
-    },
-    {
-      type: 'triangle',
-      size: 14,
-      color: '#FF9F43',
-      top: '10%',
-      left: '70%',
-      rotation: '60deg',
-    },
-    {
-      type: 'square',
-      size: 8,
-      color: '#A55EEA',
-      top: '35%',
-      left: '5%',
-      rotation: '15deg',
-    },
-    {
-      type: 'circle',
-      size: 10,
-      color: '#26C0C7',
-      top: '40%',
-      right: '10%',
-      rotation: '0deg',
-    },
-    {
-      type: 'triangle',
-      size: 10,
-      color: '#FD5E53',
-      top: '45%',
-      left: '80%',
-      rotation: '90deg',
-    },
-    {
-      type: 'square',
-      size: 12,
-      color: '#FFD93D',
-      top: '50%',
-      left: '15%',
-      rotation: '45deg',
-    },
-    {
-      type: 'circle',
-      size: 14,
-      color: '#6BCF7F',
-      top: '55%',
-      right: '20%',
-      rotation: '0deg',
-    },
-    {
-      type: 'triangle',
-      size: 8,
-      color: '#4D96FF',
-      top: '65%',
-      left: '25%',
-      rotation: '120deg',
-    },
-    {
-      type: 'square',
-      size: 6,
-      color: '#FF6B9D',
-      top: '70%',
-      right: '30%',
-      rotation: '60deg',
-    },
-    {
-      type: 'circle',
-      size: 12,
-      color: '#FF9F43',
-      top: '75%',
-      left: '10%',
-      rotation: '0deg',
-    },
-    {
-      type: 'triangle',
-      size: 16,
-      color: '#A55EEA',
-      top: '80%',
-      right: '15%',
-      rotation: '30deg',
-    },
-    {
-      type: 'square',
-      size: 14,
-      color: '#26C0C7',
-      top: '85%',
-      left: '75%',
-      rotation: '75deg',
-    },
-  ];
+  const [cardSize, setCardSize] = useState<{ w: number; h: number }>({
+    w: CARD_W,
+    h: 360,
+  });
 
-  const handleCompleteSignup = async () => {
-    try {
-      setIsLoading(true);
+  // ✅ 카드 안에만 컨페티(숫자 좌표라 TS 에러도 깔끔하게 회피)
+  const confetti = useMemo<ConfettiShape[]>(() => {
+    const w = Math.max(1, cardSize.w);
+    const h = Math.max(1, cardSize.h);
 
-      // 저장된 profileId 가져오기
-      const profileId = await getProfileId();
-      if (!profileId) {
-        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
-      }
+    const makeRand = (seed: number) => {
+      // 간단한 deterministic pseudo-random
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    };
 
-      // 회원가입 완료 API 호출
-      const requestData: SignupCompleteRequestDto = {
-        profileId,
-      };
+    const shapes: ConfettiShape[] = [];
+    for (let i = 0; i < 18; i++) {
+      const r1 = makeRand(i * 13.37);
+      const r2 = makeRand(i * 91.17);
+      const r3 = makeRand(i * 7.77);
 
-      const response = await fetch(
-        `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestData),
-        },
-      );
+      const typePick = i % 3;
+      const type = typePick === 0 ? 'circle' : typePick === 1 ? 'square' : 'triangle';
 
-      const responseData: SignupCompleteResponseDto = await response.json();
+      const size = 6 + Math.floor(r3 * 8); // 6~13
+      const left = Math.floor(r1 * (w - 16)) + 8;
+      const top = Math.floor(r2 * (h - 16)) + 8;
 
-      if (!response.ok) {
-        throw new Error(
-          responseData.message || '회원가입 완료 중 오류가 발생했습니다.',
-        );
-      }
+      const color = COLORS[i % COLORS.length];
+      const rotate = `${Math.floor(makeRand(i * 33.3) * 120 - 60)}deg`;
+      const opacity = 0.82 + makeRand(i * 3.14) * 0.15;
 
-      // 토큰 저장
-      await saveAuthTokens(
-        responseData.data.accessToken,
-        responseData.data.refreshToken,
-      );
-
-      // 포인트 정보 업데이트
-      setInitialPoints(responseData.data.initialPoints);
-
-      // 완료 처리
-      const userData = {
-        userId: responseData.data.userId,
-        accessToken: responseData.data.accessToken,
-        refreshToken: responseData.data.refreshToken,
-        initialPoints: responseData.data.initialPoints,
-      };
-
-      onComplete(userData);
-    } catch (error) {
-      console.error('회원가입 완료 오류:', error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : '회원가입 완료 중 오류가 발생했습니다.';
-      Alert.alert('오류', errorMessage);
-    } finally {
-      setIsLoading(false);
+      shapes.push({
+        type: type as any,
+        size,
+        color,
+        left,
+        top,
+        rotate,
+        opacity,
+      });
     }
-  };
+    return shapes;
+  }, [cardSize]);
 
-  const renderShape = (shape: any, index: number) => {
-    const shapeStyle = {
-      position: 'absolute' as const,
-      width: shape.size,
-      height: shape.size,
-      backgroundColor: shape.color,
+  const renderConfetti = (shape: ConfettiShape, idx: number) => {
+    const common: any = {
+      position: 'absolute',
       top: shape.top,
       left: shape.left,
-      right: shape.right,
-      transform: [{ rotate: shape.rotation }],
-      zIndex: 1,
+      opacity: shape.opacity ?? 0.9,
+      transform: shape.rotate ? [{ rotate: shape.rotate }] : undefined,
+      zIndex: 0,
     };
 
     if (shape.type === 'circle') {
       return (
         <View
-          key={index}
+          key={idx}
           style={[
-            shapeStyle,
+            common,
             {
+              width: shape.size,
+              height: shape.size,
               borderRadius: shape.size / 2,
+              backgroundColor: shape.color,
             },
           ]}
         />
@@ -248,189 +159,304 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     if (shape.type === 'triangle') {
       return (
         <View
-          key={index}
+          key={idx}
           style={[
-            shapeStyle,
+            common,
             {
-              backgroundColor: 'transparent',
+              width: 0,
+              height: 0,
               borderLeftWidth: shape.size / 2,
               borderRightWidth: shape.size / 2,
               borderBottomWidth: shape.size,
               borderLeftColor: 'transparent',
               borderRightColor: 'transparent',
               borderBottomColor: shape.color,
-              width: 0,
-              height: 0,
+              backgroundColor: 'transparent',
             },
           ]}
         />
       );
     }
 
-    // square
-    return <View key={index} style={shapeStyle} />;
+    return (
+      <View
+        key={idx}
+        style={[
+          common,
+          {
+            width: shape.size,
+            height: shape.size,
+            backgroundColor: shape.color,
+          },
+        ]}
+      />
+    );
+  };
+
+  /**
+   * ✅ 핵심:
+   * 1) 로컬에 저장된 프로필/연애관 데이터를 모아서
+   * 2) /api/signup/profile-relationship 로 먼저 서버에 저장
+   * 3) 성공하면 /api/signup/complete 호출
+   */
+  const prepareSignupResult = async () => {
+    try {
+      setIsPreparing(true);
+
+      const profileId = await getProfileId();
+      console.log('🎉 [prepareSignupResult] profileId:', profileId);
+
+      if (!profileId) {
+        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+      }
+
+      // 1) 로컬 데이터 합치기
+      const combined = await getCombinedProfileData(profileId);
+      console.log('🔗 [prepareSignupResult] combined profile data:', combined);
+
+      if (!combined) {
+        throw new Error(
+          '로컬에 저장된 프로필 데이터가 부족해요. (신체/자기소개/연애관 저장 여부 확인 필요)',
+        );
+      }
+
+      // 2) 서버에 profile-relationship 저장 (가입 단계 완료 처리용)
+      const prUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP}`;
+      console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
+
+      const prRes = await fetch(prUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(combined),
+      });
+
+      const prBody = await readResponseBody(prRes);
+      console.log('✅ [profile-relationship] status:', prRes.status);
+      console.log('📄 [profile-relationship] body(text):', prBody.text);
+      console.log('📦 [profile-relationship] body(json):', prBody.json);
+
+      // 백엔드가 success 필드를 쓰는 경우까지 같이 커버
+      if (!prRes.ok || (prBody.json && prBody.json.success === false)) {
+        const msg =
+          prBody.json?.message ||
+          `프로필 저장 실패 (status ${prRes.status})`;
+        throw new Error(msg);
+      }
+
+      // 3) 이제 complete 호출
+      const completeUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`;
+      const requestData: SignupCompleteRequestDto = { profileId };
+
+      console.log('🌐 [prepareSignupResult] POST signup complete:', completeUrl);
+      console.log('📝 [signup complete] request:', requestData);
+
+      const res = await fetch(completeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData),
+      });
+
+      const body = await readResponseBody(res);
+      console.log('✅ [signup complete] status:', res.status);
+      console.log('📄 [signup complete] body(text):', body.text);
+      console.log('📦 [signup complete] body(json):', body.json);
+
+      const responseData = body.json as SignupCompleteResponseDto | null;
+
+      if (!res.ok || !responseData?.data) {
+        const msg =
+          responseData?.message ||
+          body.text ||
+          '회원가입 완료 중 오류가 발생했습니다.';
+        throw new Error(msg);
+      }
+
+      setInitialPoints(responseData.data.initialPoints);
+
+      const userData = {
+        userId: responseData.data.userId,
+        accessToken: responseData.data.accessToken,
+        refreshToken: responseData.data.refreshToken,
+        initialPoints: responseData.data.initialPoints,
+      };
+      setPendingUserData(userData);
+    } catch (error) {
+      console.error('❌ 회원가입 준비 오류(prepareSignupResult):', error);
+
+      const msg =
+        error instanceof Error ? error.message : '오류가 발생했습니다.';
+
+      Alert.alert('오류', msg, [{ text: '다시 시도', onPress: prepareSignupResult }]);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  useEffect(() => {
+    prepareSignupResult();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleConfirm = async () => {
+    if (!pendingUserData || isCompleting) return;
+
+    setIsCompleting(true);
+    try {
+      console.log('🔐 [handleConfirm] saveAuthTokens start');
+      await saveAuthTokens(pendingUserData.accessToken, pendingUserData.refreshToken);
+      console.log('✅ [handleConfirm] tokens saved, navigating...');
+      onComplete(pendingUserData);
+    } catch (e) {
+      console.error('❌ 토큰 저장 오류:', e);
+      Alert.alert('오류', '로그인 정보 저장 중 문제가 발생했어요.');
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 배경 그라데이션 효과 */}
-      <View style={styles.backgroundGradient} />
-
-      {/* 배경 도형들 */}
-      {backgroundShapes.map((shape, index) => renderShape(shape, index))}
-
-      {/* 메인 콘텐츠 */}
-      <View style={styles.content}>
-        <View style={styles.messageContainer}>
-          <Text style={styles.congratulationsText}>축하합니다!</Text>
-
-          <View style={styles.pointContainer}>
-            <Text style={styles.pointMainText}>포인트링</Text>
-            <Text style={styles.pointAmountText}>{initialPoints}P 지급!</Text>
-          </View>
-
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailBullet}>•</Text>
-              <Text style={styles.detailText}>
-                지금 시작: 지금 즉시 사용 가능
-              </Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailBullet}>•</Text>
-              <Text style={styles.detailText}>사용기간: 유효기간 30일</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailBullet}>•</Text>
-              <Text style={styles.detailText}>
-                유의사항: 유효기간 경과 시 소멸
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.confirmButton,
-            isLoading && styles.confirmButtonDisabled,
-          ]}
-          onPress={handleCompleteSignup}
-          disabled={isLoading}
+      <View style={styles.centerWrap}>
+        <View
+          style={styles.card}
+          onLayout={e => {
+            const { width, height } = e.nativeEvent.layout;
+            // 무한 setState 방지
+            if (
+              Math.abs(width - cardSize.w) > 1 ||
+              Math.abs(height - cardSize.h) > 1
+            ) {
+              setCardSize({ w: width, h: height });
+            }
+          }}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.confirmButtonText}>확인</Text>
-          )}
-        </TouchableOpacity>
+          <View style={styles.confettiLayer} pointerEvents="none">
+            {confetti.map(renderConfetti)}
+          </View>
+
+          <Text style={styles.title}>축하합니다!</Text>
+
+          <View style={styles.pointBlock}>
+            <Text style={styles.pointBrand}>포인트팅</Text>
+            <Text style={styles.pointAmount}>
+              {isPreparing ? '...' : `${initialPoints}P 지급!`}
+            </Text>
+          </View>
+
+          <View style={styles.bullets}>
+            <View style={styles.bulletRow}>
+              <Text style={styles.bulletDot}>•</Text>
+              <Text style={styles.bulletText}>지급 시점: 지금 즉시 사용 가능</Text>
+            </View>
+            <View style={styles.bulletRow}>
+              <Text style={styles.bulletDot}>•</Text>
+              <Text style={styles.bulletText}>사용기간: 유효기간 30일</Text>
+            </View>
+            <View style={styles.bulletRow}>
+              <Text style={styles.bulletDot}>•</Text>
+              <Text style={styles.bulletText}>유의사항: 유효기간 경과 시 소멸</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              (isPreparing || !pendingUserData || isCompleting) && styles.confirmButtonDisabled,
+            ]}
+            onPress={handleConfirm}
+            disabled={isPreparing || !pendingUserData || isCompleting}
+            activeOpacity={0.85}
+          >
+            {isPreparing || isCompleting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.confirmButtonText}>확인</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#E8F4FD',
-  },
-  backgroundGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#E8F4FD',
-  },
-  content: {
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  centerWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    zIndex: 10,
+    paddingHorizontal: 24,
   },
-  messageContainer: {
+
+  card: {
+    width: CARD_W,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 40,
-    paddingHorizontal: 30,
-    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E6E6E6',
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 20,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    marginBottom: 40,
-    width: '100%',
-    maxWidth: 320,
-  },
-  congratulationsText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  pointContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  pointMainText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4ECDC4',
-    marginBottom: 5,
-  },
-  pointAmountText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#4ECDC4',
-  },
-  detailsContainer: {
-    alignSelf: 'stretch',
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  detailBullet: {
-    fontSize: 16,
-    color: '#666666',
-    marginRight: 8,
-    marginTop: 2,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#666666',
-    flex: 1,
-    lineHeight: 20,
-  },
-  confirmButton: {
-    backgroundColor: '#4ECDC4',
-    paddingVertical: 16,
-    paddingHorizontal: 60,
-    borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
-  confirmButtonDisabled: {
-    opacity: 0.6,
+
+  confettiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
-  confirmButtonText: {
+
+  title: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#222222',
     textAlign: 'center',
+    marginBottom: 12,
+    zIndex: 1,
   },
+
+  pointBlock: {
+    alignItems: 'center',
+    marginBottom: 14,
+    zIndex: 1,
+  },
+  pointBrand: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#222222',
+    marginBottom: 4,
+  },
+  pointAmount: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#222222',
+  },
+
+  bullets: {
+    alignSelf: 'stretch',
+    marginTop: 6,
+    marginBottom: 16,
+    zIndex: 1,
+  },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  bulletDot: { marginRight: 8, fontSize: 14, color: '#333333', marginTop: 2 },
+  bulletText: { flex: 1, fontSize: 13, color: '#333333', lineHeight: 18, fontWeight: '500' },
+
+  confirmButton: {
+    marginTop: 4,
+    backgroundColor: '#4ECDC4',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  confirmButtonDisabled: { opacity: 0.6 },
+  confirmButtonText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
 });
 
 export default CongratulationsScreen;
