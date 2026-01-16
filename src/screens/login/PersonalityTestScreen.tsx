@@ -126,22 +126,19 @@ const PersonalityTestScreen: React.FC<PersonalityTestScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // 1) 원본 답변도 저장 (원하면 나중에 그대로 복원 가능)
+      // 1) 원본 답변 저장
       await AsyncStorage.setItem(RAW_STORAGE_KEY, JSON.stringify(answers));
 
-      // 2) 서버 제출용 형태로 변환해서 ProfileStorage에 저장 (⭐ 핵심)
+      // 2) 서버 제출용 형태로 변환해서 저장
       const relationshipChoices = buildRelationshipChoices(answers);
       await saveRelationshipChoices(relationshipChoices);
 
-      const pointsEarned = answeredCount * 5;
-      const msg =
-        pointsEarned > 0
-          ? `선택한 질문 ${answeredCount}개 저장 완료! +${pointsEarned}P`
-          : '선택 없이 넘어갈게요!';
-
-      Alert.alert('저장 완료', msg, [
-        { text: '확인', onPress: onTestComplete },
-      ]);
+      // ✅ 성공 팝업 제거: 저장 성공하면 바로 다음
+      console.log('[PersonalityTest] saved', {
+        answeredCount,
+        pointsEarned: answeredCount * 5,
+      });
+      onTestComplete();
     } catch (e) {
       console.error('성향 테스트 저장 오류:', e);
       Alert.alert('오류', '저장 중 문제가 발생했어요.');

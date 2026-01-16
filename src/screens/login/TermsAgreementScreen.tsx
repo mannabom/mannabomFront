@@ -42,7 +42,6 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   const [termsState, setTermsState] = useState<TermsState>(DEFAULT_STATE);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ profileId별로 저장 키 분리 (이전 기록 섞임 방지)
   const storageKey = useMemo(() => {
     return profileId ? `signup_terms_state_v1_${profileId}` : null;
   }, [profileId]);
@@ -52,7 +51,6 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
       const id = await getProfileId();
       setProfileId(id);
 
-      // profileId 없으면 로드하지 않음
       if (!id) {
         setTermsState(DEFAULT_STATE);
         return;
@@ -62,7 +60,6 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
         const key = `signup_terms_state_v1_${id}`;
         const raw = await AsyncStorage.getItem(key);
 
-        // ✅ 저장된 게 없으면 "무조건" 초기 상태(전부 false)
         if (!raw) {
           setTermsState(DEFAULT_STATE);
           return;
@@ -123,7 +120,6 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   };
 
   const openDetail = (termType: 'service' | 'privacy' | 'marketing') => {
-    // ✅ 상세 보러가기 전에 현재 상태 저장(왕복 유지용)
     persist(termsState);
     onViewTermsDetail(termType);
   };
@@ -151,11 +147,8 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
       );
 
       if (response.data.success) {
-        Alert.alert(
-          '동의 완료',
-          response.data.message || '약관 동의가 완료되었습니다.',
-          [{ text: '확인', onPress: onAgreementComplete }],
-        );
+        // ✅ 성공 팝업 제거: 동의 성공하면 바로 다음
+        onAgreementComplete();
       } else {
         Alert.alert(
           '오류',

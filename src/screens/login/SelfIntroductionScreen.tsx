@@ -62,9 +62,8 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
 
       await saveSelfIntroduction(introductionData);
 
-      Alert.alert('자기소개 작성 완료', '다음 단계로 진행합니다.', [
-        { text: '확인', onPress: onIntroductionComplete },
-      ]);
+      // ✅ 성공 팝업 제거: 저장 성공하면 바로 다음
+      onIntroductionComplete();
     } catch (error) {
       console.error('자기소개 저장 오류:', error);
       Alert.alert('오류', '자기소개 저장 중 문제가 발생했습니다.');
@@ -73,7 +72,6 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
     }
   };
 
-  // ✅ “빈칸 밖”에 핑크색 안내문 (100자 넘어도 입력 가능하도록 maxLength 제거)
   const renderMinLengthHint = (currentLength: number, limit: number) => {
     const isOk = currentLength >= limit;
     return (
@@ -99,9 +97,7 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* ✅ 세로 공간을 적당히 사용해서 아래 빈 공간 과하게 안 남게 */}
             <View style={styles.form}>
-              {/* 1) 자기소개 */}
               <View style={styles.section}>
                 <Text style={styles.label}>자기소개 (필수)</Text>
 
@@ -121,16 +117,17 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
                     textAlignVertical="top"
                     onFocus={() => setIsIntroFocused(true)}
                     onBlur={() => setIsIntroFocused(false)}
-                    // ✅ 100자 넘어도 입력 가능
                     autoCorrect={false}
                     autoCapitalize="none"
                   />
                 </View>
 
-                {renderMinLengthHint(introduction.trim().length, introductionLimit)}
+                {renderMinLengthHint(
+                  introduction.trim().length,
+                  introductionLimit,
+                )}
               </View>
 
-              {/* 2) 매력 */}
               <View style={styles.section}>
                 <Text style={styles.label}>나를 설레게하는 이성의 매력? (필수)</Text>
 
@@ -148,7 +145,6 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
                     onChangeText={setCharm}
                     onFocus={() => setIsCharmFocused(true)}
                     onBlur={() => setIsCharmFocused(false)}
-                    // ✅ 30자 넘어도 입력 가능
                     autoCorrect={false}
                     autoCapitalize="none"
                   />
@@ -157,7 +153,6 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
                 {renderMinLengthHint(charm.trim().length, charmLimit)}
               </View>
 
-              {/* 3) 한 가지 */}
               <View style={[styles.section, styles.sectionLast]}>
                 <Text style={styles.label}>연인에게 꼭 바라는 한가지는? (필수)</Text>
 
@@ -175,7 +170,6 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
                     onChangeText={setIdeal}
                     onFocus={() => setIsIdealFocused(true)}
                     onBlur={() => setIsIdealFocused(false)}
-                    // ✅ 30자 넘어도 입력 가능
                     autoCorrect={false}
                     autoCapitalize="none"
                   />
@@ -186,12 +180,13 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
             </View>
           </ScrollView>
 
-          {/* ✅ “다음” 버튼 하단 고정 + 가로 1/3 + 가운데 정렬 */}
           <View style={styles.footer}>
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                submitEnabled ? styles.submitButtonActive : styles.submitButtonDisabled,
+                submitEnabled
+                  ? styles.submitButtonActive
+                  : styles.submitButtonDisabled,
               ]}
               onPress={handleSubmit}
               disabled={!submitEnabled}
@@ -200,7 +195,9 @@ const SelfIntroductionScreen: React.FC<SelfIntroductionScreenProps> = ({
               <Text
                 style={[
                   styles.submitButtonText,
-                  submitEnabled ? styles.submitButtonTextActive : styles.submitButtonTextDisabled,
+                  submitEnabled
+                    ? styles.submitButtonTextActive
+                    : styles.submitButtonTextDisabled,
                 ]}
               >
                 {isLoading ? '저장 중...' : '다음'}
@@ -231,10 +228,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 22,
-    paddingBottom: FOOTER_HEIGHT + 12, // ✅ 버튼에 가리지 않게
+    paddingBottom: FOOTER_HEIGHT + 12,
   },
 
-  // ✅ 세로 공간을 적당히 쓰도록 3개 섹션을 분산
   form: {
     flexGrow: 1,
     justifyContent: 'space-between',
@@ -282,7 +278,6 @@ const styles = StyleSheet.create({
     maxHeight: 180,
   },
 
-  // ✅ “빈칸 밖” 핑크 문구
   hintText: {
     marginTop: 10,
     fontSize: 12,
@@ -294,7 +289,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ✅ 하단 고정 버튼
   footer: {
     position: 'absolute',
     left: 0,
