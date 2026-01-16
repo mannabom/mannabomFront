@@ -40,15 +40,14 @@ interface PhotoItem {
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+// ✅ 최대 5장 고정
 const MAX_PHOTOS = 5;
 
 const CARD_W = Math.round(SCREEN_W * 0.62);
 const CARD_H = Math.round(CARD_W * 1.15);
 
-// ✅ “겹쳐 보이게” 하는 핵심: 아이템 슬롯 폭을 카드 폭보다 좁게 (약 2/3)
-// 그러면 옆 카드가 뒤에 1/3 정도 겹쳐서 보임
+// ✅ “겹쳐 보이게”
 const ITEM_W = Math.round(CARD_W * 0.67);
-
 const SIDE_PADDING = Math.round((SCREEN_W - ITEM_W) / 2);
 
 const PINK = '#FFB6C1';
@@ -63,9 +62,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
 
-  // ✅ TS 타입 충돌 피하기: Animated.FlatList는 FlatList랑 타입이 달라서 any가 가장 안전
   const listRef = useRef<any>(null);
-
   const scrollX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -96,7 +93,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
     const options = {
       mediaType: 'photo' as MediaType,
       quality: 0.8 as any,
-      selectionLimit: MAX_PHOTOS - photos.length,
+      selectionLimit: MAX_PHOTOS - photos.length, // ✅ 남은 개수만큼만 선택 가능
     };
 
     launchImageLibrary(options, (response: ImagePickerResponse) => {
@@ -118,6 +115,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
           }));
 
         setPhotos(prev => {
+          // ✅ 어떤 상황이 와도 최대 5장 유지
           const merged = [...prev, ...newPhotos].slice(0, MAX_PHOTOS);
           const nextIndex = Math.max(0, merged.length - 1);
 
@@ -159,6 +157,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
         };
 
         setPhotos(prev => {
+          // ✅ 카메라도 무조건 최대 5장 유지
           const merged = [...prev, newPhoto].slice(0, MAX_PHOTOS);
           const nextIndex = Math.max(0, merged.length - 1);
 
@@ -215,7 +214,8 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
       const formData = new FormData();
       formData.append('profileId', profileId as string);
 
-      photos.forEach((photo, index) => {
+      // ✅ 최대 5장만 업로드되도록 보장
+      photos.slice(0, MAX_PHOTOS).forEach((photo, index) => {
         formData.append('photos', {
           uri: photo.uri,
           type: photo.type || 'image/jpeg',
@@ -231,11 +231,9 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
 
       if (response.data.success) {
         setUploadedPhotos(response.data.data.uploadedPhotos);
-        Alert.alert(
-          '업로드 완료',
-          response.data.message || '프로필 사진이 업로드되었습니다.',
-          [{ text: '확인', onPress: onUploadComplete }],
-        );
+
+        // ✅ 성공 팝업 제거: 업로드 성공하면 바로 다음
+        onUploadComplete();
       } else {
         Alert.alert(
           '오류',
@@ -276,7 +274,6 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
       (index + 1) * ITEM_W,
     ];
 
-    // ✅ 뒤에 있다가 튀어나오는 느낌
     const scale = scrollX.interpolate({
       inputRange,
       outputRange: [0.86, 1, 0.86],
@@ -382,7 +379,6 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ✅ 상단 글씨 삭제 + 전체를 정중앙 */}
       <View style={styles.page}>
         <View style={styles.centerGroup}>
           {renderCarousel()}
@@ -390,6 +386,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
           <View style={styles.noticeArea}>
             <Text style={styles.helperText}>프로필 사진을 등록해주세요</Text>
             <Text style={styles.warnText}>*최소 한 장은 등록해야 합니다.</Text>
+            <Text style={styles.maxText}>최대 {MAX_PHOTOS}장까지 업로드 가능</Text>
           </View>
 
           <View style={styles.buttonRow}>
@@ -538,6 +535,7 @@ const styles = StyleSheet.create({
   },
   helperText: { fontSize: 13, color: '#333333', marginBottom: 6 },
   warnText: { fontSize: 12, color: PINK_STRONG, fontWeight: '800' },
+  maxText: { fontSize: 12, color: '#666', marginTop: 6 },
 
   buttonRow: {
     width: '100%',

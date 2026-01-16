@@ -80,14 +80,9 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
 
       await saveOptionalAnswers(questionsData);
 
-      const message =
-        pointsEarned > 0
-          ? `선택 질문을 완료했습니다! ${pointsEarned} 포인트를 획득했습니다.`
-          : '선택 질문을 건너뜁니다.';
-
-      Alert.alert('질문 답변 완료', message, [
-        { text: '확인', onPress: onQuestionsComplete },
-      ]);
+      // ✅ 성공 팝업 제거: 저장 성공하면 바로 다음
+      console.log('[DatingQuestions] saved', { pointsEarned });
+      onQuestionsComplete();
     } catch (error) {
       console.error('선택 질문 저장 오류:', error);
       Alert.alert('오류', '질문 답변 저장 중 문제가 발생했습니다.');
@@ -150,7 +145,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ✅ 남는 세로 공간을 적당히 분산해서 “꽉 찬 느낌” */}
           <View style={styles.form}>
             {renderQuestionInput(
               '나에게 연애란?',
@@ -191,7 +185,6 @@ const DatingQuestionsScreen: React.FC<DatingQuestionsScreenProps> = ({
           </View>
         </ScrollView>
 
-        {/* ✅ 다음 버튼: 하단 고정 */}
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
@@ -232,7 +225,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ✅ 핵심: flexGrow + footer 높이만큼 paddingBottom
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
@@ -240,20 +232,18 @@ const styles = StyleSheet.create({
     paddingBottom: FOOTER_HEIGHT + 12,
   },
 
-  // ✅ 남는 세로 공간을 적당히 분배
   form: {
     flexGrow: 1,
     justifyContent: 'space-between',
   },
 
   section: {
-    marginBottom: 18, // 너무 벌어지지 않게 조절 (space-between이 남는 공간 분산)
+    marginBottom: 18,
   },
   sectionLast: {
     marginBottom: 0,
   },
 
-  // ✅ 타이포 살짝 키워서 꽉 찬 느낌
   questionText: {
     fontSize: 17,
     fontWeight: '600',
@@ -266,7 +256,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
-  // ✅ 입력 박스 자체 높이를 키워서 “내용이 있어 보이게”
   answerContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -296,7 +285,6 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
 
-  // ✅ footer 하단 고정
   footer: {
     position: 'absolute',
     left: 0,

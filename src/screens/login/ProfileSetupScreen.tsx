@@ -1,3 +1,4 @@
+// (경로는 네 프로젝트에 맞춰 유지) ProfileSetupScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -87,7 +88,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     '제주특별자치도',
   ];
 
-  // ✅ 시/군/구 단위 (읍/면/동 같은 너무 세세한 건 없음)
+  // ✅ 시/군/구 단위
   const districtOptions: Record<string, string[]> = {
     서울특별시: [
       '종로구',
@@ -388,9 +389,8 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
       await savePhysicalProfile(profileData);
 
-      Alert.alert('신체 프로필 저장 완료', '다음 단계로 진행합니다.', [
-        { text: '확인', onPress: onProfileComplete },
-      ]);
+      // ✅ 성공 팝업 제거: 저장 성공하면 바로 다음 단계
+      onProfileComplete();
     } catch (error) {
       console.error('프로필 저장 오류:', error);
       Alert.alert('오류', '프로필 저장 중 문제가 발생했습니다.');
@@ -769,7 +769,7 @@ const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </View>
 
-          {/* 제출: ✅ 저장 버튼과 동일한 크기/색 */}
+          {/* 제출 */}
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -980,7 +980,6 @@ const styles = StyleSheet.create({
     height: 44,
   },
 
-  // ✅ "다음" 버튼: 저장 버튼과 동일한 사이즈/톤
   submitButton: {
     width: '33%',
     alignSelf: 'center',
