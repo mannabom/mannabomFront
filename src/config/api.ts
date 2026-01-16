@@ -40,8 +40,8 @@ export const API_ENDPOINTS_LIST = {
   QUESTIONS_BY_TYPE: '/questions/type/{questionType}', // 특정 유형 질문만 조회
 
   // 사용자 관련
-  USER_PROFILE: '/user/profile',
-  USER_UPDATE: '/user/update',
+  USER_PROFILE: '/api/user/info',
+  USER_UPDATE: '/api/user/update',
 
   // 데이팅 관련 (새로 추가)
   PROFILE_MATCH_SIMPLE: '/api/match/profile/simple', // 프로필 매칭 요청
