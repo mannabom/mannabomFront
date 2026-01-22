@@ -37,7 +37,7 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
         return (
           <BottomNavigationBar
             activeTab={activeKey}
-            onTabPress={(tabKey) => navigation.navigate(tabKey as any)}
+            onTabPress={tabKey => navigation.navigate(tabKey as any)}
           />
         );
       }}
@@ -59,7 +59,10 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
         {() => <Placeholder label="채팅" />}
       </Tab.Screen>
 
-      <Tab.Screen name="mypage" component={MyPage} />
+      {/* ✅ 마이페이지에도 onLogout 내려줌 (핵심) */}
+      <Tab.Screen name="mypage">
+        {() => <MyPage onLogout={onLogout} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }

@@ -8,18 +8,20 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Content-Type 기본 세팅 (axios가 자동도 하지만 명시)
 apiClient.defaults.headers.common['Content-Type'] = 'application/json';
 
 const maskToken = (token?: string | null) => {
   if (!token) return 'NO';
-  return `YES(${token.slice(0, 12)}...)`;
+  const head = token.slice(0, 12);
+  const tail = token.slice(-8);
+  return `YES(${head}...${tail}, len=${token.length})`;
 };
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const isAbsolute =
       typeof config.url === 'string' && /^https?:\/\//.test(config.url);
+
     const fullUrl = isAbsolute
       ? config.url
       : `${config.baseURL ?? ''}${config.url ?? ''}`;
@@ -30,7 +32,7 @@ apiClient.interceptors.request.use(
     const { accessToken } = await getAuthTokens();
     console.log('🔑 토큰 유무:', maskToken(accessToken));
 
-    // ✅ headers 타입 안전 처리 (AxiosHeaders로 통일)
+    // ✅ headers 타입 안전 처리
     if (!config.headers) {
       config.headers = new AxiosHeaders();
     } else if (!(config.headers instanceof AxiosHeaders)) {
@@ -40,13 +42,28 @@ apiClient.interceptors.request.use(
     if (accessToken) {
       config.headers.set('Authorization', `Bearer ${accessToken}`);
     } else {
-      // 토큰 없으면 Authorization 제거 (혹시 남아있을까봐)
       config.headers.delete('Authorization');
     }
 
-    // Content-Type도 확실히
     if (!config.headers.has('Content-Type')) {
       config.headers.set('Content-Type', 'application/json');
+    }
+
+    // ✅ "실제로 Authorization이 들어갔는지" 최종 확인 로그 (타입 안전)
+    const authHeaderRaw = config.headers.get('Authorization');
+
+    if (typeof authHeaderRaw === 'string' && authHeaderRaw.length > 0) {
+      // 문자열일 때만 replace 가능
+      const tokenOnly = authHeaderRaw.replace(/^Bearer\s+/i, '');
+      console.log(
+        '🧷 Authorization 헤더:',
+        `Bearer ${tokenOnly.slice(0, 12)}...${tokenOnly.slice(-8)}`,
+      );
+
+      // ⚠️ 개발 중에만 전체 토큰이 필요하면 아래 주석 해제 (절대 배포 금지)
+      // if (__DEV__) console.log('🧷 Authorization FULL:', authHeaderRaw);
+    } else {
+      console.log('🧷 Authorization 헤더: (none or non-string)', authHeaderRaw);
     }
 
     return config;
@@ -62,6 +79,7 @@ apiClient.interceptors.response.use(
     const isAbsolute =
       typeof response.config.url === 'string' &&
       /^https?:\/\//.test(response.config.url);
+
     const fullUrl = isAbsolute
       ? response.config.url
       : `${response.config.baseURL ?? ''}${response.config.url ?? ''}`;
@@ -77,15 +95,23 @@ apiClient.interceptors.response.use(
     const isAbsolute =
       typeof error.config?.url === 'string' &&
       /^https?:\/\//.test(error.config.url);
+
     const fullUrl = isAbsolute
       ? error.config?.url
       : `${error.config?.baseURL ?? ''}${error.config?.url ?? ''}`;
 
     console.error('❌ API 에러:', status, fullUrl);
-    console.error('📄 에러 데이터:', data);
+
+    const wwwAuth = error.response?.headers?.['www-authenticate'];
+    if (wwwAuth) {
+      console.warn('🧾 WWW-Authenticate:', wwwAuth);
+    }
 
     if (status === 401) {
-      console.log('🔑 인증 만료/미인증 - 로그인 필요');
+      console.warn('📄 에러 데이터(401):', data);
+      console.warn('🔑 인증 만료/미인증 - 로그인 필요');
+    } else {
+      console.error('📄 에러 데이터:', data);
     }
 
     return Promise.reject(error);

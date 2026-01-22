@@ -22,8 +22,8 @@ export const API_ENDPOINTS_LIST = {
   // 인증 관련
   KAKAO_LOGIN: '/api/auth/login/kakao',
   TOKEN_REFRESH: '/auth/refresh',
-  LOGOUT: '/auth/logout',
-
+  LOGOUT: '/api/auth/logout',
+  LEAVE: '/api/auth/leave', 
   // 회원가입 관련 (API 문서에 맞게 수정)
   EMAIL_VERIFICATION: '/api/signup/send-email-verification', // 이메일 인증번호 발송
   EMAIL_VERIFY: '/api/signup/verify-email', // 이메일 인증번호 확인
@@ -42,6 +42,8 @@ export const API_ENDPOINTS_LIST = {
   // 사용자 관련
   USER_PROFILE: '/api/user/info',
   USER_UPDATE: '/api/user/update',
+  USER_MAIN_PHOTO: '/api/user/main_photo',
+  USER_MEMBERSHIP: '/api/user/membership',
 
   // 데이팅 관련 (새로 추가)
   PROFILE_MATCH_SIMPLE: '/api/match/profile/simple', // 프로필 매칭 요청
