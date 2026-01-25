@@ -1,14 +1,17 @@
-// src/components/common/FilterModal.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  Dimensions,
   Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  SafeAreaView,
+  View,
+  PanResponder,
+  LayoutChangeEvent,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
+
 import {
   SmokingHabit,
   DrinkingHabit,
@@ -29,13 +32,24 @@ interface FilterModalProps {
   initialFilters?: FilterSettings;
 }
 
+const PINK = '#FF6B6B';
+const BORDER = '#E9ECEF';
+
+const MIN_AGE = 20;
+const MAX_AGE = 35;
+const DEFAULT_MIN = 20;
+const DEFAULT_MAX = 29;
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const { height: SCREEN_H } = Dimensions.get('window');
+
 const FilterModal: React.FC<FilterModalProps> = ({
   visible,
   onClose,
   onApply,
   initialFilters,
 }) => {
-  // 기본값 설정 (API enum에 맞춰 수정)
   const [ageRange, setAgeRange] = useState(
     initialFilters?.ageRange || defaultFilterSettings.ageRange,
   );
@@ -46,342 +60,348 @@ const FilterModal: React.FC<FilterModalProps> = ({
     initialFilters?.drinking || defaultFilterSettings.drinking,
   );
 
-  // 나이 범위 업데이트
-  const handleAgeRangeChange = (value: number, type: 'min' | 'max') => {
-    const newValue = Math.round(value);
-    setAgeRange(prev => {
-      if (type === 'min') {
-        return { ...prev, min: Math.min(newValue, prev.max) };
-      } else {
-        return { ...prev, max: Math.max(newValue, prev.min) };
-      }
-    });
-  };
+  // ✅ 모달 다시 열 때 초기값 동기화
+  useEffect(() => {
+    if (!visible) return;
+    setAgeRange(initialFilters?.ageRange || defaultFilterSettings.ageRange);
+    setSelectedSmoking(initialFilters?.smoking || defaultFilterSettings.smoking);
+    setSelectedDrinking(initialFilters?.drinking || defaultFilterSettings.drinking);
+  }, [visible, initialFilters]);
 
-  // 흡연 습관 토글
+  // ✅ 흡연 최소 1개 유지
   const toggleSmokingHabit = (habit: SmokingHabit) => {
     setSelectedSmoking(prev => {
       if (prev.includes(habit)) {
-        // 선택 해제 (단, 최소 1개는 남겨둬야 함)
         return prev.length > 1 ? prev.filter(h => h !== habit) : prev;
-      } else {
-        // 선택 추가
-        return [...prev, habit];
       }
+      return [...prev, habit];
     });
   };
 
-  // 음주 습관 토글
+  // ✅ 음주 최소 1개 유지
   const toggleDrinkingHabit = (habit: DrinkingHabit) => {
     setSelectedDrinking(prev => {
       if (prev.includes(habit)) {
-        // 선택 해제 (단, 최소 1개는 남겨둬야 함)
         return prev.length > 1 ? prev.filter(h => h !== habit) : prev;
-      } else {
-        // 선택 추가
-        return [...prev, habit];
       }
+      return [...prev, habit];
     });
   };
 
-  // 흡연 전체 선택/해제
-  const toggleAllSmoking = () => {
-    if (selectedSmoking.length === allSmokingHabits.length) {
-      // 전체 선택된 상태 -> 첫 번째 하나만 남기기
-      setSelectedSmoking([allSmokingHabits[0]]);
-    } else {
-      // 일부만 선택된 상태 -> 전체 선택
-      setSelectedSmoking([...allSmokingHabits]);
-    }
+  const setDefaultAge = () => setAgeRange({ min: DEFAULT_MIN, max: DEFAULT_MAX });
+
+  // =========================
+  // ✅ 나이 Range Slider (한 줄 + 투 핸들)
+  // =========================
+  const trackWidthRef = useRef(0);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const THUMB = 22; // 손잡이(버튼) 크기
+  const usable = Math.max(1, trackWidth - THUMB);
+
+  const valueToX = (v: number) => {
+    const ratio = (v - MIN_AGE) / (MAX_AGE - MIN_AGE);
+    return ratio * usable;
   };
 
-  // 음주 전체 선택/해제
-  const toggleAllDrinking = () => {
-    if (selectedDrinking.length === allDrinkingHabits.length) {
-      // 전체 선택된 상태 -> 첫 번째 하나만 남기기
-      setSelectedDrinking([allDrinkingHabits[0]]);
-    } else {
-      // 일부만 선택된 상태 -> 전체 선택
-      setSelectedDrinking([...allDrinkingHabits]);
-    }
+  const xToValue = (x: number) => {
+    const ratio = clamp(x / usable, 0, 1);
+    const raw = MIN_AGE + ratio * (MAX_AGE - MIN_AGE);
+    return Math.round(raw); // step=1
   };
 
-  // 필터 적용
+  const minX = useMemo(() => valueToX(ageRange.min), [ageRange.min, trackWidth]);
+  const maxX = useMemo(() => valueToX(ageRange.max), [ageRange.max, trackWidth]);
+
+  const minStartRef = useRef(ageRange.min);
+  const maxStartRef = useRef(ageRange.max);
+
+  const onTrackLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    trackWidthRef.current = w;
+    setTrackWidth(w);
+  };
+
+  const minPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        minStartRef.current = ageRange.min;
+      },
+      onPanResponderMove: (_, g) => {
+        if (!trackWidthRef.current) return;
+
+        const startX = valueToX(minStartRef.current);
+        const nextX = clamp(startX + g.dx, 0, maxX); // ✅ 오른쪽(최대) 넘어가면 안 됨
+        const nextMin = clamp(xToValue(nextX), MIN_AGE, ageRange.max);
+
+        setAgeRange(prev => ({ ...prev, min: nextMin }));
+      },
+    }),
+  ).current;
+
+  const maxPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        maxStartRef.current = ageRange.max;
+      },
+      onPanResponderMove: (_, g) => {
+        if (!trackWidthRef.current) return;
+
+        const startX = valueToX(maxStartRef.current);
+        const nextX = clamp(startX + g.dx, minX, usable); // ✅ 왼쪽(최소) 넘어가면 안 됨
+        const nextMax = clamp(xToValue(nextX), ageRange.min, MAX_AGE);
+
+        setAgeRange(prev => ({ ...prev, max: nextMax }));
+      },
+    }),
+  ).current;
+
   const handleApply = () => {
-    const filters: FilterSettings = {
+    // 혹시라도 빈 배열이면 막기(안전벨트)
+    if (!selectedSmoking.length || !selectedDrinking.length) return;
+
+    onApply({
       ageRange,
       smoking: selectedSmoking,
       drinking: selectedDrinking,
-    };
-    onApply(filters);
-  };
-
-  // 초기화
-  const handleReset = () => {
-    setAgeRange(defaultFilterSettings.ageRange);
-    setSelectedSmoking(defaultFilterSettings.smoking);
-    setSelectedDrinking(defaultFilterSettings.drinking);
+    });
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.container}>
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.closeButton}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>조건 설정</Text>
-          <TouchableOpacity onPress={handleReset}>
-            <Text style={styles.resetButton}>기본값</Text>
-          </TouchableOpacity>
-        </View>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.card, { height: SCREEN_H * 0.35 }]} onPress={() => {}}>
+          <View style={styles.header}>
+            <Text style={styles.title}>조건 설정</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Text style={styles.close}>✕</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.content}>
-          {/* 나이대 설정 */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            {/* ✅ 나이대: 한 줄 + 기본값 버튼 */}
+            <View style={styles.sectionRow}>
               <Text style={styles.sectionTitle}>나이대</Text>
               <Text style={styles.sectionValue}>
-                {ageRange.min}세 - {ageRange.max}세
+                {ageRange.min} - {ageRange.max}
               </Text>
-            </View>
 
-            {/* 나이 범위 슬라이더 */}
-            <View style={styles.sliderContainer}>
-              <Text style={styles.sliderLabel}>
-                최소 나이: {ageRange.min}세
-              </Text>
-              <Slider
-                style={styles.slider}
-                minimumValue={20}
-                maximumValue={35}
-                value={ageRange.min}
-                onValueChange={value => handleAgeRangeChange(value, 'min')}
-                minimumTrackTintColor="#FF6B6B"
-                maximumTrackTintColor="#E0E0E0"
-                thumbTintColor="#FF6B6B"
-                step={1}
-              />
-
-              <Text style={styles.sliderLabel}>
-                최대 나이: {ageRange.max}세
-              </Text>
-              <Slider
-                style={styles.slider}
-                minimumValue={20}
-                maximumValue={35}
-                value={ageRange.max}
-                onValueChange={value => handleAgeRangeChange(value, 'max')}
-                minimumTrackTintColor="#FF6B6B"
-                maximumTrackTintColor="#E0E0E0"
-                thumbTintColor="#FF6B6B"
-                step={1}
-              />
-            </View>
-          </View>
-
-          {/* 흡연 설정 */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>흡연</Text>
-              <TouchableOpacity onPress={toggleAllSmoking}>
-                <Text style={styles.selectAllButton}>
-                  {selectedSmoking.length === allSmokingHabits.length
-                    ? '전체해제'
-                    : '전체선택'}
-                </Text>
+              <TouchableOpacity style={styles.defaultBtn} onPress={setDefaultAge} activeOpacity={0.85}>
+                <Text style={styles.defaultBtnText}>기본값 설정</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.buttonGroup}>
-              {allSmokingHabits.map(habit => (
-                <TouchableOpacity
-                  key={habit}
+            <View style={styles.rangeWrap} onLayout={onTrackLayout}>
+              <View style={styles.track} />
+              {/* 선택된 구간 */}
+              {trackWidth > 0 && (
+                <View
                   style={[
-                    styles.optionButton,
-                    selectedSmoking.includes(habit) &&
-                      styles.optionButtonActive,
+                    styles.selectedTrack,
+                    {
+                      left: minX + THUMB / 2,
+                      width: Math.max(0, (maxX - minX)),
+                    },
                   ]}
-                  onPress={() => toggleSmokingHabit(habit)}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      selectedSmoking.includes(habit) &&
-                        styles.optionButtonTextActive,
-                    ]}
-                  >
-                    {smokingHabitLabels[habit]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+                />
+              )}
 
-          {/* 음주 설정 */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>음주</Text>
-              <TouchableOpacity onPress={toggleAllDrinking}>
-                <Text style={styles.selectAllButton}>
-                  {selectedDrinking.length === allDrinkingHabits.length
-                    ? '전체해제'
-                    : '전체선택'}
-                </Text>
-              </TouchableOpacity>
+              {/* 최소 핸들 */}
+              <View
+                style={[
+                  styles.thumb,
+                  { left: minX },
+                ]}
+                {...minPan.panHandlers}
+              />
+
+              {/* 최대 핸들 */}
+              <View
+                style={[
+                  styles.thumb,
+                  { left: maxX },
+                ]}
+                {...maxPan.panHandlers}
+              />
             </View>
 
+            <View style={styles.ageTicks}>
+              <Text style={styles.tickText}>{MIN_AGE}</Text>
+              <Text style={styles.tickText}>{Math.round((MIN_AGE + MAX_AGE) / 2)}</Text>
+              <Text style={styles.tickText}>{MAX_AGE}</Text>
+            </View>
+
+            {/* ✅ 흡연 */}
+            <Text style={styles.blockTitle}>흡연</Text>
             <View style={styles.buttonGroup}>
-              {allDrinkingHabits.map(habit => (
-                <TouchableOpacity
-                  key={habit}
-                  style={[
-                    styles.optionButton,
-                    selectedDrinking.includes(habit) &&
-                      styles.optionButtonActive,
-                  ]}
-                  onPress={() => toggleDrinkingHabit(habit)}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      selectedDrinking.includes(habit) &&
-                        styles.optionButtonTextActive,
-                    ]}
+              {allSmokingHabits.map(habit => {
+                const active = selectedSmoking.includes(habit);
+                return (
+                  <TouchableOpacity
+                    key={habit}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => toggleSmokingHabit(habit)}
+                    activeOpacity={0.85}
                   >
-                    {drinkingHabitLabels[habit]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                      {smokingHabitLabels[habit]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
-        </View>
 
-        {/* 저장 버튼 */}
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleApply}>
-            <Text style={styles.saveButtonText}>저장</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+            {/* ✅ 음주 */}
+            <Text style={[styles.blockTitle, { marginTop: 12 }]}>음주</Text>
+            <View style={styles.buttonGroup}>
+              {allDrinkingHabits.map(habit => {
+                const active = selectedDrinking.includes(habit);
+                return (
+                  <TouchableOpacity
+                    key={habit}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => toggleDrinkingHabit(habit)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                      {drinkingHabitLabels[habit]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleApply} activeOpacity={0.9}>
+              <Text style={styles.saveText}>저장</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  backdrop: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
     backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    height: 52,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
+    borderBottomColor: BORDER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  closeButton: {
-    fontSize: 18,
-    color: '#666666',
+  title: { fontSize: 16, fontWeight: '900', color: '#111' },
+  close: { fontSize: 16, color: '#111' },
+
+  content: { padding: 16 },
+
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
+  sectionTitle: { fontSize: 14, fontWeight: '900', color: '#111' },
+  sectionValue: { marginLeft: 10, fontSize: 13, fontWeight: '800', color: '#444' },
+
+  defaultBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: '#F8F9FA',
   },
-  resetButton: {
-    fontSize: 12,
-    color: '#FF6B6B',
+  defaultBtnText: { fontSize: 12, fontWeight: '800', color: '#111' },
+
+  rangeWrap: {
+    marginTop: 14,
+    height: 34,
+    justifyContent: 'center',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
+  track: {
+    height: 10,
+    borderRadius: 8,
+    backgroundColor: '#EAEAEA',
   },
-  section: {
-    marginTop: 30,
+  selectedTrack: {
+    position: 'absolute',
+    height: 10,
+    borderRadius: 8,
+    backgroundColor: PINK,
+    top: 12,
   },
-  sectionHeader: {
+
+  thumb: {
+    position: 'absolute',
+    top: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: PINK,
+    elevation: 2,
+  },
+
+  ageTicks: {
+    marginTop: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-  },
-  sectionValue: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  selectAllButton: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    textDecorationLine: 'underline',
-  },
-  sliderContainer: {
-    paddingHorizontal: 10,
-  },
-  sliderLabel: {
-    fontSize: 12,
-    color: '#333333',
-    marginTop: 10,
-  },
-  slider: {
-    width: '100%',
-    height: 30,
-  },
-  buttonGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  optionButton: {
-    backgroundColor: '#F8F9FA',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  tickText: { fontSize: 11, color: '#666', fontWeight: '700' },
+
+  blockTitle: { marginTop: 14, fontSize: 14, fontWeight: '900', color: '#111' },
+
+  buttonGroup: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 16,
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: BORDER,
+    backgroundColor: '#F8F9FA',
+    marginRight: 8,
     marginBottom: 8,
   },
-  optionButtonActive: {
+  pillActive: {
     backgroundColor: '#FFE8F1',
-    borderColor: '#FF6B6B',
+    borderColor: PINK,
   },
-  optionButtonText: {
-    fontSize: 12,
-    color: '#666666',
-    fontWeight: '500',
-  },
-  optionButtonTextActive: {
-    color: '#FF6B6B',
-    fontWeight: '600',
-  },
+  pillText: { fontSize: 12, fontWeight: '700', color: '#666' },
+  pillTextActive: { color: PINK, fontWeight: '900' },
+
   footer: {
-    padding: 20,
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
   },
-  saveButton: {
-    backgroundColor: '#FF6B6B',
-    paddingVertical: 15,
-    borderRadius: 25,
+  saveBtn: {
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PINK,
   },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  saveText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
 });
 
 export default FilterModal;

@@ -1,19 +1,17 @@
 // src/types/DatingAPI.ts
 
-// 백엔드에서 제공한 enum 타입들
 export enum SmokingHabit {
-  NON_SMOKER = 'NON_SMOKER', // 비흡연
-  VAPE_ONLY = 'VAPE_ONLY', // 전자담배
-  REGULAR_SMOKER = 'REGULAR_SMOKER', // 흡연
+  NON_SMOKER = 'NON_SMOKER',
+  VAPE_ONLY = 'VAPE_ONLY',
+  REGULAR_SMOKER = 'REGULAR_SMOKER',
 }
 
 export enum DrinkingHabit {
-  NON_DRINKER = 'NON_DRINKER', // 안 마심
-  OCCASIONAL_DRINKER = 'OCCASIONAL_DRINKER', // 가끔 음주
-  FREQUENT_DRINKER = 'FREQUENT_DRINKER', // 자주 음주
+  NON_DRINKER = 'NON_DRINKER',
+  OCCASIONAL_DRINKER = 'OCCASIONAL_DRINKER',
+  FREQUENT_DRINKER = 'FREQUENT_DRINKER',
 }
 
-// API 요청/응답 타입들
 export interface ProfileMatchConditionRequest {
   minAge: number;
   maxAge: number;
@@ -22,15 +20,24 @@ export interface ProfileMatchConditionRequest {
 }
 
 export interface ProfileMatchConditionResponse {
-  userId: number;
+  // ✅ 백엔드 문서 기준: profileId
+  profileId: number;
+
+  // ✅ 기존 코드 호환용: 혹시 아직 userId로 내려오면 이것도 받게 처리
+  userId?: number;
+
   profileImageUrl: string;
   age: number;
   mbti: string;
   drinking: DrinkingHabit;
   smoking: SmokingHabit;
+
+  // ✅ 닉네임 내려오면 쓰려고 optional
+  nickname?: string;
 }
 
 export interface MatchProfileRatingRequest {
+  // 서버가 userId를 쓰든 profileId를 쓰든, 일단 기존 필드명 유지
   targetUserId: number;
   score: number; // 1~5
 }
@@ -52,14 +59,12 @@ export interface LoveViewMatchConditionResponse {
   intro: string;
 }
 
-// 프론트엔드에서 사용할 확장 타입들
+// 프론트 확장
 export interface ProfileData extends ProfileMatchConditionResponse {
-  nickname?: string; // 임시로 추가
-  rating?: number; // 이미 평가한 점수
-  isRated?: boolean; // 평가 여부
+  rating?: number;
+  isRated?: boolean;
 }
 
-// 필터 설정 타입
 export interface FilterSettings {
   ageRange: { min: number; max: number };
   smoking: SmokingHabit[];

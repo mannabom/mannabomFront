@@ -1418,3 +1418,4 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { color: '#666', fontWeight: '900' },
   modalBtnSaveText: { color: '#fff', fontWeight: '900' },
 });
+
