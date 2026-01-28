@@ -65,7 +65,6 @@ const COLORS = [
   '#FF6B9D',
 ] as const;
 
-// fetch 응답 안전 파서(로그용)
 const readResponseBody = async (res: Response) => {
   const text = await res.text();
   try {
@@ -88,13 +87,11 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     h: 360,
   });
 
-  // ✅ 카드 안에만 컨페티(숫자 좌표라 TS 에러도 깔끔하게 회피)
   const confetti = useMemo<ConfettiShape[]>(() => {
     const w = Math.max(1, cardSize.w);
     const h = Math.max(1, cardSize.h);
 
     const makeRand = (seed: number) => {
-      // 간단한 deterministic pseudo-random
       const x = Math.sin(seed) * 10000;
       return x - Math.floor(x);
     };
@@ -106,9 +103,10 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       const r3 = makeRand(i * 7.77);
 
       const typePick = i % 3;
-      const type = typePick === 0 ? 'circle' : typePick === 1 ? 'square' : 'triangle';
+      const type =
+        typePick === 0 ? 'circle' : typePick === 1 ? 'square' : 'triangle';
 
-      const size = 6 + Math.floor(r3 * 8); // 6~13
+      const size = 6 + Math.floor(r3 * 8);
       const left = Math.floor(r1 * (w - 16)) + 8;
       const top = Math.floor(r2 * (h - 16)) + 8;
 
@@ -193,12 +191,6 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     );
   };
 
-  /**
-   * ✅ 핵심:
-   * 1) 로컬에 저장된 프로필/연애관 데이터를 모아서
-   * 2) /api/signup/profile-relationship 로 먼저 서버에 저장
-   * 3) 성공하면 /api/signup/complete 호출
-   */
   const prepareSignupResult = async () => {
     try {
       setIsPreparing(true);
@@ -210,7 +202,6 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
       }
 
-      // 1) 로컬 데이터 합치기
       const combined = await getCombinedProfileData(profileId);
       console.log('🔗 [prepareSignupResult] combined profile data:', combined);
 
@@ -220,7 +211,6 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         );
       }
 
-      // 2) 서버에 profile-relationship 저장 (가입 단계 완료 처리용)
       const prUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP}`;
       console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
 
@@ -235,15 +225,12 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       console.log('📄 [profile-relationship] body(text):', prBody.text);
       console.log('📦 [profile-relationship] body(json):', prBody.json);
 
-      // 백엔드가 success 필드를 쓰는 경우까지 같이 커버
       if (!prRes.ok || (prBody.json && prBody.json.success === false)) {
         const msg =
-          prBody.json?.message ||
-          `프로필 저장 실패 (status ${prRes.status})`;
+          prBody.json?.message || `프로필 저장 실패 (status ${prRes.status})`;
         throw new Error(msg);
       }
 
-      // 3) 이제 complete 호출
       const completeUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`;
       const requestData: SignupCompleteRequestDto = { profileId };
 
@@ -271,20 +258,22 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         throw new Error(msg);
       }
 
-      setInitialPoints(responseData.data.initialPoints);
+      // ✅ initialPoints: 서버가 계산해서 내려주는 값 그대로 표시 (숫자/문자열 모두 안전 처리)
+      const pointsRaw: any = (responseData.data as any).initialPoints;
+      const points = Number(pointsRaw ?? 0);
+      setInitialPoints(Number.isFinite(points) ? points : 0);
 
       const userData = {
         userId: responseData.data.userId,
         accessToken: responseData.data.accessToken,
         refreshToken: responseData.data.refreshToken,
-        initialPoints: responseData.data.initialPoints,
+        initialPoints: Number.isFinite(points) ? points : 0,
       };
       setPendingUserData(userData);
     } catch (error) {
       console.error('❌ 회원가입 준비 오류(prepareSignupResult):', error);
 
-      const msg =
-        error instanceof Error ? error.message : '오류가 발생했습니다.';
+      const msg = error instanceof Error ? error.message : '오류가 발생했습니다.';
 
       Alert.alert('오류', msg, [{ text: '다시 시도', onPress: prepareSignupResult }]);
     } finally {
@@ -321,11 +310,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
           style={styles.card}
           onLayout={e => {
             const { width, height } = e.nativeEvent.layout;
-            // 무한 setState 방지
-            if (
-              Math.abs(width - cardSize.w) > 1 ||
-              Math.abs(height - cardSize.h) > 1
-            ) {
+            if (Math.abs(width - cardSize.w) > 1 || Math.abs(height - cardSize.h) > 1) {
               setCardSize({ w: width, h: height });
             }
           }}
@@ -387,7 +372,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-
   card: {
     width: CARD_W,
     backgroundColor: '#FFFFFF',
@@ -404,12 +388,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
-
-  confettiLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-
+  confettiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
   title: {
     fontSize: 18,
     fontWeight: '800',
@@ -418,34 +397,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     zIndex: 1,
   },
-
-  pointBlock: {
-    alignItems: 'center',
-    marginBottom: 14,
-    zIndex: 1,
-  },
-  pointBrand: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#222222',
-    marginBottom: 4,
-  },
-  pointAmount: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#222222',
-  },
-
-  bullets: {
-    alignSelf: 'stretch',
-    marginTop: 6,
-    marginBottom: 16,
-    zIndex: 1,
-  },
+  pointBlock: { alignItems: 'center', marginBottom: 14, zIndex: 1 },
+  pointBrand: { fontSize: 24, fontWeight: '900', color: '#222222', marginBottom: 4 },
+  pointAmount: { fontSize: 28, fontWeight: '900', color: '#222222' },
+  bullets: { alignSelf: 'stretch', marginTop: 6, marginBottom: 16, zIndex: 1 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   bulletDot: { marginRight: 8, fontSize: 14, color: '#333333', marginTop: 2 },
   bulletText: { flex: 1, fontSize: 13, color: '#333333', lineHeight: 18, fontWeight: '500' },
-
   confirmButton: {
     marginTop: 4,
     backgroundColor: '#4ECDC4',
