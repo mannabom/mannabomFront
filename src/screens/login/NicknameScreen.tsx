@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
@@ -23,143 +22,127 @@ interface NicknameScreenProps {
 
 type NicknameCheckResponseDto = {
   success: boolean;
-  data?: {
-    available: boolean;
-  };
+  data?: { available: boolean };
   message?: string;
 };
 
 const BUTTON_PINK = '#FFB6C1';
 const HELPER_PINK = '#FF6B9A';
+const SUCCESS_GREEN = '#2DBE9D';
 
-const NicknameScreen: React.FC<NicknameScreenProps> = ({
-  onNicknameComplete,
-}) => {
+const NicknameScreen: React.FC<NicknameScreenProps> = ({ onNicknameComplete }) => {
   const [nickname, setNickname] = useState('');
   const [isNicknameValid, setIsNicknameValid] = useState(false);
+
   const [nicknameError, setNicknameError] = useState('');
+  const [nicknameSuccess, setNicknameSuccess] = useState('');
+
   const [isDuplicateChecked, setIsDuplicateChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // ✅ 한글/영어만 + 2~14자
   const validateNickname = (text: string) => {
-    // 2-14자, 한글/영문/숫자 허용
-    const nicknameRegex = /^[가-힣a-zA-Z0-9]{2,14}$/;
+    const nicknameRegex = /^[가-힣a-zA-Z]{2,14}$/;
     return nicknameRegex.test(text);
   };
 
   const handleNicknameChange = (text: string) => {
     setNickname(text);
-    setIsDuplicateChecked(false);
 
-    if (text.length === 0) {
-      setNicknameError('');
-      setIsNicknameValid(false);
-    } else if (text.length < 2) {
-      setNicknameError('*닉네임은 2글자 이상 입력해주세요.');
-      setIsNicknameValid(false);
-    } else if (text.length > 14) {
-      setNicknameError('*닉네임은 14자 이하로 입력해주세요.');
-      setIsNicknameValid(false);
-    } else if (!validateNickname(text)) {
-      setNicknameError('*닉네임은 한글, 영문, 숫자만 사용가능합니다.');
-      setIsNicknameValid(false);
-    } else {
-      setNicknameError('');
-      setIsNicknameValid(true);
-    }
-  };
+    // ✅ 중복확인 이후 값 변경 시: 다시 비활성화
+    if (isDuplicateChecked) setIsDuplicateChecked(false);
 
-  const handleCheckDuplicate = async () => {
-    if (!isNicknameValid) {
-      Alert.alert('오류', '올바른 닉네임을 입력해주세요.');
+    // 상태 메시지 리셋
+    if (nicknameError) setNicknameError('');
+    if (nicknameSuccess) setNicknameSuccess('');
+
+    const trimmed = text.trim();
+
+    if (trimmed.length === 0) {
+      setIsNicknameValid(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    if (!validateNickname(trimmed)) {
+      setNicknameError('*닉네임은 한글 또는 영어 2~14자만 가능합니다.');
+      setIsNicknameValid(false);
+      return;
+    }
 
+    setIsNicknameValid(true);
+  };
+
+  const handleCheckDuplicate = async () => {
+    if (!isNicknameValid || isLoading) return;
+
+    setIsLoading(true);
+    setNicknameError('');
+    setNicknameSuccess('');
+    setIsDuplicateChecked(false);
+
+    try {
       const url = `${API_BASE_URL}${API_ENDPOINTS_LIST.NICKNAME_CHECK}`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname }),
+        body: JSON.stringify({ nickname: nickname.trim() }),
       });
 
-      // 네트워크/서버 에러(4xx/5xx)만 여기서 걸러줌
       const responseData = (await response.json()) as NicknameCheckResponseDto;
 
+      // 서버/네트워크 에러
       if (!response.ok) {
-        throw new Error(
-          responseData?.message || '중복 검사 중 오류가 발생했습니다.',
+        setNicknameError(
+          responseData?.message || '*중복 확인 중 오류가 발생했습니다.',
         );
+        return;
       }
 
-      // ✅ 백엔드 스펙: data.available 로 중복 여부 판단
       const available = responseData?.data?.available;
 
-      // available이 확실히 있을 때
       if (available === true) {
-        Alert.alert('확인', responseData.message || '사용 가능한 닉네임입니다!');
-        setNicknameError('');
         setIsDuplicateChecked(true);
+        setNicknameSuccess('✓ 사용 가능한 닉네임입니다');
+        setNicknameError('');
         return;
       }
 
       if (available === false) {
-        Alert.alert('중복', responseData.message || '이미 사용 중인 닉네임입니다.');
-        setNicknameError(responseData.message || '*이미 사용 중인 닉네임입니다.');
-        // ✅ 유효성(regex)은 그대로 두고, 중복 체크만 실패 처리
+        // ✅ 중복이면 모달 X, 아래 문구로만
         setIsDuplicateChecked(false);
+        setNicknameSuccess('');
+        setNicknameError('이미 사용중인 닉네임입니다');
         return;
       }
 
-      // ✅ 혹시 백엔드가 available을 안 주고 message만 준다면(예외 케이스) fallback
-      const msg = (responseData?.message || '').trim();
-      if (msg.includes('이미') || msg.includes('중복')) {
-        Alert.alert('중복', msg || '이미 사용 중인 닉네임입니다.');
-        setNicknameError(msg || '*이미 사용 중인 닉네임입니다.');
-        setIsDuplicateChecked(false);
-        return;
-      }
-
-      if (msg.includes('사용 가능')) {
-        Alert.alert('확인', msg || '사용 가능한 닉네임입니다!');
-        setNicknameError('');
-        setIsDuplicateChecked(true);
-        return;
-      }
-
-      // 여기까지 오면 응답 형태가 예상과 다름
-      throw new Error('중복 검사 응답 형식이 예상과 다릅니다.');
+      // 응답 형태가 예상과 다르면
+      setNicknameError('*중복 확인 응답 형식이 예상과 다릅니다.');
     } catch (error) {
       console.error('닉네임 중복 검사 오류:', error);
-      const msg =
-        error instanceof Error ? error.message : '중복 검사 중 오류가 발생했습니다.';
-      Alert.alert('오류', msg);
-      setIsDuplicateChecked(false);
+      setNicknameError('*중복 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleComplete = async () => {
-    if (!isNicknameValid || !isDuplicateChecked) {
-      Alert.alert('오류', '닉네임 중복 확인을 완료해주세요.');
-      return;
-    }
+    if (!isNicknameValid || !isDuplicateChecked || isLoading) return;
+
+    setIsLoading(true);
+    setNicknameError('');
+    setNicknameSuccess('');
 
     try {
-      setIsLoading(true);
-
       const profileId = await getProfileId();
       if (!profileId) {
-        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+        setNicknameError('*프로필 ID가 없습니다. 다시 로그인해주세요.');
+        return;
       }
 
       const requestData: SetNicknameRequestDto = {
         profileId,
-        nickname,
+        nickname: nickname.trim(),
       };
 
       const response = await fetch(
@@ -174,35 +157,29 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
       const responseData: SetNicknameResponseDto = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          responseData.message || '닉네임 설정 중 오류가 발생했습니다.',
+        setNicknameError(
+          responseData?.message || '*닉네임 설정 중 오류가 발생했습니다.',
         );
+        // 설정 실패면 중복확인 다시 하게 막는 게 안전함
+        setIsDuplicateChecked(false);
+        return;
       }
 
-      Alert.alert('완료', responseData.message || '닉네임이 설정되었습니다.', [
-        {
-          text: '확인',
-          onPress: () => {
-            console.log('닉네임 설정 완료:', nickname);
-            onNicknameComplete();
-          },
-        },
-      ]);
+      // ✅ 설정 완료 모달 제거 → 바로 다음 단계
+      onNicknameComplete();
     } catch (error) {
       console.error('닉네임 설정 오류:', error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : '닉네임 설정 중 오류가 발생했습니다.';
-      Alert.alert('오류', errorMessage);
+      setNicknameError('*닉네임 설정 중 오류가 발생했습니다.');
+      setIsDuplicateChecked(false);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ✅ 유효성 통과 전에는 둘 다 비활성화
   const isCheckButtonEnabled = isNicknameValid && !isLoading;
-  const isCompleteButtonEnabled =
-    isNicknameValid && isDuplicateChecked && !isLoading;
+  // ✅ 설정하기는 중복확인 성공 후에만 활성화
+  const isCompleteButtonEnabled = isNicknameValid && isDuplicateChecked && !isLoading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -224,11 +201,11 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
 
           {nicknameError ? (
             <Text style={styles.errorText}>{nicknameError}</Text>
-          ) : isDuplicateChecked ? (
-            <Text style={styles.successText}>✓ 사용 가능한 닉네임입니다</Text>
+          ) : nicknameSuccess ? (
+            <Text style={styles.successText}>{nicknameSuccess}</Text>
           ) : (
             <Text style={styles.helperText}>
-              *닉네임은 한글 또는 영어, 2~14자 사이어야합니다.
+              *닉네임은 한글 또는 영어, 2~14자 사이여야합니다.
             </Text>
           )}
 
@@ -275,20 +252,14 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   centerWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  card: {
-    width: '100%',
-    maxWidth: 360,
-  },
+  card: { width: '100%', maxWidth: 360 },
   label: {
     width: '100%',
     textAlign: 'left',
@@ -307,9 +278,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#FFFFFF',
   },
-  inputError: {
-    borderColor: HELPER_PINK,
-  },
+  inputError: { borderColor: HELPER_PINK },
   helperText: {
     width: '100%',
     color: HELPER_PINK,
@@ -326,7 +295,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     width: '100%',
-    color: '#2DBE9D',
+    color: SUCCESS_GREEN,
     fontSize: 12,
     marginTop: 10,
     textAlign: 'left',
@@ -343,20 +312,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  actionButtonLeft: {
-    marginRight: 12,
-  },
-  actionButtonActive: {
-    backgroundColor: BUTTON_PINK,
-  },
-  actionButtonDisabled: {
-    backgroundColor: '#F2D1D8',
-  },
-  actionButtonText: {
-    color: '#333333',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  actionButtonLeft: { marginRight: 12 },
+  actionButtonActive: { backgroundColor: BUTTON_PINK },
+  actionButtonDisabled: { backgroundColor: '#F2D1D8' },
+  actionButtonText: { color: '#333333', fontSize: 14, fontWeight: '600' },
 });
 
 export default NicknameScreen;

@@ -3,7 +3,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import BottomNavigationBar from '../components/common/BottomNavigationBar';
 
-import HomeScreen from '../screens/home/HomeScreen';
+import BlindDateScreen from '../screens/home/BlindDateScreen';
 import MyPage from '../screens/MyPage/MyPage';
 
 import { View, Text } from 'react-native';
@@ -33,7 +33,7 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
     <Tab.Navigator
       screenOptions={{ headerShown: false }}
       tabBar={({ state, navigation }) => {
-        const activeKey = state.routeNames[state.index]; // 'dating' | ...
+        const activeKey = state.routeNames[state.index];
         return (
           <BottomNavigationBar
             activeTab={activeKey}
@@ -42,9 +42,9 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
         );
       }}
     >
-      {/* ✅ 소개팅 탭 = 기존 HomeScreen */}
+      {/* ✅ 소개팅 탭 = BlindDateScreen */}
       <Tab.Screen name="dating">
-        {() => <HomeScreen onLogout={onLogout} />}
+        {() => <BlindDateScreen onLogout={onLogout} />}
       </Tab.Screen>
 
       <Tab.Screen name="meeting">
@@ -59,7 +59,6 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
         {() => <Placeholder label="채팅" />}
       </Tab.Screen>
 
-      {/* ✅ 마이페이지에도 onLogout 내려줌 (핵심) */}
       <Tab.Screen name="mypage">
         {() => <MyPage onLogout={onLogout} />}
       </Tab.Screen>
