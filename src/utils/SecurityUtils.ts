@@ -1,294 +1,231 @@
-// utils/SecurityUtils.ts
+// src/utils/SecurityUtils.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import { API_BASE_URL } from '../config/api';
+import { getAuthTokens, saveAuthTokens, clearAllAuth } from './AuthUtils';
 
-export interface SecurityCheckResult {
-  isValid: boolean;
-  error?: string;
-  requiresUpdate?: boolean;
-}
-
+// 로그인 정보 타입
 export interface LoginInfo {
   isLoggedIn: boolean;
   token?: string;
   refreshToken?: string;
-  user?: {
-    id: string;
-    email: string;
-    name: string;
-  };
+  user?: any;
 }
 
-// 보안 검사 클래스
+// 보안 관련 유틸리티
 export class SecurityManager {
-  // 앱 무결성 검사
-  static async checkAppIntegrity(): Promise<SecurityCheckResult> {
-    try {
-      // 디버그 모드 검사
-      if (__DEV__) {
-        console.log('개발 모드에서는 보안 검사를 건너뜁니다.');
-        return { isValid: true };
-      }
-
-      // 루팅/탈옥 검사
-      const isJailbroken = await this.checkJailbreak();
-      if (isJailbroken) {
-        return {
-          isValid: false,
-          error: '보안상 이유로 루팅/탈옥된 기기에서는 사용할 수 없습니다.',
-        };
-      }
-
-      // 앱 서명 검증 (실제 구현 필요)
-      const isSignatureValid = await this.verifyAppSignature();
-      if (!isSignatureValid) {
-        return {
-          isValid: false,
-          error: '앱 무결성 검증에 실패했습니다.',
-        };
-      }
-
-      return { isValid: true };
-    } catch (error) {
-      return {
-        isValid: false,
-        error: '보안 검사 중 오류가 발생했습니다.',
-      };
-    }
-  }
-
-  // 버전 검사
-  static async checkAppVersion(): Promise<SecurityCheckResult> {
+  // 앱 버전 체크
+  static async checkAppVersion(): Promise<boolean> {
     try {
       const currentVersion = DeviceInfo.getVersion();
+      const buildNumber = DeviceInfo.getBuildNumber();
 
-      // API에서 최신 버전 정보 가져오기
-      const response = await fetch('https://api.mannabom.com/version/check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentVersion,
-          platform: Platform.OS,
-        }),
-      });
+      console.log('📱 앱 버전:', currentVersion, '빌드:', buildNumber);
 
-      const versionInfo = await response.json();
-
-      if (versionInfo.forceUpdate) {
-        return {
-          isValid: false,
-          requiresUpdate: true,
-          error: '새 버전으로 업데이트가 필요합니다.',
-        };
-      }
-
-      return { isValid: true };
+      // TODO: 서버에서 최소 지원 버전 가져와서 비교
+      // 현재는 항상 true 반환
+      return true;
     } catch (error) {
-      // 네트워크 오류 등의 경우 앱 사용을 허용
-      console.warn('버전 체크 실패:', error);
-      return { isValid: true };
+      console.error('❌ 앱 버전 체크 오류:', error);
+      return true;
     }
   }
 
-  // 루팅/탈옥 검사 (간단한 예시)
-  private static async checkJailbreak(): Promise<boolean> {
+  // 디바이스 정보 수집
+  static async getDeviceInfo() {
     try {
-      if (Platform.OS === 'ios') {
-        // iOS 탈옥 검사
-        return await this.checkiOSJailbreak();
-      } else {
-        // Android 루팅 검사
-        return await this.checkAndroidRoot();
-      }
-    } catch {
-      return false; // 검사 실패시 안전하게 false 반환
-    }
-  }
+      const deviceInfo = {
+        deviceId: DeviceInfo.getDeviceId(),
+        brand: DeviceInfo.getBrand(),
+        model: DeviceInfo.getModel(),
+        systemName: DeviceInfo.getSystemName(),
+        systemVersion: DeviceInfo.getSystemVersion(),
+        appVersion: DeviceInfo.getVersion(),
+        buildNumber: DeviceInfo.getBuildNumber(),
+        uniqueId: DeviceInfo.getUniqueId(),
+        platform: Platform.OS,
+      };
 
-  private static async checkiOSJailbreak(): Promise<boolean> {
-    // iOS 탈옥 검사 로직 (라이브러리 사용 권장)
-    // 예: react-native-jailbreak-detection
-    return false; // 임시로 false 반환
-  }
-
-  private static async checkAndroidRoot(): Promise<boolean> {
-    // Android 루팅 검사 로직 (라이브러리 사용 권장)
-    // 예: react-native-root-detection
-    return false; // 임시로 false 반환
-  }
-
-  private static async verifyAppSignature(): Promise<boolean> {
-    // 앱 서명 검증 로직
-    // 실제 구현시 네이티브 모듈 필요
-    return true; // 임시로 true 반환
-  }
-
-  // 보안 오류 처리
-  static handleSecurityError(result: SecurityCheckResult) {
-    if (result.requiresUpdate) {
-      Alert.alert(
-        '업데이트 필요',
-        result.error || '새 버전으로 업데이트해주세요.',
-        [
-          {
-            text: '업데이트',
-            onPress: () => {
-              // 스토어로 이동
-              this.redirectToStore();
-            },
-          },
-        ],
-        { cancelable: false },
-      );
-    } else {
-      Alert.alert(
-        '보안 오류',
-        result.error || '보안 검사에 실패했습니다.',
-        [{ text: '확인', onPress: () => {} }],
-        { cancelable: false },
-      );
-    }
-  }
-
-  private static redirectToStore() {
-    // 앱스토어/플레이스토어로 리디렉션
-    // const storeURL = Platform.OS === 'ios'
-    //   ? 'https://apps.apple.com/app/mannabom/id123456789'
-    //   : 'https://play.google.com/store/apps/details?id=com.mannabom';
-
-    // 실제 구현시: Linking.openURL(storeURL);
-    console.log('스토어로 리디렉션');
-  }
-}
-
-// 인증 관리 클래스
-export class AuthManager {
-  private static readonly TOKEN_KEY = 'auth_token';
-  private static readonly REFRESH_TOKEN_KEY = 'refresh_token';
-  private static readonly USER_INFO_KEY = 'user_info';
-
-  // 로그인 정보 확인
-  static async checkLoginStatus(): Promise<LoginInfo> {
-    try {
-      const token = await AsyncStorage.getItem(this.TOKEN_KEY);
-      const refreshToken = await AsyncStorage.getItem(this.REFRESH_TOKEN_KEY);
-      const userInfoStr = await AsyncStorage.getItem(this.USER_INFO_KEY);
-
-      if (!token) {
-        return { isLoggedIn: false };
-      }
-
-      // 토큰 유효성 검사
-      const isTokenValid = await this.validateToken(token);
-
-      if (isTokenValid) {
-        const user = userInfoStr ? JSON.parse(userInfoStr) : undefined;
-        return {
-          isLoggedIn: true,
-          token,
-          refreshToken: refreshToken || undefined,
-          user,
-        };
-      } else if (refreshToken) {
-        // 토큰 갱신 시도
-        const newTokens = await this.refreshTokens(refreshToken);
-        if (newTokens) {
-          await this.saveTokens(newTokens.accessToken, newTokens.refreshToken);
-          const user = userInfoStr ? JSON.parse(userInfoStr) : undefined;
-          return {
-            isLoggedIn: true,
-            token: newTokens.accessToken,
-            refreshToken: newTokens.refreshToken,
-            user,
-          };
-        }
-      }
-
-      // 토큰이 유효하지 않으면 로그아웃 처리
-      await this.logout();
-      return { isLoggedIn: false };
+      console.log('📱 디바이스 정보:', deviceInfo);
+      return deviceInfo;
     } catch (error) {
-      console.error('로그인 상태 확인 오류:', error);
-      return { isLoggedIn: false };
+      console.error('❌ 디바이스 정보 수집 오류:', error);
+      return null;
     }
   }
 
-  // 토큰 유효성 검증
-  private static async validateToken(token: string): Promise<boolean> {
-    try {
-      const response = await fetch('https://api.mannabom.com/auth/validate', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+  // 보안 경고 표시
+  static showSecurityAlert(title: string, message: string) {
+    Alert.alert(title, message, [{ text: '확인', style: 'default' }]);
+  }
 
-      return response.status === 200;
-    } catch {
+  // 탈옥/루팅 감지 (기본 구현)
+  static async detectJailbreakOrRoot(): Promise<boolean> {
+    try {
+      // TODO: 실제 탈옥/루팅 감지 라이브러리 사용
+      // 예: react-native-jailbreak-detect, react-native-root-detection
+      return false;
+    } catch (error) {
+      console.error('❌ 탈옥/루팅 감지 오류:', error);
       return false;
     }
   }
 
-  // 토큰 갱신
-  private static async refreshTokens(refreshToken: string) {
+  // 개발자 모드 감지 (기본 구현)
+  static async detectDeveloperMode(): Promise<boolean> {
     try {
-      const response = await fetch('https://api.mannabom.com/auth/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (response.status === 200) {
-        const data = await response.json();
-        return {
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-        };
-      }
+      // TODO: 실제 개발자 모드 감지 구현
+      return false;
     } catch (error) {
-      console.error('토큰 갱신 실패:', error);
+      console.error('❌ 개발자 모드 감지 오류:', error);
+      return false;
     }
+  }
+}
+
+export class AuthManager {
+  // ✅ 이제 토큰 저장/조회는 AuthUtils(accessToken/refreshToken)를 "단일 기준"으로 사용합니다.
+  // (과거 키 auth_token / refresh_token 는 1회 마이그레이션 후 제거)
+  private static readonly LEGACY_ACCESS_TOKEN_KEY = 'auth_token';
+  private static readonly LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
+  private static readonly USER_INFO_KEY = 'user_info';
+
+  // ✅ legacy 키 -> 신규 키 마이그레이션 (한 번만)
+  private static async migrateLegacyTokensIfNeeded() {
+    const { accessToken, refreshToken } = await getAuthTokens();
+    if (accessToken || refreshToken) return; // 이미 신규 키에 있으면 끝
+
+    const legacyAccess = await AsyncStorage.getItem(this.LEGACY_ACCESS_TOKEN_KEY);
+    const legacyRefresh = await AsyncStorage.getItem(this.LEGACY_REFRESH_TOKEN_KEY);
+
+    if (legacyAccess && legacyRefresh) {
+      console.log('🔁 [Auth] legacy 토큰(auth_token/refresh_token) 발견 → 신규 키로 마이그레이션');
+      await saveAuthTokens(legacyAccess, legacyRefresh);
+      await AsyncStorage.multiRemove([
+        this.LEGACY_ACCESS_TOKEN_KEY,
+        this.LEGACY_REFRESH_TOKEN_KEY,
+      ]);
+    }
+  }
+
+  // ✅ (호환용) 토큰 저장 API — 기존 코드가 saveTokens를 호출해도 안전
+  static async saveTokens(accessToken: string, refreshToken: string) {
+    await saveAuthTokens(accessToken, refreshToken);
+  }
+
+  // 로그인 정보 확인 (앱 시작 시 자동로그인용)
+  static async checkLoginStatus(): Promise<LoginInfo> {
+    try {
+      // 0) legacy -> 신규 키로 1회 마이그레이션
+      await this.migrateLegacyTokensIfNeeded();
+
+      // 1) 신규 키에서 토큰 조회
+      let { accessToken, refreshToken } = await getAuthTokens();
+
+      if (!accessToken || !refreshToken) {
+        return { isLoggedIn: false };
+      }
+
+      // 2) 시작할 때 refreshToken으로 accessToken 갱신 시도 (가장 안전)
+      const refreshed = await this.refreshTokens(refreshToken);
+      if (refreshed?.accessToken && refreshed?.refreshToken) {
+        await saveAuthTokens(refreshed.accessToken, refreshed.refreshToken);
+        accessToken = refreshed.accessToken;
+        refreshToken = refreshed.refreshToken;
+        console.log('✅ [Auth] 자동로그인: 토큰 갱신 성공');
+      } else {
+        // refresh 실패면 안전하게 로그아웃 처리 (서버/토큰 상태 불명확)
+        console.warn('⚠️ [Auth] 자동로그인: 토큰 갱신 실패 → 로그아웃 처리');
+        await this.logout();
+        return { isLoggedIn: false };
+      }
+
+      const userInfoStr = await AsyncStorage.getItem(this.USER_INFO_KEY);
+      const user = userInfoStr ? JSON.parse(userInfoStr) : undefined;
+
+      return {
+        isLoggedIn: true,
+        token: accessToken,
+        refreshToken: refreshToken || undefined,
+        user,
+      };
+    } catch (error) {
+      console.error('❌ [Auth] 로그인 상태 확인 오류:', error);
+      return { isLoggedIn: false };
+    }
+  }
+
+  // 토큰 갱신 (refreshToken만 사용)
+  private static async refreshTokens(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+  } | null> {
+    // ✅ 백에서 준 스펙: POST /api/auth/refresh  { refreshToken }
+    const candidates = [
+      `${API_BASE_URL}/api/auth/refresh`,
+      `${API_BASE_URL}/auth/refresh`, // 혹시 기존 서버가 이 경로면 fallback
+    ];
+
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        // 404/405면 다음 후보로
+        if (res.status === 404 || res.status === 405) continue;
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          console.warn('⚠️ [Auth] refresh 실패:', res.status, url, text);
+          return null;
+        }
+
+        const json: any = await res.json().catch(() => ({}));
+        // 응답 형태가 {data:{...}} 일 수도, 최상단일 수도 있어서 둘 다 대응
+        const nextAccess = json?.data?.accessToken ?? json?.accessToken;
+        const nextRefresh = json?.data?.refreshToken ?? json?.refreshToken;
+
+        if (typeof nextAccess === 'string' && typeof nextRefresh === 'string') {
+          return { accessToken: nextAccess, refreshToken: nextRefresh };
+        }
+
+        console.warn('⚠️ [Auth] refresh 응답 파싱 실패:', json);
+        return null;
+      } catch (e) {
+        console.warn('⚠️ [Auth] refresh 네트워크 오류:', url, e);
+        // 다음 후보로
+      }
+    }
+
     return null;
   }
 
-  // 토큰 저장
-  static async saveTokens(accessToken: string, refreshToken: string) {
-    await Promise.all([
-      AsyncStorage.setItem(this.TOKEN_KEY, accessToken),
-      AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken),
-    ]);
-  }
-
-  // 사용자 정보 저장
+  // 사용자 정보 저장 (필요하면 계속 사용)
   static async saveUserInfo(user: any) {
     await AsyncStorage.setItem(this.USER_INFO_KEY, JSON.stringify(user));
   }
 
-  // 로그아웃
+  // 로그아웃: 신규 키 + legacy 키 + user_info 정리
   static async logout() {
-    await Promise.all([
-      AsyncStorage.removeItem(this.TOKEN_KEY),
-      AsyncStorage.removeItem(this.REFRESH_TOKEN_KEY),
-      AsyncStorage.removeItem(this.USER_INFO_KEY),
+    await clearAllAuth();
+    await AsyncStorage.multiRemove([
+      this.LEGACY_ACCESS_TOKEN_KEY,
+      this.LEGACY_REFRESH_TOKEN_KEY,
+      this.USER_INFO_KEY,
     ]);
   }
 
   // 자동 로그인 처리
   static async performAutoLogin(): Promise<boolean> {
     const loginInfo = await this.checkLoginStatus();
-
     if (loginInfo.isLoggedIn && loginInfo.token) {
-      // 추가적인 자동 로그인 로직 (필요시)
-      console.log('자동 로그인 성공:', loginInfo.user?.name);
+      console.log('✅ [Auth] 자동 로그인 성공');
       return true;
     }
-
     return false;
   }
 }

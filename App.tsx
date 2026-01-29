@@ -22,6 +22,9 @@ import { RootStackParamList } from './src/navigation/types';
 
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 
+// ✅ FCM 토큰 등록(자동로그인도 커버)
+import { registerFcmTokenToServer } from './src/services/PushTokenService';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 type AppState =
@@ -52,7 +55,18 @@ const App: React.FC = () => {
   const handleSplashComplete = async () => {
     try {
       const isAutoLoginSuccess = await AuthManager.performAutoLogin();
-      setAppState(isAutoLoginSuccess ? 'home' : 'login');
+
+      if (isAutoLoginSuccess) {
+        // ✅ 자동로그인으로 바로 홈 가는 케이스도 디바이스 토큰 등록 실행
+        try {
+          await registerFcmTokenToServer();
+        } catch (e) {
+          console.warn('⚠️ [App] registerFcmTokenToServer failed (ignored):', e);
+        }
+        setAppState('home');
+      } else {
+        setAppState('login');
+      }
     } catch {
       setAppState('login');
     }
