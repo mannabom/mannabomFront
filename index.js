@@ -1,9 +1,15 @@
 /**
  * @format
  */
+var reactNative = require('react-native');
+var AppRegistry = reactNative.AppRegistry;
 
-import { AppRegistry } from 'react-native';
-import App from './App';
-import { name as appName } from './app.json';
+var AppModule = require('./App');
+var App = AppModule && AppModule.default ? AppModule.default : AppModule;
 
-AppRegistry.registerComponent(appName, () => App);
+var appJson = require('./app.json');
+var appName = appJson && appJson.name ? appJson.name : 'App';
+
+AppRegistry.registerComponent(appName, function () {
+  return App;
+});

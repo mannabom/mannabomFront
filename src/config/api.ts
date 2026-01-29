@@ -38,6 +38,10 @@ export const API_ENDPOINTS_LIST = {
   // 질문 관련
   QUESTIONS: '/questions',
   QUESTIONS_BY_TYPE: '/questions/type/{questionType}',
+  
+  //디바이스 토큰 관련
+  DEVICE_TOKENS: '/api/device-tokens',
+
 
   // 사용자 관련
   USER_PROFILE: '/api/user/info',

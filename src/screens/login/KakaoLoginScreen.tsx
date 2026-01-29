@@ -1,5 +1,5 @@
 // src/screens/login/KakaoLoginScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   ImageBackground,
   Dimensions,
-  Platform,
 } from 'react-native';
 import {
   KakaoLoginService,
@@ -19,8 +18,8 @@ import {
 import { saveAuthTokens, saveProfileId } from '../../utils/AuthUtils';
 import AgeRestrictionModal from '../../components/login/AgeRestrictionModal';
 
-// ✅ FCM
-import messaging from '@react-native-firebase/messaging';
+// ✅ 로그인 성공 직후 토큰 확보 & 서버 등록
+import { registerFcmTokenToServer } from '../../services/PushTokenService';
 
 interface KakaoLoginScreenProps {
   onLoginSuccess: (userData?: any) => void;
@@ -35,43 +34,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgeRestrictionModal, setShowAgeRestrictionModal] = useState(false);
-
-  // ✅ FCM 초기화: 화면 진입 시 자동 로그
-  useEffect(() => {
-    let unsubscribeTokenRefresh: (() => void) | null = null;
-
-    const initFCM = async () => {
-      try {
-        console.log('📌 FCM 초기화 시작');
-
-        // Android 13+ 알림 권한 (RNFirebase가 내부적으로 처리하지만, 로그 목적)
-        // iOS도 requestPermission 필요
-        const authStatus = await messaging().requestPermission();
-        const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-        console.log('🔔 알림 권한 상태:', authStatus, 'enabled:', enabled);
-
-        // ✅ FCM 토큰 가져오기
-        const token = await messaging().getToken();
-        console.log('✅ FCM TOKEN:', token);
-
-        // ✅ 토큰 갱신 리스너
-        unsubscribeTokenRefresh = messaging().onTokenRefresh(newToken => {
-          console.log('🔄 FCM TOKEN REFRESH:', newToken);
-        });
-      } catch (e) {
-        console.error('❌ FCM 초기화 오류:', e);
-      }
-    };
-
-    initFCM();
-
-    return () => {
-      if (unsubscribeTokenRefresh) unsubscribeTokenRefresh();
-    };
-  }, []);
 
   const handleKakaoLogin = async () => {
     if (isLoading) return;
@@ -89,12 +51,11 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
       // 사용자가 취소한 경우 (null 반환)
       if (result === null) {
         console.log('사용자가 카카오 로그인을 취소했습니다.');
-        return; // 조용히 종료 - 에러 메시지 표시하지 않음
+        return;
       }
 
       console.log('카카오 로그인 결과:', result);
 
-      // 결과에 따라 처리
       switch (result.nextStep) {
         case 'home':
           // 기존 회원 - 토큰 저장 후 홈으로
@@ -105,15 +66,17 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
             );
           }
 
+          // ✅ 토큰 저장 직후: FCM 토큰 서버 등록
+          try {
+            await registerFcmTokenToServer();
+          } catch (e) {
+            console.warn('⚠️ [KakaoLogin] registerFcmTokenToServer failed (ignored):', e);
+          }
+
           Alert.alert(
             '로그인 성공',
             `${result.userData.nickname}님, 환영합니다!`,
-            [
-              {
-                text: '확인',
-                onPress: () => onLoginSuccess(result.userData),
-              },
-            ],
+            [{ text: '확인', onPress: () => onLoginSuccess(result.userData) }],
           );
           break;
 
@@ -128,7 +91,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
           break;
 
         case 'ageRestricted':
-          // 연령 제한 - 모달 표시
           console.log('연령 제한 사용자');
           setShowAgeRestrictionModal(true);
           break;
@@ -139,7 +101,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
     } catch (error) {
       console.error('카카오 로그인 오류:', error);
 
-      // 사용자 취소가 아닌 실제 오류만 표시
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -163,13 +124,11 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
         translucent
       />
 
-      {/* 배경 이미지 */}
       <ImageBackground
-        source={require('../../assets/images/login_screen.png')} // 이미지 경로
+        source={require('../../assets/images/login_screen.png')}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        {/* 메인 콘텐츠 - 카카오 로그인 버튼만 */}
         <View style={styles.contentContainer}>
           <TouchableOpacity
             style={[styles.kakaoButton, isLoading && styles.kakaoButtonDisabled]}
@@ -182,7 +141,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
                 <ActivityIndicator size="small" color="#381E1E" />
               ) : (
                 <>
-                  {/* 말풍선 아이콘 */}
                   <Text style={styles.kakaoIcon}>💬</Text>
                   <Text style={styles.kakaoButtonText}>카카오 간편 로그인</Text>
                 </>
@@ -192,7 +150,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
         </View>
       </ImageBackground>
 
-      {/* 연령 제한 모달 */}
       <AgeRestrictionModal
         visible={showAgeRestrictionModal}
         onClose={handleAgeRestrictionClose}
@@ -202,14 +159,8 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backgroundImage: {
-    flex: 1,
-    width: width,
-    height: height,
-  },
+  container: { flex: 1 },
+  backgroundImage: { flex: 1, width: width, height: height },
   contentContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -239,10 +190,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 28,
   },
-  kakaoIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
+  kakaoIcon: { fontSize: 20, marginRight: 12 },
   kakaoButtonText: {
     color: '#381E1E',
     fontSize: 18,
