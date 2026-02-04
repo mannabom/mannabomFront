@@ -1,5 +1,5 @@
 // App.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -22,8 +22,15 @@ import { RootStackParamList } from './src/navigation/types';
 
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 
-// ✅ FCM 토큰 등록(자동로그인도 커버)
-import { registerFcmTokenToServer } from './src/services/PushTokenService';
+// ✅ FCM 토큰 등록 + 포그라운드 알림 리스너
+import {
+  registerFcmTokenToServer,
+  startForegroundNotificationListener,
+  startTokenRefreshListener,
+  stopPushListeners,
+} from './src/services/PushTokenService';
+
+import { debugPushStatus } from './src/services/PushTokenService';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -52,34 +59,58 @@ const App: React.FC = () => {
     termType: 'service',
   });
 
+  // ✅ 앱 켜질 때 1번만: 포그라운드에서도 상태바 알림 뜨게
+useEffect(() => {
+  // 개발 중에만 찍고 싶으면 이 가드 추천
+  if (__DEV__) {
+    debugPushStatus();
+  }
+
+  startForegroundNotificationListener();
+}, []);
+
+  // ✅ 핵심: home 진입(=로그인 완료)할 때마다 토큰 등록 + 갱신 리스너 시작
+  useEffect(() => {
+    if (appState !== 'home') return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await registerFcmTokenToServer({ force: true });
+        if (cancelled) return;
+
+        if (token) {
+          startTokenRefreshListener();
+        } else {
+          console.warn('⚠️ [App] FCM token is null (permission/FCM issue?)');
+        }
+      } catch (e) {
+        console.warn('⚠️ [App] registerFcmTokenToServer failed (ignored):', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appState]);
+
   const handleSplashComplete = async () => {
     try {
       const isAutoLoginSuccess = await AuthManager.performAutoLogin();
-
-      if (isAutoLoginSuccess) {
-        // ✅ 자동로그인으로 바로 홈 가는 케이스도 디바이스 토큰 등록 실행
-        try {
-          await registerFcmTokenToServer();
-        } catch (e) {
-          console.warn('⚠️ [App] registerFcmTokenToServer failed (ignored):', e);
-        }
-        setAppState('home');
-      } else {
-        setAppState('login');
-      }
+      setAppState(isAutoLoginSuccess ? 'home' : 'login');
     } catch {
       setAppState('login');
     }
   };
 
   const handleLogout = async () => {
+    stopPushListeners();
     await AuthManager.logout();
     setAppState('login');
   };
 
-  const handleViewTermsDetail = (
-    termType: 'service' | 'privacy' | 'marketing',
-  ) => {
+  const handleViewTermsDetail = (termType: 'service' | 'privacy' | 'marketing') => {
     setTermsDetailState({ termType });
     setAppState('termsDetail');
   };
@@ -94,9 +125,7 @@ const App: React.FC = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
-      >
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         {appState === 'login' && (
           <Stack.Screen name="KakaoLogin">
             {props => (
