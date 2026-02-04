@@ -22,6 +22,14 @@ import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 
+// ✅ 지역/시군구는 여기서 import로만 사용
+import {
+  DISTRICT_OPTIONS,
+  REGION_OPTIONS,
+  normalizeSido,
+  normalizeSigungu,
+} from '../../constants/koreaRegions';
+
 type ServerProfile = {
   nickName?: string;
   birthDate?: string;
@@ -83,260 +91,6 @@ const BODY_TYPE_OPTIONS = [
   { label: '보통', value: 'AVERAGE' },
   { label: '통통', value: 'CHUBBY' },
 ];
-
-const REGION_OPTIONS = [
-  '서울특별시',
-  '부산광역시',
-  '대구광역시',
-  '인천광역시',
-  '광주광역시',
-  '대전광역시',
-  '울산광역시',
-  '세종특별자치시',
-  '경기도',
-  '강원특별자치도',
-  '충청북도',
-  '충청남도',
-  '전북특별자치도',
-  '전라남도',
-  '경상북도',
-  '경상남도',
-  '제주특별자치도',
-];
-
-const DISTRICT_OPTIONS: Record<string, string[]> = {
-  서울특별시: [
-    '종로구',
-    '중구',
-    '용산구',
-    '성동구',
-    '광진구',
-    '동대문구',
-    '중랑구',
-    '성북구',
-    '강북구',
-    '도봉구',
-    '노원구',
-    '은평구',
-    '서대문구',
-    '마포구',
-    '양천구',
-    '강서구',
-    '구로구',
-    '금천구',
-    '영등포구',
-    '동작구',
-    '관악구',
-    '서초구',
-    '강남구',
-    '송파구',
-    '강동구',
-  ],
-  부산광역시: [
-    '중구',
-    '서구',
-    '동구',
-    '영도구',
-    '부산진구',
-    '동래구',
-    '남구',
-    '북구',
-    '해운대구',
-    '사하구',
-    '금정구',
-    '강서구',
-    '연제구',
-    '수영구',
-    '사상구',
-    '기장군',
-  ],
-  대구광역시: ['중구', '동구', '서구', '남구', '북구', '수성구', '달서구', '달성군'],
-  인천광역시: [
-    '중구',
-    '동구',
-    '미추홀구',
-    '연수구',
-    '남동구',
-    '부평구',
-    '계양구',
-    '서구',
-    '강화군',
-    '옹진군',
-  ],
-  광주광역시: ['동구', '서구', '남구', '북구', '광산구'],
-  대전광역시: ['동구', '중구', '서구', '유성구', '대덕구'],
-  울산광역시: ['중구', '남구', '동구', '북구', '울주군'],
-  세종특별자치시: ['세종시'],
-  경기도: [
-    '수원시',
-    '성남시',
-    '안양시',
-    '안산시',
-    '용인시',
-    '평택시',
-    '과천시',
-    '오산시',
-    '시흥시',
-    '군포시',
-    '의왕시',
-    '하남시',
-    '이천시',
-    '안성시',
-    '김포시',
-    '화성시',
-    '광주시',
-    '양주시',
-    '포천시',
-    '여주시',
-    '연천군',
-    '가평군',
-    '양평군',
-    '고양시',
-    '부천시',
-    '광명시',
-    '동두천시',
-    '구리시',
-    '남양주시',
-    '의정부시',
-    '파주시',
-  ],
-  강원특별자치도: [
-    '춘천시',
-    '원주시',
-    '강릉시',
-    '동해시',
-    '태백시',
-    '속초시',
-    '삼척시',
-    '홍천군',
-    '횡성군',
-    '영월군',
-    '평창군',
-    '정선군',
-    '철원군',
-    '화천군',
-    '양구군',
-    '인제군',
-    '고성군',
-    '양양군',
-  ],
-  충청북도: [
-    '청주시',
-    '충주시',
-    '제천시',
-    '보은군',
-    '옥천군',
-    '영동군',
-    '증평군',
-    '진천군',
-    '괴산군',
-    '음성군',
-    '단양군',
-  ],
-  충청남도: [
-    '천안시',
-    '공주시',
-    '보령시',
-    '아산시',
-    '서산시',
-    '논산시',
-    '계룡시',
-    '당진시',
-    '금산군',
-    '부여군',
-    '서천군',
-    '청양군',
-    '홍성군',
-    '예산군',
-    '태안군',
-  ],
-  전북특별자치도: [
-    '전주시',
-    '군산시',
-    '익산시',
-    '정읍시',
-    '남원시',
-    '김제시',
-    '완주군',
-    '진안군',
-    '무주군',
-    '장수군',
-    '임실군',
-    '순창군',
-    '고창군',
-    '부안군',
-  ],
-  전라남도: [
-    '목포시',
-    '여수시',
-    '순천시',
-    '나주시',
-    '광양시',
-    '담양군',
-    '곡성군',
-    '구례군',
-    '고흥군',
-    '보성군',
-    '화순군',
-    '장흥군',
-    '강진군',
-    '해남군',
-    '영암군',
-    '무안군',
-    '함평군',
-    '영광군',
-    '장성군',
-    '완도군',
-    '진도군',
-    '신안군',
-  ],
-  경상북도: [
-    '포항시',
-    '경주시',
-    '김천시',
-    '안동시',
-    '구미시',
-    '영주시',
-    '영천시',
-    '상주시',
-    '문경시',
-    '경산시',
-    '군위군',
-    '의성군',
-    '청송군',
-    '영양군',
-    '영덕군',
-    '청도군',
-    '고령군',
-    '성주군',
-    '칠곡군',
-    '예천군',
-    '봉화군',
-    '울진군',
-    '울릉군',
-  ],
-  경상남도: [
-    '창원시',
-    '진주시',
-    '통영시',
-    '사천시',
-    '김해시',
-    '밀양시',
-    '거제시',
-    '양산시',
-    '의령군',
-    '함안군',
-    '창녕군',
-    '고성군',
-    '남해군',
-    '하동군',
-    '산청군',
-    '함양군',
-    '거창군',
-    '합천군',
-  ],
-  제주특별자치도: ['제주시', '서귀포시'],
-};
 
 const CHOICES: ChoiceItem[] = [
   { question: '연인과 싸웠을 때(선택 시 1포인트팅 지급!)', key: '싸웠을', options: ['바로 풀고 싶다', '시간을 좀 가지고 싶다'] },
@@ -409,11 +163,11 @@ const isMbtiValid = (arr: string[]) => arr.length === 4 && arr.every(x => x && x
 
 const norm = (s?: string) => (s || '').replace(/\s+/g, '').toLowerCase();
 
-// ✅ 핵심: 3단 고정 스냅 (0 / 50 / 100) + 중간값 금지
+// ✅ 핵심: 3단 고정 스냅 (0 / 50 / 100)
 const snapToTri = (raw: number) => {
-  if (raw < 25) return 0;   // 0~24.999 -> 0
-  if (raw < 75) return 50;  // 25~74.999 -> 50
-  return 100;               // 75~100 -> 100
+  if (raw < 25) return 0; // 0~24.999 -> 0
+  if (raw < 75) return 50; // 25~74.999 -> 50
+  return 100; // 75~100 -> 100
 };
 
 export default function ProfileDetail() {
@@ -461,8 +215,16 @@ export default function ProfileDetail() {
   const openBasicModal = () => {
     setDraftHeight(form.height || '');
     setDraftBodyType(form.bodyType || '');
-    setDraftRegion(form.regionSido || '');
-    setDraftDistrict(form.regionSigungu || '');
+
+    // ✅ 서버에서 특별자치도/세종시 형태로 와도 드롭다운이 안 깨지게 정규화
+    const draftSido = normalizeSido(form.regionSido || profile?.regionSido || '');
+    const draftSigungu = draftSido
+      ? normalizeSigungu(draftSido, form.regionSigungu || profile?.regionSigungu || '')
+      : (form.regionSigungu || profile?.regionSigungu || '');
+
+    setDraftRegion(draftSido);
+    setDraftDistrict(draftSigungu);
+
     setDraftMbti(splitMbti(form.mbti || profile?.mbti));
 
     // ✅ 모달 처음 열릴 때도 0/50/100 유지
@@ -544,14 +306,22 @@ export default function ProfileDetail() {
       const data: any = profileRes.data?.data ?? profileRes.data;
       const profileData: any = data?.profile ?? data;
 
+      // ✅ 서버값 정규화
+      const rawSido: string | undefined = profileData?.regionSido;
+      const rawSigungu: string | undefined = profileData?.regionSigungu;
+
+      const sidoN = rawSido ? normalizeSido(rawSido) : undefined;
+      const sigunguN =
+        rawSigungu && sidoN ? normalizeSigungu(sidoN, rawSigungu) : rawSigungu;
+
       const nextProfile: ServerProfile = {
         nickName: profileData?.nickName ?? profileData?.nickname,
         birthDate: profileData?.birthDate,
         gender: profileData?.gender,
         mbti: profileData?.mbti,
         height: profileData?.height,
-        regionSido: profileData?.regionSido,
-        regionSigungu: profileData?.regionSigungu,
+        regionSido: sidoN ?? rawSido,
+        regionSigungu: sigunguN ?? rawSigungu,
         university: profileData?.university,
         profileImageUrl:
           mainPhotoURL ??
@@ -637,7 +407,13 @@ export default function ProfileDetail() {
   }, [birthYear]);
 
   const address = useMemo(() => {
-    const a = (form.regionSido ? `${form.regionSido} ` : '') + (form.regionSigungu || '');
+    const sido = form.regionSido || '';
+    const sigungu = form.regionSigungu || '';
+
+    // ✅ 세종처럼 "시도 == 시군구"로 들어오면 중복 표시 방지
+    if (sido && sigungu && sido === sigungu) return sido;
+
+    const a = (sido ? `${sido} ` : '') + sigungu;
     return a.trim();
   }, [form.regionSido, form.regionSigungu]);
 
@@ -756,8 +532,10 @@ export default function ProfileDetail() {
     );
   };
 
-  // ✅ 여기서 스냅 적용: 드래그 중에도 0/50/100만 유지
+  // ✅ 여기서 스냅 적용 + step=50으로 중간 정차 불가
   const renderPercentSlider = (value: number, onChange: (v: number) => void) => {
+    const snappedValue = snapToTri(value);
+
     return (
       <View style={styles.customSliderContainer}>
         <View style={styles.sliderTrack} />
@@ -767,7 +545,8 @@ export default function ProfileDetail() {
           style={styles.slider}
           minimumValue={0}
           maximumValue={100}
-          value={value}
+          step={50}
+          value={snappedValue}
           onValueChange={(raw) => onChange(snapToTri(raw))}
           onSlidingComplete={(raw) => onChange(snapToTri(raw))}
           minimumTrackTintColor="transparent"
@@ -1056,11 +835,17 @@ export default function ProfileDetail() {
 
                 {renderDropdown(
                   showRegionDropdown,
-                  REGION_OPTIONS,
+                  [...REGION_OPTIONS] as unknown as string[],
                   draftRegion,
                   v => {
                     setDraftRegion(v);
-                    setDraftDistrict('');
+
+                    // ✅ 세종은 시군구도 동일 값으로 자동 세팅하면 UX가 덜 귀찮음
+                    if (v === '세종특별자치시') {
+                      setDraftDistrict('세종특별자치시');
+                    } else {
+                      setDraftDistrict('');
+                    }
                   },
                   () => setShowRegionDropdown(false),
                 )}
@@ -1154,12 +939,16 @@ export default function ProfileDetail() {
                 onPress={() => {
                   const mbti = draftMbti.join('').toUpperCase();
 
+                  // ✅ 저장 직전에 한 번 더 정규화(특히 세종)
+                  const sidoN = draftRegion ? normalizeSido(draftRegion) : '';
+                  const sigunguN = sidoN && draftDistrict ? normalizeSigungu(sidoN, draftDistrict) : draftDistrict;
+
                   setForm(prev => ({
                     ...prev,
                     height: draftHeight,
                     bodyType: draftBodyType,
-                    regionSido: draftRegion,
-                    regionSigungu: draftDistrict,
+                    regionSido: sidoN,
+                    regionSigungu: sigunguN,
                     mbti: mbti,
                     smoking: mapSliderToSmokingEnum(draftSmoking),
                     alcohol: mapSliderToAlcoholEnum(draftDrinking),
@@ -1418,4 +1207,3 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { color: '#666', fontWeight: '900' },
   modalBtnSaveText: { color: '#fff', fontWeight: '900' },
 });
-

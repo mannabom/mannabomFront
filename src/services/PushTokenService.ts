@@ -3,21 +3,110 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import apiClient from './apiClient';
 
+import notifee, { AndroidImportance, AuthorizationStatus } from '@notifee/react-native';
+
 const DEVICE_TOKEN_ENDPOINT = '/api/device-tokens';
 
 const STORAGE_DEVICE_TOKEN = 'deviceToken';
 const STORAGE_LAST_SENT = 'deviceToken:lastSent';
 
+const NOTIFEE_CHANNEL_ID = 'default';
+
 let tokenRefreshUnsub: null | (() => void) = null;
+let foregroundMsgUnsub: null | (() => void) = null;
 
-export async function registerFcmTokenToServer(): Promise<string | null> {
+let notifeeReady = false;
+
+async function ensureNotifeeReady() {
+  if (notifeeReady) return;
+
   try {
-    console.log('📌 [Push] registerFcmTokenToServer start');
+    const settings = await notifee.requestPermission();
+    // Android 13+에서 알림 차단이면 여기서 status가 막혀있을 수 있음
+    // (아래 debug 함수로도 확인 가능)
 
-    // RNFirebase 권장
+    await notifee.createChannel({
+      id: NOTIFEE_CHANNEL_ID,
+      name: 'Default',
+      importance: AndroidImportance.HIGH,
+    });
+
+    notifeeReady = true;
+  } catch (e) {
+    console.warn('⚠️ [Push] ensureNotifeeReady failed (ignored):', e);
+  }
+}
+
+function pickTitleBody(remoteMessage: any): { title: string; body: string } {
+  const rawTitle =
+    remoteMessage?.notification?.title ??
+    remoteMessage?.data?.title ??
+    remoteMessage?.data?.notificationTitle ??
+    '알림';
+
+  const rawBody =
+    remoteMessage?.notification?.body ??
+    remoteMessage?.data?.body ??
+    remoteMessage?.data?.message ??
+    remoteMessage?.data?.notificationBody ??
+    '';
+
+  return {
+    title: String(rawTitle ?? '알림'),
+    body: String(rawBody ?? ''),
+  };
+}
+
+export async function showLocalNotificationFromRemoteMessage(remoteMessage: any) {
+  const { title, body } = pickTitleBody(remoteMessage);
+  await ensureNotifeeReady();
+
+  await notifee.displayNotification({
+    title,
+    body,
+    android: {
+      channelId: NOTIFEE_CHANNEL_ID,
+      pressAction: { id: 'default' },
+      // ⚠️ 어떤 기기에서 알림이 안 뜨고 로그에 icon 관련 에러 나면 주석 해제 필요
+      // smallIcon: 'ic_notification',
+    },
+  });
+}
+
+/** ✅ 권한/상태 디버그용 */
+export async function debugPushStatus() {
+  try {
+    const notifSettings = await notifee.getNotificationSettings();
+    const perm =
+      notifSettings.authorizationStatus === AuthorizationStatus.AUTHORIZED
+        ? 'AUTHORIZED'
+        : notifSettings.authorizationStatus === AuthorizationStatus.DENIED
+        ? 'DENIED'
+        : String(notifSettings.authorizationStatus);
+
+    const lastSent = await AsyncStorage.getItem(STORAGE_LAST_SENT);
+    const savedToken = await AsyncStorage.getItem(STORAGE_DEVICE_TOKEN);
+    const fcmToken = await messaging().getToken().catch(() => null);
+
+    console.log('🧪 [PushDebug] notifee permission:', perm);
+    console.log('🧪 [PushDebug] AsyncStorage lastSent:', lastSent);
+    console.log('🧪 [PushDebug] AsyncStorage savedToken:', savedToken);
+    console.log('🧪 [PushDebug] messaging getToken():', fcmToken);
+  } catch (e) {
+    console.warn('⚠️ [PushDebug] failed:', e);
+  }
+}
+
+/** ✅ 서버에 FCM 토큰 등록 */
+export async function registerFcmTokenToServer(opts?: { force?: boolean }): Promise<string | null> {
+  const force = !!opts?.force;
+
+  try {
+    console.log('📌 [Push] registerFcmTokenToServer start', { force });
+
+    await ensureNotifeeReady();
+
     await messaging().registerDeviceForRemoteMessages();
-
-    // (안드로이드는 권한 없어도 대체로 괜찮지만, 호출해도 문제 없음)
     await messaging().requestPermission().catch(() => {});
 
     const token = await messaging().getToken();
@@ -28,49 +117,83 @@ export async function registerFcmTokenToServer(): Promise<string | null> {
       return null;
     }
 
-    // 앱 내부 저장 (MyPage 로그아웃에서 참조할 수도 있어서 유지)
     await AsyncStorage.setItem(STORAGE_DEVICE_TOKEN, token);
 
-    // 같은 토큰이면 서버 재등록 스킵
     const lastSent = await AsyncStorage.getItem(STORAGE_LAST_SENT);
-    if (lastSent === token) {
+
+    // ✅ 문제의 핵심: 로그인/계정변경/서버초기화 대비해서, 기본은 force로 POST 하자
+    if (!force && lastSent === token) {
       console.log('⏭️ [Push] token unchanged, skip POST');
       return token;
     }
 
-    // 서버 등록
     console.log('🌐 [Push] POST', DEVICE_TOKEN_ENDPOINT, { deviceToken: token });
     await apiClient.post(DEVICE_TOKEN_ENDPOINT, { deviceToken: token });
 
     await AsyncStorage.setItem(STORAGE_LAST_SENT, token);
     console.log('✅ [Push] device token upsert success');
 
-    // 토큰 갱신 리스너는 1회만
-    if (!tokenRefreshUnsub) {
-      tokenRefreshUnsub = messaging().onTokenRefresh(async newToken => {
-        try {
-          console.log('🔄 [Push] onTokenRefresh:', newToken);
-
-          await AsyncStorage.setItem(STORAGE_DEVICE_TOKEN, newToken);
-          await apiClient.post(DEVICE_TOKEN_ENDPOINT, { deviceToken: newToken });
-          await AsyncStorage.setItem(STORAGE_LAST_SENT, newToken);
-
-          console.log('✅ [Push] refreshed token upsert success');
-        } catch (e: any) {
-          console.error(
-            '❌ [Push] token refresh upsert failed:',
-            e?.response?.data || e?.message || e,
-          );
-        }
-      });
-    }
-
     return token;
   } catch (e: any) {
-    console.error(
-      '❌ [Push] registerFcmTokenToServer failed:',
-      e?.response?.data || e?.message || e,
-    );
+    console.error('❌ [Push] registerFcmTokenToServer failed:', e?.response?.data || e?.message || e);
     return null;
   }
 }
+
+export function startTokenRefreshListener() {
+  if (tokenRefreshUnsub) return;
+
+  tokenRefreshUnsub = messaging().onTokenRefresh(async newToken => {
+    try {
+      console.log('🔄 [Push] onTokenRefresh:', newToken);
+
+      await AsyncStorage.setItem(STORAGE_DEVICE_TOKEN, newToken);
+
+      await apiClient.post(DEVICE_TOKEN_ENDPOINT, { deviceToken: newToken });
+      await AsyncStorage.setItem(STORAGE_LAST_SENT, newToken);
+
+      console.log('✅ [Push] refreshed token upsert success');
+    } catch (e: any) {
+      console.error('❌ [Push] token refresh upsert failed:', e?.response?.data || e?.message || e);
+    }
+  });
+}
+
+export function startForegroundNotificationListener() {
+  if (foregroundMsgUnsub) return;
+
+  console.log('📌 [Push] startForegroundNotificationListener');
+
+  void ensureNotifeeReady();
+
+  foregroundMsgUnsub = messaging().onMessage(async remoteMessage => {
+    try {
+      console.log('🔔 [Push] onMessage (foreground):', {
+        notification: remoteMessage?.notification,
+        data: remoteMessage?.data,
+      });
+
+      await showLocalNotificationFromRemoteMessage(remoteMessage);
+    } catch (e) {
+      console.error('❌ [Push] foreground notification failed:', e);
+    }
+  });
+}
+
+export async function registerDeviceTokenAfterLogin() {
+  const token = await registerFcmTokenToServer({ force: true }); // ✅ 로그인 직후는 강제
+  if (token) startTokenRefreshListener();
+  return token;
+}
+
+export function stopPushListeners() {
+  if (tokenRefreshUnsub) {
+    tokenRefreshUnsub();
+    tokenRefreshUnsub = null;
+  }
+  if (foregroundMsgUnsub) {
+    foregroundMsgUnsub();
+    foregroundMsgUnsub = null;
+  }
+}
+
