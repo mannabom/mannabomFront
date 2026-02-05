@@ -1,3 +1,4 @@
+// src/components/common/FilterModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -33,16 +34,23 @@ interface FilterModalProps {
 }
 
 const PINK = '#FF6B6B';
-const BORDER = '#E9ECEF';
+const BORDER = '#E5E7EB';
 
 const MIN_AGE = 20;
-const MAX_AGE = 35;
+const MAX_AGE = 29;
+const STEP_COUNT = 9; // 20~29 사이 9칸
+const STEP_SIZE = (MAX_AGE - MIN_AGE) / STEP_COUNT; // 1
 const DEFAULT_MIN = 20;
 const DEFAULT_MAX = 29;
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
 const { height: SCREEN_H } = Dimensions.get('window');
+
+const ensureAtLeastOne = <T,>(arr: T[], fallback: T) => (arr && arr.length ? arr : [fallback]);
+const sanitizeAgeRange = (range: { min: number; max: number }) => ({
+  min: clamp(range.min, MIN_AGE, MAX_AGE),
+  max: clamp(range.max, MIN_AGE, MAX_AGE),
+});
 
 const FilterModal: React.FC<FilterModalProps> = ({
   visible,
@@ -51,24 +59,44 @@ const FilterModal: React.FC<FilterModalProps> = ({
   initialFilters,
 }) => {
   const [ageRange, setAgeRange] = useState(
-    initialFilters?.ageRange || defaultFilterSettings.ageRange,
-  );
-  const [selectedSmoking, setSelectedSmoking] = useState<SmokingHabit[]>(
-    initialFilters?.smoking || defaultFilterSettings.smoking,
-  );
-  const [selectedDrinking, setSelectedDrinking] = useState<DrinkingHabit[]>(
-    initialFilters?.drinking || defaultFilterSettings.drinking,
+    sanitizeAgeRange(initialFilters?.ageRange || defaultFilterSettings.ageRange),
   );
 
-  // ✅ 모달 다시 열 때 초기값 동기화
+  const [selectedSmoking, setSelectedSmoking] = useState<SmokingHabit[]>(
+    ensureAtLeastOne(
+      initialFilters?.smoking || defaultFilterSettings.smoking,
+      allSmokingHabits[0],
+    ),
+  );
+
+  const [selectedDrinking, setSelectedDrinking] = useState<DrinkingHabit[]>(
+    ensureAtLeastOne(
+      initialFilters?.drinking || defaultFilterSettings.drinking,
+      allDrinkingHabits[0],
+    ),
+  );
+
+  // ✅ 모달 열 때 초기값 동기화
   useEffect(() => {
     if (!visible) return;
-    setAgeRange(initialFilters?.ageRange || defaultFilterSettings.ageRange);
-    setSelectedSmoking(initialFilters?.smoking || defaultFilterSettings.smoking);
-    setSelectedDrinking(initialFilters?.drinking || defaultFilterSettings.drinking);
+    setAgeRange(sanitizeAgeRange(initialFilters?.ageRange || defaultFilterSettings.ageRange));
+
+    setSelectedSmoking(
+      ensureAtLeastOne(
+        initialFilters?.smoking || defaultFilterSettings.smoking,
+        allSmokingHabits[0],
+      ),
+    );
+
+    setSelectedDrinking(
+      ensureAtLeastOne(
+        initialFilters?.drinking || defaultFilterSettings.drinking,
+        allDrinkingHabits[0],
+      ),
+    );
   }, [visible, initialFilters]);
 
-  // ✅ 흡연 최소 1개 유지
+  // ✅ 흡연 최소 1개 유지 + 다중 선택 가능
   const toggleSmokingHabit = (habit: SmokingHabit) => {
     setSelectedSmoking(prev => {
       if (prev.includes(habit)) {
@@ -78,7 +106,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
     });
   };
 
-  // ✅ 음주 최소 1개 유지
+  // ✅ 음주 최소 1개 유지 + 다중 선택 가능
   const toggleDrinkingHabit = (habit: DrinkingHabit) => {
     setSelectedDrinking(prev => {
       if (prev.includes(habit)) {
@@ -91,13 +119,20 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const setDefaultAge = () => setAgeRange({ min: DEFAULT_MIN, max: DEFAULT_MAX });
 
   // =========================
-  // ✅ 나이 Range Slider (한 줄 + 투 핸들)
+  // ✅ 나이 Range Slider (투 핸들, 서로 못 넘음)
   // =========================
   const trackWidthRef = useRef(0);
   const [trackWidth, setTrackWidth] = useState(0);
+  const [showBubbles, setShowBubbles] = useState(false);
 
-  const THUMB = 22; // 손잡이(버튼) 크기
+  const THUMB = 18; // 스샷 느낌으로 살짝 작게
   const usable = Math.max(1, trackWidth - THUMB);
+
+  const snapValue = (v: number) => {
+    const stepped = Math.round((v - MIN_AGE) / STEP_SIZE);
+    const snapped = MIN_AGE + stepped * STEP_SIZE;
+    return clamp(Math.round(snapped), MIN_AGE, MAX_AGE);
+  };
 
   const valueToX = (v: number) => {
     const ratio = (v - MIN_AGE) / (MAX_AGE - MIN_AGE);
@@ -106,8 +141,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
 
   const xToValue = (x: number) => {
     const ratio = clamp(x / usable, 0, 1);
-    const raw = MIN_AGE + ratio * (MAX_AGE - MIN_AGE);
-    return Math.round(raw); // step=1
+    return MIN_AGE + ratio * (MAX_AGE - MIN_AGE); // 실시간은 부드럽게, 스냅은 release에서
   };
 
   const minX = useMemo(() => valueToX(ageRange.min), [ageRange.min, trackWidth]);
@@ -125,17 +159,24 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const minPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
+        setShowBubbles(true);
         minStartRef.current = ageRange.min;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
         const startX = valueToX(minStartRef.current);
-        const nextX = clamp(startX + g.dx, 0, maxX); // ✅ 오른쪽(최대) 넘어가면 안 됨
+        const nextX = clamp(startX + g.dx, 0, maxX); // ✅ max 핸들 못 넘음
         const nextMin = clamp(xToValue(nextX), MIN_AGE, ageRange.max);
 
         setAgeRange(prev => ({ ...prev, min: nextMin }));
+      },
+      onPanResponderRelease: () => {
+        const snapped = snapValue(ageRange.min);
+        setAgeRange(prev => ({ ...prev, min: Math.min(snapped, prev.max) }));
+        setShowBubbles(false);
       },
     }),
   ).current;
@@ -143,27 +184,34 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const maxPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
+        setShowBubbles(true);
         maxStartRef.current = ageRange.max;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
         const startX = valueToX(maxStartRef.current);
-        const nextX = clamp(startX + g.dx, minX, usable); // ✅ 왼쪽(최소) 넘어가면 안 됨
+        const nextX = clamp(startX + g.dx, minX, usable); // ✅ min 핸들 못 넘음
         const nextMax = clamp(xToValue(nextX), ageRange.min, MAX_AGE);
 
         setAgeRange(prev => ({ ...prev, max: nextMax }));
+      },
+      onPanResponderRelease: () => {
+        const snapped = snapValue(ageRange.max);
+        setAgeRange(prev => ({ ...prev, max: Math.max(snapped, prev.min) }));
+        setShowBubbles(false);
       },
     }),
   ).current;
 
   const handleApply = () => {
-    // 혹시라도 빈 배열이면 막기(안전벨트)
+    // 안전벨트: 혹시라도 빈 배열이면 저장 막음
     if (!selectedSmoking.length || !selectedDrinking.length) return;
 
     onApply({
-      ageRange,
+      ageRange: sanitizeAgeRange(ageRange),
       smoking: selectedSmoking,
       drinking: selectedDrinking,
     });
@@ -172,7 +220,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.card, { height: SCREEN_H * 0.35 }]} onPress={() => {}}>
+        <Pressable style={[styles.card, { height: SCREEN_H * 0.62 }]} onPress={() => {}}>
           <View style={styles.header}>
             <Text style={styles.title}>조건 설정</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}>
@@ -181,13 +229,9 @@ const FilterModal: React.FC<FilterModalProps> = ({
           </View>
 
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {/* ✅ 나이대: 한 줄 + 기본값 버튼 */}
+            {/* 나이대 */}
             <View style={styles.sectionRow}>
               <Text style={styles.sectionTitle}>나이대</Text>
-              <Text style={styles.sectionValue}>
-                {ageRange.min} - {ageRange.max}
-              </Text>
-
               <TouchableOpacity style={styles.defaultBtn} onPress={setDefaultAge} activeOpacity={0.85}>
                 <Text style={styles.defaultBtnText}>기본값 설정</Text>
               </TouchableOpacity>
@@ -195,45 +239,42 @@ const FilterModal: React.FC<FilterModalProps> = ({
 
             <View style={styles.rangeWrap} onLayout={onTrackLayout}>
               <View style={styles.track} />
-              {/* 선택된 구간 */}
+
               {trackWidth > 0 && (
                 <View
                   style={[
                     styles.selectedTrack,
                     {
                       left: minX + THUMB / 2,
-                      width: Math.max(0, (maxX - minX)),
+                      width: Math.max(0, maxX - minX),
                     },
                   ]}
                 />
               )}
 
-              {/* 최소 핸들 */}
-              <View
-                style={[
-                  styles.thumb,
-                  { left: minX },
-                ]}
-                {...minPan.panHandlers}
-              />
-
-              {/* 최대 핸들 */}
-              <View
-                style={[
-                  styles.thumb,
-                  { left: maxX },
-                ]}
-                {...maxPan.panHandlers}
-              />
+              <View style={[styles.thumb, { left: minX }]} {...minPan.panHandlers}>
+                {showBubbles && (
+                  <View pointerEvents="none" style={styles.bubble}>
+                    <Text style={styles.bubbleText}>{Math.round(ageRange.min)}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={[styles.thumb, { left: maxX }]} {...maxPan.panHandlers}>
+                {showBubbles && (
+                  <View pointerEvents="none" style={styles.bubble}>
+                    <Text style={styles.bubbleText}>{Math.round(ageRange.max)}</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
-            <View style={styles.ageTicks}>
-              <Text style={styles.tickText}>{MIN_AGE}</Text>
-              <Text style={styles.tickText}>{Math.round((MIN_AGE + MAX_AGE) / 2)}</Text>
-              <Text style={styles.tickText}>{MAX_AGE}</Text>
+            {/* tick 20 / 29만 표시 (중간 값 숨김) */}
+            <View style={styles.ticks}>
+              <Text style={styles.tickText}>20</Text>
+              <Text style={styles.tickText}>29</Text>
             </View>
 
-            {/* ✅ 흡연 */}
+            {/* 흡연 */}
             <Text style={styles.blockTitle}>흡연</Text>
             <View style={styles.buttonGroup}>
               {allSmokingHabits.map(habit => {
@@ -253,7 +294,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
               })}
             </View>
 
-            {/* ✅ 음주 */}
+            {/* 음주 */}
             <Text style={[styles.blockTitle, { marginTop: 12 }]}>음주</Text>
             <View style={styles.buttonGroup}>
               {allDrinkingHabits.map(habit => {
@@ -288,41 +329,40 @@ const FilterModal: React.FC<FilterModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
   card: {
-    width: '100%',
-    maxWidth: 420,
+    width: '92%',
+    maxWidth: 340,
+    height: SCREEN_H * 0.78,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   header: {
-    height: 52,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    paddingTop: 14,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: { fontSize: 16, fontWeight: '900', color: '#111' },
+  title: { fontSize: 18, fontWeight: '900', color: '#111' },
   close: { fontSize: 16, color: '#111' },
 
-  content: { padding: 16 },
+  content: { paddingHorizontal: 16, paddingBottom: 8 },
 
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sectionTitle: { fontSize: 14, fontWeight: '900', color: '#111' },
-  sectionValue: { marginLeft: 10, fontSize: 13, fontWeight: '800', color: '#444' },
 
   defaultBtn: {
-    marginLeft: 'auto',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
@@ -333,75 +373,78 @@ const styles = StyleSheet.create({
   defaultBtnText: { fontSize: 12, fontWeight: '800', color: '#111' },
 
   rangeWrap: {
-    marginTop: 14,
-    height: 34,
+    marginTop: 12,
+    height: 28,
     justifyContent: 'center',
   },
-  track: {
-    height: 10,
-    borderRadius: 8,
-    backgroundColor: '#EAEAEA',
-  },
+  track: { height: 6, borderRadius: 6, backgroundColor: '#E5E7EB' },
   selectedTrack: {
     position: 'absolute',
-    height: 10,
-    borderRadius: 8,
+    height: 6,
+    borderRadius: 6,
     backgroundColor: PINK,
-    top: 12,
+    top: 11,
   },
-
   thumb: {
     position: 'absolute',
-    top: 6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: 5,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
     borderColor: PINK,
-    elevation: 2,
   },
 
-  ageTicks: {
+  ticks: {
     marginTop: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  tickText: { fontSize: 11, color: '#666', fontWeight: '700' },
+  tickText: { fontSize: 12, fontWeight: '800', color: '#111' },
+
+  bubble: {
+    position: 'absolute',
+    top: -28,
+    alignSelf: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  bubbleText: { fontSize: 10, fontWeight: '900', color: '#111' },
 
   blockTitle: { marginTop: 14, fontSize: 14, fontWeight: '900', color: '#111' },
 
   buttonGroup: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
   pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: BORDER,
-    backgroundColor: '#F8F9FA',
-    marginRight: 8,
-    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+    marginRight: 10,
+    marginBottom: 10,
   },
   pillActive: {
     backgroundColor: '#FFE8F1',
     borderColor: PINK,
   },
-  pillText: { fontSize: 12, fontWeight: '700', color: '#666' },
-  pillTextActive: { color: PINK, fontWeight: '900' },
+  pillText: { fontSize: 12, fontWeight: '800', color: '#111' },
+  pillTextActive: { color: '#111', fontWeight: '900' },
 
-  footer: {
-    padding: 14,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
+  footer: { padding: 14 },
   saveBtn: {
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: PINK,
+    backgroundColor: '#FFB3C7',
   },
-  saveText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  saveText: { color: '#111', fontSize: 14, fontWeight: '900' },
 });
 
 export default FilterModal;

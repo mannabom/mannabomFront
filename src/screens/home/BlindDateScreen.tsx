@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+// src/screens/BlindDate/BlindDateScreen.tsx
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,9 +8,8 @@ import {
   StatusBar,
   SafeAreaView,
   ImageBackground,
-  Platform,
+  Image,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import FilterModal from '../../components/common/FilterModal';
 import ProfileCardModal from '../../components/common/ProfileCardModal';
@@ -17,309 +17,393 @@ import LoveCodeModal from '../../components/common/LoveCodeModal';
 
 import { FilterSettings } from '../../types/DatingAPI';
 import { defaultFilterSettings } from '../../utils/DatingUtils';
+import {
+  MockFilterInput,
+  UiLoveCodeCard,
+  UiProfileCard,
+  mockFetchLoveCodeCards,
+  mockFetchProfileCards,
+} from '../../mocks/datingMock';
+const petalImg = require('../../assets/images/petal.png');
 
 interface BlindDateScreenProps {
   onLogout: () => void;
 }
 
-const STORAGE_KEYS = {
-  LAST_OPEN_PROFILE_MATCH: 'last_open_profile_match',
-  LAST_OPEN_LOVE_CODE: 'last_open_love_code',
-};
+const DAILY_FREE = 5;
+const DAILY_PAID_SUB = 5;
 
-const getTodayNoon = () => {
-  const now = new Date();
-  const noon = new Date(now);
-  noon.setHours(12, 0, 0, 0);
-  return noon;
-};
-
-const isNewAfterNoon = (lastOpenedMs?: number | null) => {
-  const now = new Date();
-  const noon = getTodayNoon();
-
-  // 12시 전이면 NEW 없음
-  if (now.getTime() < noon.getTime()) return false;
-
-  // 기록 없으면 NEW
-  if (!lastOpenedMs) return true;
-
-  // 마지막 오픈이 오늘 12시 이전이면 NEW
-  return lastOpenedMs < noon.getTime();
-};
-
-const BlindDateScreen: React.FC<BlindDateScreenProps> = ({ onLogout }) => {
+const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const [filterSettings, setFilterSettings] = useState<FilterSettings>(defaultFilterSettings);
+
+  const [previewProfile, setPreviewProfile] = useState<UiProfileCard | null>(null);
+  const [previewLoveCode, setPreviewLoveCode] = useState<UiLoveCodeCard | null>(null);
+  const [profileCards, setProfileCards] = useState<UiProfileCard[]>([]);
+  const [loveCodeCards, setLoveCodeCards] = useState<UiLoveCodeCard[]>([]);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [loveCodeModalVisible, setLoveCodeModalVisible] = useState(false);
 
-  // ✅ 재화/구독 (지금은 임시값. 나중에 USER_MEMBERSHIP 붙이면 여기만 교체하면 됨)
-  const [tingBalance, setTingBalance] = useState<number>(225);
+  // ✅ 재화/구독 (지금은 임시값)
+  const [tingBalance, setTingBalance] = useState<number>(225); // ♥
+  const [coinBalance, setCoinBalance] = useState<number>(100); // 코인(임시)
+  const [isVip] = useState<boolean>(true);
   const [isSubscribed] = useState<boolean>(true);
 
-  const has200 = tingBalance >= 200;
-  const hasBenefitTicket = has200 || isSubscribed;
+  // ✅ 프로필 열람권(무료/유료) - “프로필/연애코드 통합”으로 같이 씀
+  const [freeRemaining, setFreeRemaining] = useState<number>(DAILY_FREE);
+  const [paidRemaining, setPaidRemaining] = useState<number>(isSubscribed ? DAILY_PAID_SUB : 0);
 
-  const [isNewProfile, setIsNewProfile] = useState(false);
-  const [isNewLoveCode, setIsNewLoveCode] = useState(false);
+  const paidLabelCount = useMemo(() => paidRemaining, [paidRemaining]);
 
-  const refreshNewBadges = useCallback(async () => {
-    try {
-      const [p, l] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.LAST_OPEN_PROFILE_MATCH),
-        AsyncStorage.getItem(STORAGE_KEYS.LAST_OPEN_LOVE_CODE),
-      ]);
+  const toMockFilter = (filters: FilterSettings): MockFilterInput => ({
+    minAge: filters.ageRange.min,
+    maxAge: filters.ageRange.max,
+    smoking: filters.smoking,
+    drinking: filters.drinking,
+    limit: 10,
+  });
 
-      const pMs = p ? Number(p) : null;
-      const lMs = l ? Number(l) : null;
+  React.useEffect(() => {
+    let mounted = true;
 
-      setIsNewProfile(isNewAfterNoon(pMs));
-      setIsNewLoveCode(isNewAfterNoon(lMs));
-    } catch {
-      setIsNewProfile(false);
-      setIsNewLoveCode(false);
-    }
-  }, []);
+    const loadPreview = async () => {
+      try {
+        const mockInput = toMockFilter(filterSettings);
+        const [profiles, loveCodes] = await Promise.all([
+          mockFetchProfileCards(mockInput),
+          mockFetchLoveCodeCards(mockInput),
+        ]);
 
-  useEffect(() => {
-    refreshNewBadges();
-  }, [refreshNewBadges]);
+        if (!mounted) return;
+        setProfileCards(profiles);
+        setLoveCodeCards(loveCodes);
+        setPreviewProfile(profiles[0] ?? null);
+        setPreviewLoveCode(loveCodes[0] ?? null);
+      } catch (e) {
+        console.warn('Failed to load mock previews', e);
+      }
+    };
+
+    loadPreview();
+    return () => {
+      mounted = false;
+    };
+  }, [filterSettings]);
 
   const handleFilterApply = (newFilters: FilterSettings) => {
     setFilterSettings(newFilters);
     setFilterModalVisible(false);
   };
 
-  const handleProfilePress = async () => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.LAST_OPEN_PROFILE_MATCH, String(Date.now()));
-    } catch {}
-    setIsNewProfile(false);
-    setProfileModalVisible(true);
-  };
+  const mapProfilesForModal = useMemo(
+    () =>
+      profileCards.map(p => ({
+        profileId: p.profileId,
+        nickname: p.nickname,
+        age: p.age,
+        mbti: p.mbti,
+        smoking: p.smoking,
+        drinking: p.drinking,
+        photoUris: [p.mainPhotoUrl],
+      })),
+    [profileCards],
+  );
 
-  const handleLoveCodePress = async () => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.LAST_OPEN_LOVE_CODE, String(Date.now()));
-    } catch {}
-    setIsNewLoveCode(false);
-    setLoveCodeModalVisible(true);
-  };
+  const firstLoveCode = loveCodeCards[0];
+  const findAnswer = (q: string | undefined) =>
+    firstLoveCode?.requiredQA.find(item => item.question === q)?.answer;
+  const loveCodeOptional = useMemo(() => {
+    if (!firstLoveCode || !firstLoveCode.optionalQA?.length) return undefined;
+    return firstLoveCode.optionalQA.reduce<Record<string, string>>((acc, qa) => {
+      acc[qa.question] = qa.answer;
+      return acc;
+    }, {});
+  }, [firstLoveCode]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ✅ 상단 바: 오른쪽에 200이상 보유, 그 밑에 필터 버튼 */}
-      <View style={styles.topBar}>
-        <View style={styles.leftChips}>
-          {isSubscribed && (
-            <View style={[styles.chip, styles.chipGreen]}>
-              <Text style={[styles.chipText, styles.chipTextGreen]}>구독중</Text>
+      <View style={styles.container}>
+        {/* 상단 바 */}
+        <View style={styles.topBar}>
+          <View style={styles.badgeRow}>
+            {isVip && (
+              <View style={[styles.tag, styles.vipTag]}>
+                <Text style={styles.vipText}>👑 VIP</Text>
+              </View>
+            )}
+            <View style={[styles.tag, styles.subTag]}>
+              <Text style={styles.subText}>🔔 SUB</Text>
             </View>
-          )}
-
-          <View style={styles.tingChip}>
-            <Text style={styles.tingText}>♥ {tingBalance}</Text>
+            <View style={[styles.balanceBox, styles.heartBox]}>
+              <Text style={styles.balanceText}>❤ {tingBalance}</Text>
+            </View>
           </View>
-        </View>
-
-        <View style={styles.rightStack}>
-          {has200 && (
-            <View style={[styles.chip, styles.chipOutlinePurple]}>
-              <Text style={[styles.chipText, styles.chipTextPurple]}>200이상 보유</Text>
+          <View style={styles.coinRow}>
+            <View style={[styles.balanceBox, styles.coinBox]}>
+              <Text style={styles.balanceText}>🪙 {coinBalance}</Text>
             </View>
-          )}
-
+          </View>
           <TouchableOpacity
-            style={styles.filterIconButton}
+            style={styles.filterButton}
             onPress={() => setFilterModalVisible(true)}
             activeOpacity={0.85}
           >
-            <Text style={styles.filterIcon}>⚙️</Text>
+            <View style={styles.filterIcon}>
+              <View style={[styles.filterLine, { width: 18 }]} />
+              <View style={[styles.filterLine, { width: 12, marginTop: 4 }]} />
+              <View style={[styles.filterLine, { width: 6, marginTop: 4 }]} />
+            </View>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* ✅ 카드 2개가 화면 꽉 차게 */}
-      <View style={styles.cardsWrap}>
-        <TouchableOpacity style={styles.cardTouchable} onPress={handleProfilePress} activeOpacity={0.9}>
-          <ImageBackground
-            source={{ uri: 'https://picsum.photos/800/1200?blur=2' }}
-            blurRadius={Platform.OS === 'android' ? 2 : 10}
-            style={styles.bigCard}
-            imageStyle={styles.bigCardImage}
+        {/* 카드 2개 */}
+        <View style={styles.cardsWrap}>
+          {/* 떠다니는 벚꽃잎 */}
+          <Image source={petalImg} style={[styles.petal, styles.petalLeft]} />
+          <Image source={petalImg} style={[styles.petal, styles.petalRight]} />
+
+          {/* 일반 소개팅 */}
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => setProfileModalVisible(true)}
+            activeOpacity={0.9}
           >
-            <View style={styles.cardBorder} />
-            {isNewProfile && <Text style={styles.newTag}>New!</Text>}
-            <View style={styles.cardFooter}>
-              <Text style={styles.cardTitle}>오늘의 프로필</Text>
-            </View>
-          </ImageBackground>
-        </TouchableOpacity>
+            <ImageBackground
+              source={{ uri: previewProfile?.mainPhotoUrl ?? 'https://picsum.photos/700/700' }}
+              blurRadius={7}
+              style={styles.cardImage}
+              imageStyle={styles.cardImageStyle}
+            >
+              <View style={styles.blurScrim} />
+            </ImageBackground>
+            <Text style={styles.cardTitle}>일반 소개팅</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.cardTouchable} onPress={handleLoveCodePress} activeOpacity={0.9}>
-          <ImageBackground
-            source={{ uri: 'https://picsum.photos/800/900?blur=2' }}
-            blurRadius={Platform.OS === 'android' ? 2 : 10}
-            style={styles.bigCard}
-            imageStyle={styles.bigCardImage}
+          {/* 블라인드 소개팅 */}
+          <TouchableOpacity
+            style={[styles.card, styles.blindCard]}
+            onPress={() => setLoveCodeModalVisible(true)}
+            activeOpacity={0.9}
           >
-            <View style={styles.cardBorder} />
-            {isNewLoveCode && <Text style={styles.newTag}>New!</Text>}
-            <View style={styles.cardFooter}>
-              <Text style={styles.cardTitle}>오늘의 연애 코드</Text>
+            <View style={[styles.cardImage, styles.blindPlaceholder]}>
+              <View style={styles.blindBlur} />
+              <Text style={styles.blindLabel}>자기소개</Text>
+              <Text style={styles.blindText} numberOfLines={4}>
+                {previewLoveCode?.requiredQA.find(q => q.question === '자기소개')?.answer ??
+                  '소개팅 프로필에 작성된 자기소개가 여기에 블러 처리되어 보여요.'}
+              </Text>
             </View>
-          </ImageBackground>
-        </TouchableOpacity>
+            <Text style={styles.cardTitle}>블라인드 소개팅</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 필터 모달 */}
+        <FilterModal
+          visible={filterModalVisible}
+          onClose={() => setFilterModalVisible(false)}
+          onApply={handleFilterApply}
+          initialFilters={filterSettings}
+        />
+
+        {/* 프로필 카드 모달(전체 화면) */}
+        <ProfileCardModal
+          visible={profileModalVisible}
+          onClose={() => setProfileModalVisible(false)}
+          filterSettings={filterSettings}
+          profiles={mapProfilesForModal}
+          isVip={isVip}
+          isSubscribed={isSubscribed}
+          tingBalance={tingBalance}
+          coinBalance={coinBalance}
+          freeRemaining={freeRemaining}
+          paidRemaining={paidLabelCount}
+          onChangeTingBalance={setTingBalance}
+          onChangeCoinBalance={setCoinBalance}
+          onChangeFreeRemaining={setFreeRemaining}
+          onChangePaidRemaining={setPaidRemaining}
+          // ✅ 여기서 Store 라우트 연결 필요 (아래 질문 참고)
+          onNavigateToStore={() => {
+            // TODO: 네 “스토어-재화충전” 화면 route 이름 알려주면 정확히 연결해줄게.
+            // 예: navigation.navigate('StoreCharge')
+          }}
+        />
+
+        {/* 연애코드 모달(전체 화면) */}
+        <LoveCodeModal
+          visible={loveCodeModalVisible}
+          onClose={() => setLoveCodeModalVisible(false)}
+          nickname={firstLoveCode?.nickname}
+          intro={findAnswer('자기소개')}
+          want={findAnswer('연인에게 바라는 한 가지는?')}
+          charm={findAnswer('나를 설레게 하는 이성의 매력?')}
+          optionalAnswers={loveCodeOptional}
+          isVip={isVip}
+          isSubscribed={isSubscribed}
+          tingBalance={tingBalance}
+          coinBalance={coinBalance}
+          freeRemaining={freeRemaining}
+          paidRemaining={paidLabelCount}
+          onChangeTingBalance={setTingBalance}
+          onChangeCoinBalance={setCoinBalance}
+          onChangeFreeRemaining={setFreeRemaining}
+          onChangePaidRemaining={setPaidRemaining}
+          onNavigateToStore={() => {
+            // TODO: StoreCharge 라우트 연결 필요
+          }}
+        />
       </View>
-
-      {/* ✅ 모달들 */}
-      <FilterModal
-        visible={filterModalVisible}
-        onClose={() => setFilterModalVisible(false)}
-        onApply={handleFilterApply}
-        initialFilters={filterSettings}
-      />
-
-      <ProfileCardModal
-        visible={profileModalVisible}
-        onClose={() => setProfileModalVisible(false)}
-        filterSettings={filterSettings}
-        hasBenefitTicket={hasBenefitTicket}
-        tingBalance={tingBalance}
-        onChangeTingBalance={setTingBalance}
-      />
-
-      <LoveCodeModal
-        visible={loveCodeModalVisible}
-        onClose={() => setLoveCodeModalVisible(false)}
-        // 지금은 더미 데이터(연애코드 API 스펙 주면 이 부분만 실제 데이터로 교체)
-        nickname="닉네임"
-        intro="서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요."
-        want="서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요."
-        charm="서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요."
-        optionalAnswers={{
-          meaningOfLove: '서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요.',
-          soulFood: '서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요.',
-          dailyAndHoliday: '서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요.',
-          idealDate: '서로의 감정에 진심으로 공감해주고, 말하지 않아도 마음이 전해지는 그런 따뜻한 사람이면 좋겠어요.',
-        }}
-        choices={[
-          { question: '연인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', selected: '바로 풀고 싶다' },
-          { question: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', selected: 'SNS에 공유하기 싫다' },
-          { question: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', selected: '설렘' },
-          { question: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', selected: '실외에서 데이트하기' },
-          { question: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', selected: '쿨한 게 편하다' },
-          { question: '연인과의 이상적인 하루는', left: '편안한 일상 즐기기', right: '새로운 경험 해보기', selected: '새로운 경험 해보기' },
-          { question: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', selected: '주도적인 모습' },
-          { question: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', selected: '따로 놀기' },
-        ]}
-        onPressProfile={() => {
-          // TODO: “상대 상세 프로필” 화면 라우트 생기면 여기에서 navigation 연결
-        }}
-      />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: '#FFFFFF', position: 'relative' },
 
   topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 12,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 6,
   },
 
-  leftChips: { flexDirection: 'row', alignItems: 'center' },
-  rightStack: { alignItems: 'flex-end' },
+  badgeRow: { flexDirection: 'row', gap: 8, flexShrink: 1 },
+  coinRow: { flexDirection: 'row', alignSelf: 'flex-end' },
 
-  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginLeft: 8 },
-  chipText: { fontSize: 12, fontWeight: '800' },
-
-  chipGreen: { backgroundColor: '#22C55E' },
-  chipTextGreen: { color: '#FFFFFF' },
-
-  chipOutlinePurple: { borderWidth: 1, borderColor: '#8B5CF6', backgroundColor: '#FFFFFF', marginBottom: 8 },
-  chipTextPurple: { color: '#8B5CF6' },
-
-  tingChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFE8F1',
-    borderRadius: 16,
-    paddingHorizontal: 10,
+  tag: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-  },
-  tingText: { color: '#FF4D6D', fontWeight: '900', fontSize: 12 },
-
-  filterIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFB3C7',
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    minWidth: 64,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
   },
-  filterIcon: { fontSize: 18 },
+  vipTag: { backgroundColor: '#6D28D9' },
+  vipText: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
+
+  subTag: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF9DBA',
+  },
+  subText: { color: '#FF6B9A', fontWeight: '900', fontSize: 12 },
+
+  balanceBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FFD7E4',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 64,
+    alignItems: 'center',
+  },
+  balanceText: { fontSize: 12, fontWeight: '900', color: '#FF6B9A', textAlign: 'center' },
+  heartBox: { borderColor: '#FFD7E4' },
+  coinBox: { borderColor: '#FFD7E4' },
+
+  filterButton: { padding: 8, marginTop: 4, alignSelf: 'flex-end' },
+  filterIcon: { alignItems: 'flex-end' },
+  filterLine: {
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#111',
+  },
 
   cardsWrap: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingBottom: 14,
-  },
-
-  cardTouchable: {
-    flex: 1,
-    marginBottom: 14,
-  },
-
-  bigCard: {
-    flex: 1,
-    borderRadius: 22,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  bigCardImage: { borderRadius: 22 },
-
-  cardBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: '#FFB3C7',
-  },
-
-  newTag: {
-    position: 'absolute',
-    right: 14,
-    top: 10,
-    color: '#FF7AA2',
-    fontWeight: '900',
-    fontSize: 12,
-    transform: [{ rotate: '-18deg' }],
-  },
-
-  cardFooter: {
-    paddingBottom: 14,
+    paddingTop: 16,
+    gap: 16,
+    position: 'relative',
+    overflow: 'visible',
     alignItems: 'center',
   },
-  cardTitle: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 18,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+
+  card: {
+    width: '82%',
+    borderWidth: 2.2,
+    borderColor: '#FFB3C7',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingTop: 16,
+    paddingBottom: 10,
+    shadowColor: '#FFB3C7',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    aspectRatio: 1.1,
   },
+  blindCard: { marginTop: 12 },
+
+  cardImage: {
+    width: '94%',
+    alignSelf: 'center',
+    flex: 1,
+    minHeight: 80,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+  },
+  cardImageStyle: { borderRadius: 12 },
+  blurScrim: { flex: 1, backgroundColor: 'rgba(255,255,255,0.26)' },
+
+  cardTitle: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#111',
+  },
+
+  blindPlaceholder: {
+    borderWidth: 1,
+    borderColor: '#FFE0EA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    width: '94%',
+    alignSelf: 'center',
+    flex: 1,
+    minHeight: 80,
+  },
+  blindBlur: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(240,240,240,0.97)',
+  },
+  blindLabel: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#111',
+    marginBottom: 10,
+    opacity: 0.18,
+  },
+  blindText: {
+    color: '#111',
+    fontWeight: '900',
+    textAlign: 'center',
+    opacity: 0.08,
+    letterSpacing: 3.6,
+    textShadowColor: '#000',
+    textShadowRadius: 16,
+    textShadowOffset: { width: 2, height: 2 },
+    lineHeight: 20,
+    transform: [{ scaleX: 0.82 }, { scaleY: 0.8 }],
+  },
+
+  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9 },
+  petalLeft: { left: 14, bottom: 10, transform: [{ rotate: '-18deg' }] },
+  petalRight: { right: 16, top: '44%', transform: [{ rotate: '18deg' }] },
 });
 
 export default BlindDateScreen;

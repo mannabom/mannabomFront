@@ -17,6 +17,8 @@ import TermsDetailScreen from './src/screens/login/TermsDetailScreen';
 import CongratulationsScreen from './src/screens/login/CongratulationsScreen';
 
 import ProfileDetail from './src/screens/MyPage/ProfileDetail';
+import StoreScreen from './src/screens/store/StoreScreen'; // ✅ 추가
+
 import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
 
@@ -60,14 +62,12 @@ const App: React.FC = () => {
   });
 
   // ✅ 앱 켜질 때 1번만: 포그라운드에서도 상태바 알림 뜨게
-useEffect(() => {
-  // 개발 중에만 찍고 싶으면 이 가드 추천
-  if (__DEV__) {
-    debugPushStatus();
-  }
-
-  startForegroundNotificationListener();
-}, []);
+  useEffect(() => {
+    if (__DEV__) {
+      debugPushStatus();
+    }
+    startForegroundNotificationListener();
+  }, []);
 
   // ✅ 핵심: home 진입(=로그인 완료)할 때마다 토큰 등록 + 갱신 리스너 시작
   useEffect(() => {
@@ -257,6 +257,9 @@ useEffect(() => {
             </Stack.Screen>
 
             <Stack.Screen name="ProfileDetail" component={ProfileDetail} />
+
+            {/* ✅ 스토어 */}
+            <Stack.Screen name="Store" component={StoreScreen} />
           </>
         )}
       </Stack.Navigator>

@@ -24,6 +24,9 @@ export type RootStackParamList = {
 
   // ✅ 탭 위로 띄우는 상세(스택)
   ProfileDetail: undefined;
+
+  // ✅ 스토어 (간단 화면)
+  Store: undefined;
 };
 
 export type RootNavigationProp<T extends keyof RootStackParamList> =

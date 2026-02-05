@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+// src/components/common/LoveCodeModal.tsx
+import React, { useMemo } from 'react';
 import {
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -8,447 +8,225 @@ import {
   Text,
   TouchableOpacity,
   View,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Dimensions,
+  Platform,
+  ToastAndroid,
 } from 'react-native';
 
-const { width: W } = Dimensions.get('window');
+const BORDER = '#E9ECEF';
+const PINK = '#FF6B9A';
 
-const PINK = '#FF6F8E';
-const BORDER = '#E6E6E6';
+type OptionalAnswers = Record<string, string | undefined | null>;
 
-type Choice = {
+type ChoiceItem = {
   question: string;
   left: string;
   right: string;
-  selected?: string; // left/right 중 하나
+  selected: string;
 };
 
-type OptionalAnswers = {
-  meaningOfLove?: string;
-  soulFood?: string;
-  dailyAndHoliday?: string;
-  idealDate?: string;
-};
-
-type PageType = 'summary' | 'must' | 'optional' | 'choices';
-type Page = { key: string; type: PageType };
-
-interface LoveCodeModalProps {
+export type LoveCodeModalProps = {
   visible: boolean;
   onClose: () => void;
 
+  // 데이터
   nickname?: string;
-  intro: string;
-  want: string;
-  charm: string;
+  intro?: string; // 자기소개(필수)
+  want?: string; // 필수 주관식
+  charm?: string; // 필수 주관식
+  optionalAnswers?: OptionalAnswers; // 선택 주관식(빈 값은 미표시)
+  choices?: ChoiceItem[]; // 밸런스 질문(있으면 표시)
 
-  optionalAnswers?: OptionalAnswers;
-  choices?: Choice[];
-
+  // 행동
   onPressProfile?: () => void;
-}
 
-const LoveCodeModal: React.FC<LoveCodeModalProps> = ({
-  visible,
-  onClose,
-  nickname = '닉네임',
-  intro,
-  want,
-  charm,
-  optionalAnswers,
-  choices = [],
-  onPressProfile,
-}) => {
-  const scrollRef = useRef<ScrollView>(null);
-  const [index, setIndex] = useState(0);
+  // ✅ BlindDateScreen에서 던질 수 있는 추가 props들(타입 에러 방지용)
+  isVip?: boolean;
+  isSubscribed?: boolean;
+  tingBalance?: number;
+  coinBalance?: number;
+  freeRemaining?: number;
+  paidRemaining?: number;
+  extraRemaining?: number;
+  onNavigateToStore?: () => void;
+} & Record<string, any>; // ✅ 어떤 props 더 와도 OK
 
-  const optionalList = useMemo(() => {
-    return [
-      {
-        label: '나에게 연애란 어떤 의미인가요?',
-        value: optionalAnswers?.meaningOfLove,
-      },
-      { label: '나의 소울 푸드?', value: optionalAnswers?.soulFood },
-      {
-        label: '나의 하루 그리고 나의 휴일은?',
-        value: optionalAnswers?.dailyAndHoliday,
-      },
-      { label: '하고 싶은 데이트는?', value: optionalAnswers?.idealDate },
-    ].filter(x => (x.value || '').trim().length > 0);
+const { height: H } = Dimensions.get('window');
+
+const isNonEmpty = (v?: string | null) => typeof v === 'string' && v.trim().length > 0;
+
+const showToast = (msg: string) => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(msg, ToastAndroid.SHORT);
+  } else {
+    // iOS는 일단 콘솔로(프로젝트에 별도 토스트 컴포넌트 있으면 여기서 교체)
+    console.log('[Toast]', msg);
+  }
+};
+
+const LoveCodeModal: React.FC<LoveCodeModalProps> = props => {
+  const {
+    visible,
+    onClose,
+    nickname,
+    intro,
+    want,
+    charm,
+    optionalAnswers,
+    choices,
+    onPressProfile,
+  } = props;
+
+  const visibleOptionalEntries = useMemo(() => {
+    const entries = Object.entries(optionalAnswers ?? {});
+    return entries.filter(([, v]) => isNonEmpty(v));
   }, [optionalAnswers]);
 
-  // ✅ TS가 좁게 추론하지 않도록 Page[]로 고정
-  const pages = useMemo<Page[]>(() => {
-    const base: Page[] = [
-      { key: 'p1', type: 'summary' },
-      { key: 'p2', type: 'must' },
-    ];
-    if (optionalList.length > 0) base.push({ key: 'p3', type: 'optional' });
-    base.push({ key: 'p4', type: 'choices' });
-    return base;
-  }, [optionalList.length]);
-
-  const pageCount = pages.length;
-
-  const goTo = (to: number) => {
-    const next = Math.max(0, Math.min(pageCount - 1, to));
-    setIndex(next);
-    scrollRef.current?.scrollTo({ x: next * W, animated: true });
-  };
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const x = e.nativeEvent.contentOffset.x;
-    const nextIdx = Math.round(x / W);
-    if (nextIdx !== index) setIndex(nextIdx);
-  };
-
-  const renderPage = (type: PageType) => {
-    if (type === 'summary') {
-      return (
-        <View style={styles.page}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>자기소개</Text>
-            <Text style={styles.cardBody} numberOfLines={4}>
-              {intro}
-            </Text>
-
-            <Text style={[styles.cardTitle, { marginTop: 14 }]}>
-              연인에게 바라는 한 가지는?
-            </Text>
-            <Text style={styles.cardBody} numberOfLines={4}>
-              {want}
-            </Text>
-
-            <Text style={[styles.cardTitle, { marginTop: 14 }]}>
-              나를 설레게 하는 이성의 매력?
-            </Text>
-            <Text style={styles.cardBody} numberOfLines={4}>
-              {charm}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={onPressProfile}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.profileBtnText}>프로필 보기</Text>
-          </TouchableOpacity>
-        </View>
-      );
+  const handlePressProfile = () => {
+    onClose();
+    if (onPressProfile) {
+      onPressProfile();
+      return;
     }
-
-    if (type === 'must') {
-      return (
-        <View style={styles.page}>
-          <Text style={styles.nick}>{nickname}</Text>
-
-          <View style={styles.longCard}>
-            <Text style={styles.longTitle}>자기소개</Text>
-            <Text style={styles.longBody}>{intro}</Text>
-
-            <Text style={[styles.longTitle, { marginTop: 16 }]}>
-              연인에게 바라는 한 가지는?
-            </Text>
-            <Text style={styles.longBody}>{want}</Text>
-
-            <Text style={[styles.longTitle, { marginTop: 16 }]}>
-              나를 설레게 하는 이성의 매력?
-            </Text>
-            <Text style={styles.longBody}>{charm}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={onPressProfile}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.profileBtnText}>프로필 보기</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (type === 'optional') {
-      return (
-        <View style={styles.page}>
-          <Text style={styles.nick}>{nickname}</Text>
-
-          <View style={styles.longCard}>
-            {optionalList.map((it, i) => (
-              <View key={it.label}>
-                <Text
-                  style={[
-                    styles.longTitle,
-                    i === 0 ? undefined : { marginTop: 16 },
-                  ]}
-                >
-                  {it.label}
-                </Text>
-                <Text style={styles.longBody}>{it.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={onPressProfile}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.profileBtnText}>프로필 보기</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    // choices
-    return (
-      <View style={styles.page}>
-        <Text style={styles.nick}>{nickname}</Text>
-
-        <View style={styles.choiceCard}>
-          {choices.map((c, i) => {
-            const leftActive = c.selected === c.left;
-            const rightActive = c.selected === c.right;
-
-            return (
-              <View
-                key={`${c.question}-${i}`}
-                style={{ marginBottom: i === choices.length - 1 ? 0 : 14 }}
-              >
-                <Text style={styles.choiceQuestion}>{c.question}</Text>
-
-                <View style={styles.vsRow}>
-                  <View
-                    style={[
-                      styles.choicePill,
-                      leftActive
-                        ? styles.choicePillActive
-                        : styles.choicePillIdle,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceText,
-                        leftActive && styles.choiceTextActive,
-                      ]}
-                    >
-                      {c.left}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.vsText}>VS</Text>
-
-                  <View
-                    style={[
-                      styles.choicePill,
-                      rightActive
-                        ? styles.choicePillActive
-                        : styles.choicePillIdle,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceText,
-                        rightActive && styles.choiceTextActive,
-                      ]}
-                    >
-                      {c.right}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        <TouchableOpacity
-          style={styles.profileBtn}
-          onPress={onPressProfile}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.profileBtnText}>프로필 보기</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    // ✅ fallback 네비게이션 절대 안 함 (동미 요청)
+    showToast('상대 프로필 상세 화면 연결 전입니다.');
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.userIcon}>👤</Text>
-            <Text style={styles.pageText}>
-              {index + 1}/{pageCount}
-            </Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.card} onPress={() => {}}>
+          <View style={styles.header}>
+            <Text style={styles.title}>오늘의 연애 코드</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Text style={styles.close}>✕</Text>
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity onPress={onClose} hitSlop={10}>
-            <Text style={styles.close}>✕</Text>
-          </TouchableOpacity>
-        </View>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            {isNonEmpty(nickname) && <Text style={styles.nickname}>{nickname}</Text>}
 
-        <Pressable
-          style={[styles.arrowBtn, { left: 8 }]}
-          onPress={() => goTo(index - 1)}
-        >
-          <Text style={styles.arrowText}>‹</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.arrowBtn, { right: 8 }]}
-          onPress={() => goTo(index + 1)}
-        >
-          <Text style={styles.arrowText}>›</Text>
-        </Pressable>
+            {isNonEmpty(intro) && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>자기소개</Text>
+                <Text style={styles.blockText}>{intro}</Text>
+              </View>
+            )}
 
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          pagingEnabled
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          showsHorizontalScrollIndicator={false}
-        >
-          {pages.map(p => (
-            <View key={p.key} style={{ width: W }}>
-              {renderPage(p.type)}
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+            {isNonEmpty(want) && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>필수 주관식 1</Text>
+                <Text style={styles.blockText}>{want}</Text>
+              </View>
+            )}
+
+            {isNonEmpty(charm) && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>필수 주관식 2</Text>
+                <Text style={styles.blockText}>{charm}</Text>
+              </View>
+            )}
+
+            {visibleOptionalEntries.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>선택 주관식</Text>
+                {visibleOptionalEntries.map(([k, v]) => (
+                  <View key={k} style={styles.optionalRow}>
+                    <Text style={styles.optionalKey}>{k}</Text>
+                    <Text style={styles.optionalVal}>{String(v)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {(choices?.length ?? 0) > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>밸런스 질문</Text>
+                {choices!.map((c, idx) => (
+                  <View key={`${c.question}-${idx}`} style={styles.choiceRow}>
+                    <Text style={styles.choiceQ}>{c.question}</Text>
+                    <Text style={styles.choiceA}>선택: {c.selected}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.profileBtn} onPress={handlePressProfile} activeOpacity={0.9}>
+              <Text style={styles.profileBtnText}>프로필 보기</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
-
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: H * 0.78,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
   header: {
-    height: 56,
+    height: 52,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  userIcon: { fontSize: 18, marginRight: 8 },
-  pageText: { fontSize: 14, fontWeight: '900', color: '#111' },
+  title: { fontSize: 16, fontWeight: '900', color: '#111' },
   close: { fontSize: 16, fontWeight: '900', color: '#111' },
 
-  arrowBtn: {
-    position: 'absolute',
-    top: 56 + 10,
-    zIndex: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+  content: { padding: 16, paddingBottom: 12 },
+
+  nickname: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 10 },
+
+  block: {
     borderWidth: 1,
     borderColor: BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowText: { fontSize: 22, fontWeight: '900', color: '#111' },
-
-  page: { flex: 1, padding: 16, paddingTop: 16 },
-
-  card: {
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#FFF',
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#111',
-    marginBottom: 6,
-  },
-  cardBody: { fontSize: 13, color: '#333', lineHeight: 18 },
-
-  nick: {
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#111',
-    marginBottom: 12,
-  },
-
-  longCard: {
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#FFF',
-  },
-  longTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#111',
-    marginBottom: 6,
-  },
-  longBody: { fontSize: 13, color: '#333', lineHeight: 18 },
-
-  choiceCard: {
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#FFF',
-  },
-  choiceQuestion: {
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#111',
+    borderRadius: 14,
+    padding: 12,
     marginBottom: 10,
+    backgroundColor: '#FFF',
   },
+  blockTitle: { fontSize: 13, fontWeight: '900', color: '#111', marginBottom: 8 },
+  blockText: { fontSize: 12, fontWeight: '700', color: '#444', lineHeight: 18 },
 
-  vsRow: { position: 'relative', flexDirection: 'row', alignItems: 'center' },
-  vsText: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -10,
-    fontWeight: '900',
-    color: '#999',
-    fontSize: 12,
-  },
-  choicePill: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choicePillIdle: { borderColor: BORDER, backgroundColor: '#FFF' },
-  choicePillActive: { borderColor: PINK, backgroundColor: PINK },
-  choiceText: { fontSize: 12, fontWeight: '900', color: '#111' },
-  choiceTextActive: { color: '#FFF' },
+  optionalRow: { marginBottom: 10 },
+  optionalKey: { fontSize: 12, fontWeight: '900', color: '#111', marginBottom: 4 },
+  optionalVal: { fontSize: 12, fontWeight: '700', color: '#444', lineHeight: 18 },
 
+  choiceRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#F1F1F1' },
+  choiceQ: { fontSize: 12, fontWeight: '900', color: '#111' },
+  choiceA: { marginTop: 4, fontSize: 12, fontWeight: '700', color: '#555' },
+
+  footer: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
   profileBtn: {
-    marginTop: 16,
-    alignSelf: 'center',
     height: 44,
-    paddingHorizontal: 26,
     borderRadius: 22,
-    backgroundColor: '#FFD1DC',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FFB3C7',
+    backgroundColor: '#FFE8F1',
   },
-  profileBtnText: { fontSize: 14, fontWeight: '900', color: '#111' },
+  profileBtnText: { color: PINK, fontSize: 14, fontWeight: '900' },
 });
 
 export default LoveCodeModal;
