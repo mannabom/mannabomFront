@@ -54,6 +54,9 @@ export const API_ENDPOINTS_LIST = {
   PROFILE_MATCH_SIMPLE_EXTRA: '/api/match/profile/simple/extra', // ✅ 혜택권(구독/재화)
   PROFILE_RATE: '/api/match/profile/rate',
   LOVEVIEW_MATCH_SIMPLE: '/api/match/loveview/simple',
+  LOVEVIEW_MATCH_SIMPLE_EXTRA: '/api/match/loveview/simple/extra',
+  EXTRA_PROFILE_BY_TING: '/api/extra_profile/ting',
+
 } as const;
 
 // API 호출 헬퍼

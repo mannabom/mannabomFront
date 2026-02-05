@@ -94,6 +94,28 @@ class DatingApiService {
     return data;
   }
 
+    // 연애관 매칭(혜택권)
+  async getLoveViewMatchingExtra(condition: LoveViewMatchConditionRequest): Promise<LoveViewMatchConditionResponse> {
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS_LIST.LOVEVIEW_MATCH_SIMPLE_EXTRA}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(condition),
+    });
+    if (!response.ok) throw new Error(`연애관 매칭(혜택권) 실패: ${response.status}`);
+    return await response.json();
+  }
+
+  // 추가 프로필 구매(팅)
+  async purchaseExtraProfileByTing(additionalProfileNumByTing: 1 | 5): Promise<boolean> {
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS_LIST.EXTRA_PROFILE_BY_TING}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ additionalProfileNumByTing }),
+    });
+    return response.ok;
+  }
+
+
   async checkApiHealth(): Promise<boolean> {
     try {
       const controller = new AbortController();
