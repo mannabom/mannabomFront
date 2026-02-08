@@ -51,7 +51,7 @@ export type ProfileCardModalProps = {
   freeRemaining?: number; // 무료 남은 장 수
   paidRemaining?: number; // 유료(혜택권/추가구매) 남은 장 수
 
-  // ✅ 데이터 주입(추천: 지금은 mock에서 만들어서 넣기)
+  // 데이터 주입
   profiles?: MatchProfileCard[];
 
   // ✅ 행동 콜백
@@ -202,7 +202,7 @@ const renderStars = () => {
               <View style={styles.emptyWrap}>
                 <Text style={styles.emptyTitle}>프로필 데이터가 아직 없어요</Text>
                 <Text style={styles.emptyDesc}>
-                  지금은 mock에서 profiles 배열을 만들어서 ProfileCardModal에 넘겨주면 화면부터 바로 확인 가능!
+                  조건에 맞는 프로필이 아직 없거나 불러오기에 실패했어요.
                 </Text>
               </View>
             ) : (

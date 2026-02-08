@@ -42,15 +42,28 @@ const STEP_COUNT = 9; // 20~29 사이 9칸
 const STEP_SIZE = (MAX_AGE - MIN_AGE) / STEP_COUNT; // 1
 const DEFAULT_MIN = 20;
 const DEFAULT_MAX = 29;
+const AGE_VALUES = Array.from(
+  { length: MAX_AGE - MIN_AGE + 1 },
+  (_, i) => MIN_AGE + i,
+);
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const { height: SCREEN_H } = Dimensions.get('window');
 
 const ensureAtLeastOne = <T,>(arr: T[], fallback: T) => (arr && arr.length ? arr : [fallback]);
-const sanitizeAgeRange = (range: { min: number; max: number }) => ({
-  min: clamp(range.min, MIN_AGE, MAX_AGE),
-  max: clamp(range.max, MIN_AGE, MAX_AGE),
-});
+const snapToAgeStep = (v: number) => {
+  const stepped = Math.round((v - MIN_AGE) / STEP_SIZE);
+  return clamp(MIN_AGE + stepped * STEP_SIZE, MIN_AGE, MAX_AGE);
+};
+
+const sanitizeAgeRange = (range: { min: number; max: number }) => {
+  const min = Math.round(snapToAgeStep(range.min));
+  const max = Math.round(snapToAgeStep(range.max));
+  return {
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+  };
+};
 
 const FilterModal: React.FC<FilterModalProps> = ({
   visible,
@@ -123,16 +136,13 @@ const FilterModal: React.FC<FilterModalProps> = ({
   // =========================
   const trackWidthRef = useRef(0);
   const [trackWidth, setTrackWidth] = useState(0);
-  const [showBubbles, setShowBubbles] = useState(false);
+  const [activeAgeHandle, setActiveAgeHandle] = useState<'min' | 'max'>('min');
 
   const THUMB = 18; // 스샷 느낌으로 살짝 작게
   const usable = Math.max(1, trackWidth - THUMB);
+  const stepPx = usable / STEP_COUNT;
 
-  const snapValue = (v: number) => {
-    const stepped = Math.round((v - MIN_AGE) / STEP_SIZE);
-    const snapped = MIN_AGE + stepped * STEP_SIZE;
-    return clamp(Math.round(snapped), MIN_AGE, MAX_AGE);
-  };
+  const snapValue = (v: number) => Math.round(snapToAgeStep(v));
 
   const valueToX = (v: number) => {
     const ratio = (v - MIN_AGE) / (MAX_AGE - MIN_AGE);
@@ -159,24 +169,27 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const minPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        setShowBubbles(true);
+        setActiveAgeHandle('min');
         minStartRef.current = ageRange.min;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
-        const startX = valueToX(minStartRef.current);
-        const nextX = clamp(startX + g.dx, 0, maxX); // ✅ max 핸들 못 넘음
-        const nextMin = clamp(xToValue(nextX), MIN_AGE, ageRange.max);
+        const stepDelta = Math.round(g.dx / Math.max(1, stepPx));
+        const nextMin = clamp(
+          snapValue(minStartRef.current + stepDelta),
+          MIN_AGE,
+          ageRange.max,
+        );
 
         setAgeRange(prev => ({ ...prev, min: nextMin }));
       },
       onPanResponderRelease: () => {
         const snapped = snapValue(ageRange.min);
         setAgeRange(prev => ({ ...prev, min: Math.min(snapped, prev.max) }));
-        setShowBubbles(false);
       },
     }),
   ).current;
@@ -184,24 +197,27 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const maxPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        setShowBubbles(true);
+        setActiveAgeHandle('max');
         maxStartRef.current = ageRange.max;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
-        const startX = valueToX(maxStartRef.current);
-        const nextX = clamp(startX + g.dx, minX, usable); // ✅ min 핸들 못 넘음
-        const nextMax = clamp(xToValue(nextX), ageRange.min, MAX_AGE);
+        const stepDelta = Math.round(g.dx / Math.max(1, stepPx));
+        const nextMax = clamp(
+          snapValue(maxStartRef.current + stepDelta),
+          ageRange.min,
+          MAX_AGE,
+        );
 
         setAgeRange(prev => ({ ...prev, max: nextMax }));
       },
       onPanResponderRelease: () => {
         const snapped = snapValue(ageRange.max);
         setAgeRange(prev => ({ ...prev, max: Math.max(snapped, prev.min) }));
-        setShowBubbles(false);
       },
     }),
   ).current;
@@ -214,6 +230,14 @@ const FilterModal: React.FC<FilterModalProps> = ({
       ageRange: sanitizeAgeRange(ageRange),
       smoking: selectedSmoking,
       drinking: selectedDrinking,
+    });
+  };
+  const onTapAge = (age: number) => {
+    setAgeRange(prev => {
+      if (activeAgeHandle === 'min') {
+        return { min: age, max: Math.max(age, prev.max) };
+      }
+      return { min: Math.min(prev.min, age), max: age };
     });
   };
 
@@ -252,26 +276,39 @@ const FilterModal: React.FC<FilterModalProps> = ({
                 />
               )}
 
-              <View style={[styles.thumb, { left: minX }]} {...minPan.panHandlers}>
-                {showBubbles && (
-                  <View pointerEvents="none" style={styles.bubble}>
-                    <Text style={styles.bubbleText}>{Math.round(ageRange.min)}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={[styles.thumb, { left: maxX }]} {...maxPan.panHandlers}>
-                {showBubbles && (
-                  <View pointerEvents="none" style={styles.bubble}>
-                    <Text style={styles.bubbleText}>{Math.round(ageRange.max)}</Text>
-                  </View>
-                )}
-              </View>
+              <View style={[styles.thumb, { left: minX }]} {...minPan.panHandlers} />
+              <View style={[styles.thumb, { left: maxX }]} {...maxPan.panHandlers} />
             </View>
 
-            {/* tick 20 / 29만 표시 (중간 값 숨김) */}
+            {/* tick 20~29 전체 표시 */}
             <View style={styles.ticks}>
-              <Text style={styles.tickText}>20</Text>
-              <Text style={styles.tickText}>29</Text>
+              {AGE_VALUES.map(age => (
+                <TouchableOpacity key={age} style={styles.tickItem} onPress={() => onTapAge(age)}>
+                  <View style={styles.tickMark} />
+                  <Text
+                    style={[
+                      styles.tickText,
+                      age >= ageRange.min && age <= ageRange.max && styles.tickTextActive,
+                    ]}
+                  >
+                    {age}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.ageSelectRow}>
+              <TouchableOpacity
+                style={[styles.ageHandleBtn, activeAgeHandle === 'min' && styles.ageHandleBtnActive]}
+                onPress={() => setActiveAgeHandle('min')}
+              >
+                <Text style={styles.ageHandleText}>최소 {ageRange.min}세</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.ageHandleBtn, activeAgeHandle === 'max' && styles.ageHandleBtnActive]}
+                onPress={() => setActiveAgeHandle('max')}
+              >
+                <Text style={styles.ageHandleText}>최대 {ageRange.max}세</Text>
+              </TouchableOpacity>
             </View>
 
             {/* 흡연 */}
@@ -400,21 +437,37 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  tickText: { fontSize: 12, fontWeight: '800', color: '#111' },
-
-  bubble: {
-    position: 'absolute',
-    top: -28,
-    alignSelf: 'center',
-    backgroundColor: '#FFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  tickItem: { alignItems: 'center', width: 24 },
+  tickMark: {
+    width: 1,
+    height: 6,
+    backgroundColor: '#C5CAD3',
+    marginBottom: 3,
+  },
+  tickText: { fontSize: 11, fontWeight: '800', color: '#111' },
+  tickTextActive: { color: PINK, fontWeight: '900' },
+  ageSelectRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  ageHandleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: BORDER,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  bubbleText: { fontSize: 10, fontWeight: '900', color: '#111' },
+  ageHandleBtnActive: {
+    borderColor: PINK,
+    backgroundColor: '#FFE8F1',
+  },
+  ageHandleText: { fontSize: 12, color: '#111', fontWeight: '800' },
 
   blockTitle: { marginTop: 14, fontSize: 14, fontWeight: '900', color: '#111' },
 

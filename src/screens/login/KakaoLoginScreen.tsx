@@ -11,10 +11,7 @@ import {
   ImageBackground,
   Dimensions,
 } from 'react-native';
-import {
-  KakaoLoginService,
-  MockKakaoLoginService,
-} from '../../services/KakaoLoginService';
+import { KakaoLoginService } from '../../services/KakaoLoginService';
 import { saveAuthTokens, saveProfileId } from '../../utils/AuthUtils';
 import AgeRestrictionModal from '../../components/login/AgeRestrictionModal';
 

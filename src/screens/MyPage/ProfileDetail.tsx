@@ -307,8 +307,10 @@ export default function ProfileDetail() {
       const profileData: any = data?.profile ?? data;
 
       // ✅ 서버값 정규화
-      const rawSido: string | undefined = profileData?.regionSido;
-      const rawSigungu: string | undefined = profileData?.regionSigungu;
+      const rawSido: string | undefined =
+        profileData?.region?.sido ?? profileData?.regionSido;
+      const rawSigungu: string | undefined =
+        profileData?.region?.sigungu ?? profileData?.regionSigungu;
 
       const sidoN = rawSido ? normalizeSido(rawSido) : undefined;
       const sigunguN =
@@ -385,7 +387,10 @@ export default function ProfileDetail() {
       setActivePhotoIndex(0);
     } catch (e: any) {
       console.error('❌ [ProfileDetail] load error:', e?.response?.data || e?.message || e);
-      Alert.alert('오류', '프로필 불러오기 실패', [{ text: '다시 시도', onPress: loadProfile }]);
+      Alert.alert('오류', '프로필 불러오기 실패', [
+        { text: '뒤로가기', style: 'cancel', onPress: () => navigation.goBack() },
+        { text: '다시 시도', onPress: loadProfile },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -457,8 +462,13 @@ export default function ProfileDetail() {
           gender: form.gender || undefined,
           height: form.height ? Number(form.height) : undefined,
           bodyType: form.bodyType || undefined,
-          regionSido: form.regionSido || undefined,
-          regionSigungu: form.regionSigungu || undefined,
+          region:
+            form.regionSido || form.regionSigungu
+              ? {
+                  sido: form.regionSido || undefined,
+                  sigungu: form.regionSigungu || undefined,
+                }
+              : undefined,
           nickName: form.nickName || undefined,
           birthDate: form.birthDate || undefined,
           mbti: mbtiValue || undefined,
@@ -573,9 +583,6 @@ export default function ProfileDetail() {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>프로필</Text>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
-            <Text style={styles.backText}>{'< 뒤로 가기'}</Text>
-          </Pressable>
         </View>
 
         <View style={styles.heroCard}>
@@ -979,11 +986,10 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginBottom: 12,
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
-  backText: { fontSize: 14, color: '#111' },
 
   heroCard: {
     width: '100%',

@@ -81,6 +81,13 @@ const LoveCodeModal: React.FC<LoveCodeModalProps> = props => {
     const entries = Object.entries(optionalAnswers ?? {});
     return entries.filter(([, v]) => isNonEmpty(v));
   }, [optionalAnswers]);
+  const hasAnyContent =
+    isNonEmpty(nickname) ||
+    isNonEmpty(intro) ||
+    isNonEmpty(want) ||
+    isNonEmpty(charm) ||
+    visibleOptionalEntries.length > 0 ||
+    (choices?.length ?? 0) > 0;
 
   const handlePressProfile = () => {
     onClose();
@@ -104,6 +111,15 @@ const LoveCodeModal: React.FC<LoveCodeModalProps> = props => {
           </View>
 
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            {!hasAnyContent && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>연애 코드 데이터가 아직 없어요</Text>
+                <Text style={styles.blockText}>
+                  조건에 맞는 연애 코드가 아직 없거나 불러오기에 실패했어요.
+                </Text>
+              </View>
+            )}
+
             {isNonEmpty(nickname) && <Text style={styles.nickname}>{nickname}</Text>}
 
             {isNonEmpty(intro) && (

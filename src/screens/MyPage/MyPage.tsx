@@ -77,8 +77,16 @@ export default function MyPage({ onLogout }: MyPageProps) {
         birthDate: data?.birthDate ?? data?.profile?.birthDate,
         mbti: data?.mbti ?? data?.profile?.mbti,
         height: data?.height ?? data?.profile?.height,
-        regionSido: data?.regionSido ?? data?.profile?.regionSido,
-        regionSigungu: data?.regionSigungu ?? data?.profile?.regionSigungu,
+        regionSido:
+          data?.region?.sido ??
+          data?.profile?.region?.sido ??
+          data?.regionSido ??
+          data?.profile?.regionSido,
+        regionSigungu:
+          data?.region?.sigungu ??
+          data?.profile?.region?.sigungu ??
+          data?.regionSigungu ??
+          data?.profile?.regionSigungu,
         university: data?.university ?? data?.profile?.university,
         profileImageUrl:
           data?.profileImageUrl ??
@@ -140,14 +148,23 @@ export default function MyPage({ onLogout }: MyPageProps) {
         }
       }
     } catch (e: any) {
+      const status = e?.response?.status;
+      const serverMessage =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        'unknown';
       console.error(
         '❌ [MyPage] USER_PROFILE error:',
         e?.response?.data || e?.message || e,
       );
       Alert.alert(
         '오류',
-        '내 정보 불러오기에 실패했어요.\n(토큰/서버 상태 확인 필요)',
-        [{ text: '다시 시도', onPress: loadMyPage }],
+        `내 정보 불러오기에 실패했어요.\nstatus: ${status ?? 'unknown'}\nmessage: ${serverMessage}`,
+        [
+          { text: '닫기', style: 'cancel' },
+          { text: '다시 시도', onPress: loadMyPage },
+        ],
       );
     } finally {
       setLoading(false);
