@@ -24,6 +24,33 @@ export type RootStackParamList = {
 
   // ✅ 탭 위로 띄우는 상세(스택)
   ProfileDetail: undefined;
+  ProfilePreview: {
+    profiles: Array<{
+      profileId: number;
+      nickname: string;
+      name?: string;
+      age: number;
+      mbti?: string;
+      photoUris?: string[];
+    }>;
+    isVip: boolean;
+    isSubscribed: boolean;
+    tingBalance: number;
+    eventTingBalance: number;
+    noCards?: boolean;
+  };
+  LoveCodePreview: {
+    nickname?: string;
+    intro?: string;
+    want?: string;
+    charm?: string;
+    isVip: boolean;
+    isSubscribed: boolean;
+    tingBalance: number;
+    eventTingBalance: number;
+    page?: number;
+    total?: number;
+  };
 
   // ✅ 스토어 (간단 화면)
   Store: undefined;

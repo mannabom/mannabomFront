@@ -4,14 +4,12 @@ import type {
   KakaoOAuthToken,
   KakaoProfile,
 } from '@react-native-seoul/kakao-login';
-import { KAKAO_CONFIG } from '../config/kakao';
 import { API_ENDPOINTS_LIST } from '../config/api';
 import apiClient from './apiClient';
 import {
   KakaoLoginResponseDto,
   UserStatus,
   KakaoLoginRequestDto,
-  KakaoUserInfo,
   Gender,
 } from '../types/KakaoAPI';
 
@@ -157,87 +155,3 @@ export class KakaoLoginService {
   }
 }
 
-/**
- * 개발용 Mock 서비스
- */
-export class MockKakaoLoginService {
-  static async performMockKakaoLogin(): Promise<{
-    nextStep: 'home' | 'signup' | 'ageRestricted';
-    userData?: any;
-  }> {
-    const mockResponses = [
-      {
-        success: true,
-        userStatus: UserStatus.ACTIVE,
-        data: {
-          accessToken: 'mock_access_token_12345',
-          refreshToken: 'mock_refresh_token_12345',
-          userId: 12345,
-          nickname: '김만나',
-        },
-        message: '로그인 성공',
-      },
-      {
-        success: true,
-        userStatus: UserStatus.PENDING_VERIFICATION,
-        data: {
-          kakaoUserInfo: {
-            kakaoId: 'mock_kakao_12345',
-            name: '김신규',
-            email: 'test@example.com',
-            birthYear: 1995,
-            gender: Gender.MALE,
-            profileId: 'mock_profile_id_12345',
-          },
-        },
-        message: '회원가입이 필요합니다.',
-      },
-      {
-        success: false,
-        userStatus: UserStatus.AGE_RESTRICTED,
-        data: {
-          birthYear: 2010,
-        },
-        message: '20대만 이용 가능한 서비스입니다.',
-      },
-    ];
-
-    const randomResponse =
-      mockResponses[Math.floor(Math.random() * mockResponses.length)];
-
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const response = randomResponse as KakaoLoginResponseDto;
-
-        switch (response.userStatus) {
-          case UserStatus.ACTIVE:
-            resolve({
-              nextStep: 'home',
-              userData: {
-                accessToken: response.data.accessToken,
-                refreshToken: response.data.refreshToken,
-                userId: response.data.userId,
-                nickname: response.data.nickname,
-              },
-            });
-            break;
-          case UserStatus.PENDING_VERIFICATION:
-            resolve({
-              nextStep: 'signup',
-              userData: {
-                kakaoUserInfo: response.data.kakaoUserInfo,
-              },
-            });
-            break;
-          case UserStatus.AGE_RESTRICTED:
-            resolve({
-              nextStep: 'ageRestricted',
-            });
-            break;
-          default:
-            throw new Error('알 수 없는 사용자 상태');
-        }
-      }, 1500);
-    });
-  }
-}

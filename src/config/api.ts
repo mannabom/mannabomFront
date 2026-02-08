@@ -52,9 +52,11 @@ export const API_ENDPOINTS_LIST = {
   // 데이팅 관련
   PROFILE_MATCH_SIMPLE: '/api/match/profile/simple', // ✅ 당일 무료권
   PROFILE_MATCH_SIMPLE_EXTRA: '/api/match/profile/simple/extra', // ✅ 혜택권(구독/재화)
+  PROFILE_MATCH_SIMPLE_TODAY: '/api/match/profile/simple/today',
   PROFILE_RATE: '/api/match/profile/rate',
   LOVEVIEW_MATCH_SIMPLE: '/api/match/loveview/simple',
   LOVEVIEW_MATCH_SIMPLE_EXTRA: '/api/match/loveview/simple/extra',
+  LOVEVIEW_MATCH_SIMPLE_TODAY: '/api/match/loveview/simple/today',
   EXTRA_PROFILE_BY_TING: '/api/extra_profile/ting',
 
 } as const;

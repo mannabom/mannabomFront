@@ -1,6 +1,7 @@
 // src/screens/BlindDate/BlindDateScreen.tsx
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -10,79 +11,314 @@ import {
   ImageBackground,
   Image,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 import FilterModal from '../../components/common/FilterModal';
-import ProfileCardModal from '../../components/common/ProfileCardModal';
-import LoveCodeModal from '../../components/common/LoveCodeModal';
 
-import { FilterSettings } from '../../types/DatingAPI';
-import { defaultFilterSettings } from '../../utils/DatingUtils';
 import {
-  MockFilterInput,
-  UiLoveCodeCard,
-  UiProfileCard,
-  mockFetchLoveCodeCards,
-  mockFetchProfileCards,
-} from '../../mocks/datingMock';
+  DrinkingHabit,
+  FilterSettings,
+  LoveViewMatchConditionRequest,
+  ProfileMatchConditionRequest,
+  SmokingHabit,
+} from '../../types/DatingAPI';
+import { defaultFilterSettings } from '../../utils/DatingUtils';
+import { datingApiService } from '../../services/DatingApiService';
 const petalImg = require('../../assets/images/petal.png');
+const vipBadgeImg = require('../../assets/images/VIP.png');
+const subBadgeImg = require('../../assets/images/SUB.png');
+const tingIconImg = require('../../assets/images/Ting.png');
+const eventTingIconImg = require('../../assets/images/Eventting.png');
+const filterImg = require('../../assets/images/Filter.png');
 
 interface BlindDateScreenProps {
   onLogout: () => void;
 }
 
-const DAILY_FREE = 5;
-const DAILY_PAID_SUB = 5;
+type BlindProfileCard = {
+  profileId: number;
+  name?: string;
+  nickname: string;
+  age: number;
+  mbti: string;
+  mainPhotoUrl: string;
+  smoking: SmokingHabit;
+  drinking: DrinkingHabit;
+};
+
+type BlindLoveCodeCard = {
+  profileId: number;
+  nickname: string;
+  requiredQA: { question: string; answer: string }[];
+  optionalQA: { question: string; answer: string }[];
+};
+type PreviewModalProfile = {
+  profileId: number;
+  name?: string;
+  nickname: string;
+  age: number;
+  mbti: string;
+  smoking: SmokingHabit;
+  drinking: DrinkingHabit;
+  photoUris: string[];
+};
+
+const firstNonEmptyString = (...vals: any[]): string | undefined => {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return undefined;
+};
+
+const toPositiveId = (...vals: any[]): number | undefined => {
+  for (const v of vals) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string' && v.trim().length > 0) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return undefined;
+};
+
+const firstProfileCandidate = (raw: any): any => {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  if (Array.isArray(raw?.profiles)) return raw.profiles[0] ?? null;
+  if (Array.isArray(raw?.profileList)) return raw.profileList[0] ?? null;
+  if (Array.isArray(raw?.matches)) return raw.matches[0] ?? null;
+  return raw?.profile ?? raw?.matchProfile ?? raw;
+};
+
+const firstLoveCandidate = (raw: any): any => {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  if (Array.isArray(raw?.loveViews)) return raw.loveViews[0] ?? null;
+  if (Array.isArray(raw?.loveViewList)) return raw.loveViewList[0] ?? null;
+  if (Array.isArray(raw?.matches)) return raw.matches[0] ?? null;
+  return raw?.loveView ?? raw?.matchLoveView ?? raw;
+};
+
+const isNoFreeTicketError = (e: any) => {
+  const status = e?.response?.status;
+  const msg = String(e?.response?.data?.message ?? '');
+  return status === 400 && msg.includes('무료권') && msg.includes('부족');
+};
+
+const isNoProfileQuotaError = (e: any) => {
+  const status = e?.response?.status;
+  const msg = String(e?.response?.data?.message ?? '');
+  if (status !== 400) return false;
+  return (
+    (msg.includes('무료권') && msg.includes('부족')) ||
+    (msg.includes('추가 프로필') && msg.includes('혜택권') && msg.includes('없'))
+  );
+};
+
+const isNetworkError = (e: any) => {
+  const hasResponse = !!e?.response;
+  const msg = String(e?.message ?? '');
+  return !hasResponse && msg.toLowerCase().includes('network');
+};
+
+const withNetworkRetry = async <T,>(fn: () => Promise<T>, retries = 2): Promise<T> => {
+  let lastError: any;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastError = e;
+      if (!isNetworkError(e) || i === retries) break;
+    }
+  }
+  throw lastError;
+};
 
 const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
+  const navigation = useNavigation<any>();
   const [filterSettings, setFilterSettings] = useState<FilterSettings>(defaultFilterSettings);
 
-  const [previewProfile, setPreviewProfile] = useState<UiProfileCard | null>(null);
-  const [previewLoveCode, setPreviewLoveCode] = useState<UiLoveCodeCard | null>(null);
-  const [profileCards, setProfileCards] = useState<UiProfileCard[]>([]);
-  const [loveCodeCards, setLoveCodeCards] = useState<UiLoveCodeCard[]>([]);
+  const [previewProfile, setPreviewProfile] = useState<BlindProfileCard | null>(null);
+  const [previewLoveCode, setPreviewLoveCode] = useState<BlindLoveCodeCard | null>(null);
+  const [profileCards, setProfileCards] = useState<BlindProfileCard[]>([]);
+  const [loveCodeCards, setLoveCodeCards] = useState<BlindLoveCodeCard[]>([]);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [profileModalVisible, setProfileModalVisible] = useState(false);
-  const [loveCodeModalVisible, setLoveCodeModalVisible] = useState(false);
 
   // ✅ 재화/구독 (지금은 임시값)
   const [tingBalance, setTingBalance] = useState<number>(225); // ♥
-  const [coinBalance, setCoinBalance] = useState<number>(100); // 코인(임시)
-  const [isVip] = useState<boolean>(true);
+  const [coinBalance, setCoinBalance] = useState<number>(100); // 이벤트 팅(임시)
   const [isSubscribed] = useState<boolean>(true);
+  const isVip = tingBalance >= 200;
 
-  // ✅ 프로필 열람권(무료/유료) - “프로필/연애코드 통합”으로 같이 씀
-  const [freeRemaining, setFreeRemaining] = useState<number>(DAILY_FREE);
-  const [paidRemaining, setPaidRemaining] = useState<number>(isSubscribed ? DAILY_PAID_SUB : 0);
+  const pickSmoking = (smoking: SmokingHabit[]) =>
+    smoking[0] ?? SmokingHabit.NON_SMOKER;
+  const pickDrinking = (drinking: DrinkingHabit[]) =>
+    drinking[0] ?? DrinkingHabit.NON_DRINKER;
+  const parseLoveCodeCard = (raw: any): BlindLoveCodeCard | null => {
+    const loveViewRes: any = firstLoveCandidate(raw);
+    if (!loveViewRes) return null;
 
-  const paidLabelCount = useMemo(() => paidRemaining, [paidRemaining]);
+    const loveProfileId =
+      toPositiveId(loveViewRes?.profileId, loveViewRes?.userId, loveViewRes?.id) ?? 1;
 
-  const toMockFilter = (filters: FilterSettings): MockFilterInput => ({
-    minAge: filters.ageRange.min,
-    maxAge: filters.ageRange.max,
-    smoking: filters.smoking,
-    drinking: filters.drinking,
-    limit: 10,
-  });
+    const introText =
+      firstNonEmptyString(
+        loveViewRes?.intro,
+        loveViewRes?.selfIntroduction,
+        loveViewRes?.description,
+        loveViewRes?.bio,
+      ) ?? '자기소개가 아직 등록되지 않았어요.';
+    const wantText =
+      firstNonEmptyString(
+        loveViewRes?.want,
+        loveViewRes?.desiredPartnerTrait,
+        loveViewRes?.requiredAnswer1,
+      ) ?? '연인에게 바라는 한 가지 응답이 없어요.';
+    const charmText =
+      firstNonEmptyString(
+        loveViewRes?.charm,
+        loveViewRes?.attractivePartnerTrait,
+        loveViewRes?.requiredAnswer2,
+      ) ?? '매력 응답이 아직 없어요.';
+
+    return {
+      profileId: loveProfileId,
+      nickname:
+        firstNonEmptyString(
+          loveViewRes?.name,
+          loveViewRes?.nickname,
+          loveViewRes?.nickName,
+        ) ?? '회원',
+      requiredQA: [
+        { question: '자기소개', answer: introText },
+        { question: '연인에게 바라는 한 가지는?', answer: wantText },
+        { question: '나를 설레게 하는 이성의 매력?', answer: charmText },
+      ],
+      optionalQA: [],
+    };
+  };
+
+  const fetchProfilePreview = async (): Promise<BlindProfileCard | null> => {
+    const profileCondition: ProfileMatchConditionRequest = {
+      minAge: filterSettings.ageRange.min,
+      maxAge: filterSettings.ageRange.max,
+      smoking: filterSettings.smoking,
+      drinking: filterSettings.drinking,
+    };
+    let profileRaw: any;
+    try {
+      profileRaw = await withNetworkRetry(
+        () => datingApiService.getMatchingProfile(profileCondition),
+        2,
+      );
+    } catch (e: any) {
+      if (isNoFreeTicketError(e)) {
+        profileRaw = await withNetworkRetry(
+          () => datingApiService.getMatchingProfileExtra(profileCondition),
+          2,
+        );
+      } else {
+        throw e;
+      }
+    }
+    const profileRes: any = firstProfileCandidate(profileRaw);
+    const profileId =
+      toPositiveId(profileRes?.profileId, profileRes?.userId, profileRes?.id) ?? 1;
+
+    return {
+      profileId,
+      name: firstNonEmptyString(profileRes?.name),
+      nickname:
+        firstNonEmptyString(profileRes?.nickname, profileRes?.nickName, profileRes?.name) ??
+        '회원',
+      age: Number(profileRes?.age ?? 0),
+      mbti: String(profileRes?.mbti ?? ''),
+      smoking: profileRes?.smoking ?? SmokingHabit.NON_SMOKER,
+      drinking: profileRes?.drinking ?? DrinkingHabit.NON_DRINKER,
+      mainPhotoUrl:
+        firstNonEmptyString(
+          profileRes?.profileImageUrl,
+          profileRes?.profileImage,
+          profileRes?.imageUrl,
+          profileRes?.mainPhotoUrl,
+        ) ?? '',
+    };
+  };
+
+  const fetchLovePreview = async (): Promise<BlindLoveCodeCard | null> => {
+    const loveViewCondition: LoveViewMatchConditionRequest = {
+      minAge: filterSettings.ageRange.min,
+      maxAge: filterSettings.ageRange.max,
+      smoking: pickSmoking(filterSettings.smoking),
+      drinking: pickDrinking(filterSettings.drinking),
+    };
+    let loveRaw: any;
+    try {
+      loveRaw = await withNetworkRetry(
+        () => datingApiService.getLoveViewMatching(loveViewCondition),
+        2,
+      );
+    } catch (e: any) {
+      if (isNoFreeTicketError(e)) {
+        loveRaw = await withNetworkRetry(
+          () => datingApiService.getLoveViewMatchingExtra(loveViewCondition),
+          2,
+        );
+      } else {
+        throw e;
+      }
+    }
+    return parseLoveCodeCard(loveRaw);
+  };
 
   React.useEffect(() => {
     let mounted = true;
 
     const loadPreview = async () => {
-      try {
-        const mockInput = toMockFilter(filterSettings);
-        const [profiles, loveCodes] = await Promise.all([
-          mockFetchProfileCards(mockInput),
-          mockFetchLoveCodeCards(mockInput),
-        ]);
+      const [profileResult, loveViewResult] = await Promise.allSettled([
+        fetchProfilePreview(),
+        fetchLovePreview(),
+      ]);
 
-        if (!mounted) return;
-        setProfileCards(profiles);
-        setLoveCodeCards(loveCodes);
-        setPreviewProfile(profiles[0] ?? null);
-        setPreviewLoveCode(loveCodes[0] ?? null);
-      } catch (e) {
-        console.warn('Failed to load mock previews', e);
+      if (!mounted) return;
+
+      if (profileResult.status === 'fulfilled') {
+        const profileCard = profileResult.value;
+
+        if (__DEV__) {
+          console.log('🧪 [BlindDate] profile parsed:', profileCard);
+        }
+        if (profileCard) {
+          setProfileCards([profileCard]);
+          setPreviewProfile(profileCard);
+        } else {
+          setProfileCards([]);
+          setPreviewProfile(null);
+        }
+      } else {
+        console.warn('Failed to load profile preview', profileResult.reason);
+        setProfileCards([]);
+        setPreviewProfile(null);
+      }
+
+      if (loveViewResult.status === 'fulfilled') {
+        const loveCodeCard = loveViewResult.value;
+
+        if (__DEV__) {
+          console.log('🧪 [BlindDate] love parsed:', loveCodeCard);
+        }
+        if (loveCodeCard) {
+          setLoveCodeCards([loveCodeCard]);
+          setPreviewLoveCode(loveCodeCard);
+        } else {
+          setLoveCodeCards([]);
+          setPreviewLoveCode(null);
+        }
+      } else {
+        console.warn('Failed to load love code preview', loveViewResult.reason);
+        setLoveCodeCards([]);
+        setPreviewLoveCode(null);
       }
     };
 
@@ -98,9 +334,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   };
 
   const mapProfilesForModal = useMemo(
-    () =>
+    (): PreviewModalProfile[] =>
       profileCards.map(p => ({
         profileId: p.profileId,
+        name: p.name ?? p.nickname,
         nickname: p.nickname,
         age: p.age,
         mbti: p.mbti,
@@ -114,14 +351,96 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const firstLoveCode = loveCodeCards[0];
   const findAnswer = (q: string | undefined) =>
     firstLoveCode?.requiredQA.find(item => item.question === q)?.answer;
-  const loveCodeOptional = useMemo(() => {
-    if (!firstLoveCode || !firstLoveCode.optionalQA?.length) return undefined;
-    return firstLoveCode.optionalQA.reduce<Record<string, string>>((acc, qa) => {
-      acc[qa.question] = qa.answer;
-      return acc;
-    }, {});
-  }, [firstLoveCode]);
 
+  const openProfilePreview = async () => {
+    try {
+      let profiles: PreviewModalProfile[] = mapProfilesForModal;
+      if (!profiles.length && previewProfile) {
+        profiles = [
+          {
+            profileId: previewProfile.profileId,
+            nickname: previewProfile.nickname,
+            name: previewProfile.name ?? previewProfile.nickname,
+            age: previewProfile.age,
+            mbti: previewProfile.mbti,
+            smoking: previewProfile.smoking,
+            drinking: previewProfile.drinking,
+            photoUris: [previewProfile.mainPhotoUrl],
+          },
+        ];
+      }
+      if (!profiles.length) {
+        const fresh = await fetchProfilePreview();
+        if (!fresh) throw new Error('empty profile');
+        setProfileCards([fresh]);
+        setPreviewProfile(fresh);
+        profiles = [
+          {
+            profileId: fresh.profileId,
+            name: fresh.name ?? fresh.nickname,
+            nickname: fresh.nickname,
+            age: fresh.age,
+            mbti: fresh.mbti,
+            smoking: fresh.smoking,
+            drinking: fresh.drinking,
+            photoUris: [fresh.mainPhotoUrl],
+          },
+        ];
+      }
+
+      navigation.navigate('ProfilePreview', {
+        profiles,
+        isVip,
+        isSubscribed,
+        tingBalance,
+        eventTingBalance: coinBalance,
+      });
+    } catch (e: any) {
+      if (isNoProfileQuotaError(e)) {
+        navigation.navigate('ProfilePreview', {
+          profiles: [],
+          isVip,
+          isSubscribed,
+          tingBalance,
+          eventTingBalance: coinBalance,
+          noCards: true,
+        });
+        return;
+      }
+      Alert.alert('오류', '일반 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  const openLoveCodePreview = async () => {
+    try {
+      let card = firstLoveCode;
+      if (!card && previewLoveCode) {
+        card = previewLoveCode;
+      }
+      if (!card) {
+        const fresh = await fetchLovePreview();
+        if (!fresh) throw new Error('empty love');
+        setLoveCodeCards([fresh]);
+        setPreviewLoveCode(fresh);
+        card = fresh;
+      }
+
+      navigation.navigate('LoveCodePreview', {
+        nickname: card.nickname,
+        intro: card.requiredQA.find(q => q.question === '자기소개')?.answer,
+        want: card.requiredQA.find(q => q.question === '연인에게 바라는 한 가지는?')?.answer,
+        charm: card.requiredQA.find(q => q.question === '나를 설레게 하는 이성의 매력?')?.answer,
+        isVip,
+        isSubscribed,
+        tingBalance,
+        eventTingBalance: coinBalance,
+        page: 1,
+        total: loveCodeCards.length || 1,
+      });
+    } catch {
+      Alert.alert('오류', '블라인드 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+    }
+  };
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -129,34 +448,38 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       <View style={styles.container}>
         {/* 상단 바 */}
         <View style={styles.topBar}>
-          <View style={styles.badgeRow}>
+          <View style={styles.topRow}>
             {isVip && (
-              <View style={[styles.tag, styles.vipTag]}>
-                <Text style={styles.vipText}>👑 VIP</Text>
+              <View style={[styles.chip, styles.vipChip]}>
+                <Image source={vipBadgeImg} style={styles.chipIcon} />
+                <Text style={styles.vipChipText}>VIP</Text>
               </View>
             )}
-            <View style={[styles.tag, styles.subTag]}>
-              <Text style={styles.subText}>🔔 SUB</Text>
-            </View>
-            <View style={[styles.balanceBox, styles.heartBox]}>
-              <Text style={styles.balanceText}>❤ {tingBalance}</Text>
+            {isSubscribed && (
+              <View style={[styles.chip, styles.subChip]}>
+                <Image source={subBadgeImg} style={styles.chipIcon} />
+                <Text style={styles.subChipText}>SUB</Text>
+              </View>
+            )}
+
+            <View style={styles.balancePanel}>
+              <View style={styles.balanceLine}>
+                <Image source={tingIconImg} style={styles.balanceIcon} />
+                <Text style={styles.balanceNumber}>{tingBalance}</Text>
+              </View>
+              <View style={styles.balanceLine}>
+                <Image source={eventTingIconImg} style={styles.balanceIcon} />
+                <Text style={styles.balanceNumber}>{coinBalance}</Text>
+              </View>
             </View>
           </View>
-          <View style={styles.coinRow}>
-            <View style={[styles.balanceBox, styles.coinBox]}>
-              <Text style={styles.balanceText}>🪙 {coinBalance}</Text>
-            </View>
-          </View>
+
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => setFilterModalVisible(true)}
             activeOpacity={0.85}
           >
-            <View style={styles.filterIcon}>
-              <View style={[styles.filterLine, { width: 18 }]} />
-              <View style={[styles.filterLine, { width: 12, marginTop: 4 }]} />
-              <View style={[styles.filterLine, { width: 6, marginTop: 4 }]} />
-            </View>
+            <Image source={filterImg} style={styles.filterImg} />
           </TouchableOpacity>
         </View>
 
@@ -169,7 +492,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           {/* 일반 소개팅 */}
           <TouchableOpacity
             style={styles.card}
-            onPress={() => setProfileModalVisible(true)}
+            onPress={openProfilePreview}
             activeOpacity={0.9}
           >
             <ImageBackground
@@ -186,7 +509,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           {/* 블라인드 소개팅 */}
           <TouchableOpacity
             style={[styles.card, styles.blindCard]}
-            onPress={() => setLoveCodeModalVisible(true)}
+            onPress={openLoveCodePreview}
             activeOpacity={0.9}
           >
             <View style={[styles.cardImage, styles.blindPlaceholder]}>
@@ -209,52 +532,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           initialFilters={filterSettings}
         />
 
-        {/* 프로필 카드 모달(전체 화면) */}
-        <ProfileCardModal
-          visible={profileModalVisible}
-          onClose={() => setProfileModalVisible(false)}
-          filterSettings={filterSettings}
-          profiles={mapProfilesForModal}
-          isVip={isVip}
-          isSubscribed={isSubscribed}
-          tingBalance={tingBalance}
-          coinBalance={coinBalance}
-          freeRemaining={freeRemaining}
-          paidRemaining={paidLabelCount}
-          onChangeTingBalance={setTingBalance}
-          onChangeCoinBalance={setCoinBalance}
-          onChangeFreeRemaining={setFreeRemaining}
-          onChangePaidRemaining={setPaidRemaining}
-          // ✅ 여기서 Store 라우트 연결 필요 (아래 질문 참고)
-          onNavigateToStore={() => {
-            // TODO: 네 “스토어-재화충전” 화면 route 이름 알려주면 정확히 연결해줄게.
-            // 예: navigation.navigate('StoreCharge')
-          }}
-        />
-
-        {/* 연애코드 모달(전체 화면) */}
-        <LoveCodeModal
-          visible={loveCodeModalVisible}
-          onClose={() => setLoveCodeModalVisible(false)}
-          nickname={firstLoveCode?.nickname}
-          intro={findAnswer('자기소개')}
-          want={findAnswer('연인에게 바라는 한 가지는?')}
-          charm={findAnswer('나를 설레게 하는 이성의 매력?')}
-          optionalAnswers={loveCodeOptional}
-          isVip={isVip}
-          isSubscribed={isSubscribed}
-          tingBalance={tingBalance}
-          coinBalance={coinBalance}
-          freeRemaining={freeRemaining}
-          paidRemaining={paidLabelCount}
-          onChangeTingBalance={setTingBalance}
-          onChangeCoinBalance={setCoinBalance}
-          onChangeFreeRemaining={setFreeRemaining}
-          onChangePaidRemaining={setPaidRemaining}
-          onNavigateToStore={() => {
-            // TODO: StoreCharge 라우트 연결 필요
-          }}
-        />
       </View>
     </SafeAreaView>
   );
@@ -266,56 +543,89 @@ const styles = StyleSheet.create({
 
   topBar: {
     paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 12,
-    flexDirection: 'column',
+    paddingTop: 8,
+    paddingBottom: 8,
     alignItems: 'flex-end',
+  },
+
+  topRow: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 6,
   },
-
-  badgeRow: { flexDirection: 'row', gap: 8, flexShrink: 1 },
-  coinRow: { flexDirection: 'row', alignSelf: 'flex-end' },
-
-  tag: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    shadowColor: '#FFB3C7',
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    minWidth: 64,
+  chip: {
+    height: 24,
+    width: 62,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  vipTag: { backgroundColor: '#6D28D9' },
-  vipText: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
-
-  subTag: {
+  chipIcon: {
+    width: 11,
+    height: 11,
+    resizeMode: 'contain',
+  },
+  vipChip: {
+    backgroundColor: '#660099',
+  },
+  subChip: {
+    backgroundColor: '#FFB6C180',
+    borderWidth: 1,
+    borderColor: '#00000020',
+  },
+  vipChipText: {
+    color: '#F0C22D',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  subChipText: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  balancePanel: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#FF9DBA',
+    borderColor: '#444',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    width: 65,
   },
-  subText: { color: '#FF6B9A', fontWeight: '900', fontSize: 12 },
-
-  balanceBox: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#FFD7E4',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 64,
+  balanceLine: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 48,
+    paddingVertical: 1,
+    gap: 0,
   },
-  balanceText: { fontSize: 12, fontWeight: '900', color: '#FF6B9A', textAlign: 'center' },
-  heartBox: { borderColor: '#FFD7E4' },
-  coinBox: { borderColor: '#FFD7E4' },
+  balanceIcon: {
+    width: 19,
+    height: 19,
+    resizeMode: 'contain',
+  },
+  balanceNumber: {
+    color: '#111',
+    fontWeight: '400',
+    fontSize: 16,
+    lineHeight: 18,
+    marginLeft: 7,
+  },
 
-  filterButton: { padding: 8, marginTop: 4, alignSelf: 'flex-end' },
-  filterIcon: { alignItems: 'flex-end' },
-  filterLine: {
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#111',
+  filterButton: {
+    marginTop: 30,
+    marginRight: -1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  filterImg: {
+    width: 30,
+    height: 30,
+    resizeMode: 'contain',
   },
 
   cardsWrap: {

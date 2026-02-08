@@ -34,6 +34,7 @@ export interface ProfileMatchConditionResponse {
 
   // ✅ 닉네임 내려오면 쓰려고 optional
   nickname?: string;
+  name?: string;
 }
 
 export interface MatchProfileRatingRequest {
@@ -45,18 +46,33 @@ export interface MatchProfileRatingRequest {
 export interface LoveViewMatchConditionRequest {
   minAge: number;
   maxAge: number;
-  region: string;
+  region?: string;
   smoking: SmokingHabit;
   drinking: DrinkingHabit;
 }
 
 export interface LoveViewMatchConditionResponse {
+  profileId?: number;
   userId: number;
+  nickname?: string;
+  name?: string;
   age: number;
   mbti: string;
   drinking: DrinkingHabit;
   smoking: SmokingHabit;
   intro: string;
+  questionAnswers?: {
+    question?: string;
+    answer?: string;
+  }[];
+}
+
+export interface TodayProfileMatchListResponse {
+  recommendedTodayProfileList: ProfileMatchConditionResponse[];
+}
+
+export interface TodayLoveViewMatchListResponse {
+  recommendedTodayLoveViewList: LoveViewMatchConditionResponse[];
 }
 
 // 프론트 확장

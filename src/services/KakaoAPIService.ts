@@ -3,7 +3,6 @@ import {
   KakaoLoginRequestDto,
   KakaoLoginResponseDto,
   UserStatus,
-  Gender,
 } from '../types/KakaoAPI';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
 
@@ -90,67 +89,5 @@ export class KakaoAPIService {
       default:
         throw new Error('알 수 없는 사용자 상태입니다.');
     }
-  }
-
-  /**
-   * 임시 카카오 로그인 (SDK 연동 전까지 사용)
-   * 수정된 부분: accessToken으로 변경
-   */
-  static async mockKakaoLogin(): Promise<KakaoLoginResponseDto> {
-    // 실제로는 카카오 SDK에서 accessToken을 받아와야 함
-    // const result = await KakaoLogin.login();
-    // return this.loginWithKakao(result.accessToken);
-
-    // 임시 Mock 데이터
-    const mockResponses = [
-      // 기존 회원 응답
-      {
-        success: true,
-        userStatus: UserStatus.ACTIVE,
-        data: {
-          accessToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...',
-          refreshToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...',
-          userId: 12345,
-          nickname: '김만나',
-        },
-        message: '로그인 성공',
-      },
-      // 신규 사용자 응답
-      {
-        success: true,
-        userStatus: UserStatus.PENDING_VERIFICATION,
-        data: {
-          kakaoUserInfo: {
-            kakaoId: '12345',
-            name: '김신규',
-            email: 'test@example.com',
-            birthYear: 2000,
-            gender: Gender.MALE,
-            profileId: 'eeeeee',
-          },
-        },
-        message: '회원가입이 필요합니다.',
-      },
-      // 연령 제한 응답
-      {
-        success: false,
-        userStatus: UserStatus.AGE_RESTRICTED,
-        data: {
-          birthYear: 1995,
-        },
-        message: '20대만 이용 가능한 서비스입니다.',
-      },
-    ];
-
-    // 랜덤하게 응답 선택 (테스트용)
-    const randomResponse =
-      mockResponses[Math.floor(Math.random() * mockResponses.length)];
-
-    // 실제 API 호출 시뮬레이션 (1초 딜레이)
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve(randomResponse as KakaoLoginResponseDto);
-      }, 1000);
-    });
   }
 }

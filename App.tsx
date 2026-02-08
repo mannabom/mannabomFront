@@ -18,6 +18,8 @@ import CongratulationsScreen from './src/screens/login/CongratulationsScreen';
 
 import ProfileDetail from './src/screens/MyPage/ProfileDetail';
 import StoreScreen from './src/screens/store/StoreScreen'; // ✅ 추가
+import ProfilePreviewScreen from './src/screens/home/ProfilePreviewScreen';
+import LoveCodePreviewScreen from './src/screens/home/LoveCodePreviewScreen';
 
 import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
@@ -257,6 +259,8 @@ const App: React.FC = () => {
             </Stack.Screen>
 
             <Stack.Screen name="ProfileDetail" component={ProfileDetail} />
+            <Stack.Screen name="ProfilePreview" component={ProfilePreviewScreen} />
+            <Stack.Screen name="LoveCodePreview" component={LoveCodePreviewScreen} />
 
             {/* ✅ 스토어 */}
             <Stack.Screen name="Store" component={StoreScreen} />
