@@ -37,6 +37,8 @@ export type RootStackParamList = {
     isSubscribed: boolean;
     tingBalance: number;
     eventTingBalance: number;
+    freeProfileNum?: number;
+    additionalProfileNum?: number;
     noCards?: boolean;
   };
   LoveCodePreview: {

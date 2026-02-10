@@ -75,6 +75,16 @@ export interface TodayLoveViewMatchListResponse {
   recommendedTodayLoveViewList: LoveViewMatchConditionResponse[];
 }
 
+export interface CheckTingWalletResponse {
+  freeLikeNum: number;
+  freeMessageNum: number;
+  eventTingNum: number;
+  tingNum: number;
+  freeProfileNum: number;
+  freeLoveViewNum: number;
+  additionalProfileNum: number;
+}
+
 // 프론트 확장
 export interface ProfileData extends ProfileMatchConditionResponse {
   rating?: number;

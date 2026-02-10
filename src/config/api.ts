@@ -58,6 +58,7 @@ export const API_ENDPOINTS_LIST = {
   LOVEVIEW_MATCH_SIMPLE_EXTRA: '/api/match/loveview/simple/extra',
   LOVEVIEW_MATCH_SIMPLE_TODAY: '/api/match/loveview/simple/today',
   EXTRA_PROFILE_BY_TING: '/api/extra_profile/ting',
+  CHECK_TING_WALLET: '/api/check_tingwallet',
 
 } as const;
 

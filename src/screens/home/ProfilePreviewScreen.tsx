@@ -14,6 +14,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import BottomNavigationBar from '../../components/common/BottomNavigationBar';
 import { datingApiService } from '../../services/DatingApiService';
+import { API_BASE_URL } from '../../config/api';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -41,6 +42,10 @@ export default function ProfilePreviewScreen() {
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
   const [tingBalance, setTingBalance] = useState<number>(route.params?.tingBalance ?? 0);
   const eventTingBalance: number = route.params?.eventTingBalance ?? 0;
+  const [freeProfileNum, setFreeProfileNum] = useState<number>(route.params?.freeProfileNum ?? 5);
+  const [additionalProfileNum, setAdditionalProfileNum] = useState<number>(
+    route.params?.additionalProfileNum ?? 5,
+  );
   const noCards: boolean = route.params?.noCards ?? profiles.length === 0;
 
   const [index, setIndex] = useState(0);
@@ -79,7 +84,7 @@ export default function ProfilePreviewScreen() {
           nickname: p.nickname ?? p.name ?? '회원',
           age: p.age ?? 0,
           mbti: p.mbti ?? '',
-          photoUris: [p.profileImageUrl ?? ''],
+          photoUris: [toAbsoluteUri(p.profileImageUrl)],
         }))
         .filter(p => p.profileId > 0 && !existing.has(p.profileId));
 
@@ -130,6 +135,7 @@ export default function ProfilePreviewScreen() {
       setPurchasing(count);
       await datingApiService.purchaseExtraProfileByTing(count);
       setTingBalance(prev => Math.max(0, prev - cost));
+      setAdditionalProfileNum(prev => prev + count);
       navigation.goBack();
     } catch {
       setShortageVisible(true);
@@ -220,9 +226,11 @@ export default function ProfilePreviewScreen() {
                   onPress={openCounterInfo}
                 >
                   <Image source={freeProfileImg} style={styles.metaIconLarge} />
-                  <Text style={styles.metaTextLarge}>5</Text>
+                  <Text style={styles.metaTextLarge}>{freeProfileNum}</Text>
                   <Image source={paidProfileImg} style={styles.metaIconLarge} />
-                  <Text style={[styles.metaTextLarge, { color: '#E76A8C' }]}>5</Text>
+                  <Text style={[styles.metaTextLarge, { color: '#E76A8C' }]}>
+                    {additionalProfileNum}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -556,3 +564,10 @@ const styles = StyleSheet.create({
   counterIcon: { width: 16, height: 16, resizeMode: 'contain' },
   counterText: { fontSize: 12, color: '#111', fontWeight: '700' },
 });
+  const toAbsoluteUri = (uri: string | undefined): string => {
+    const s = (uri ?? '').trim();
+    if (!s) return '';
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith('/')) return `${API_BASE_URL}${s}`;
+    return `${API_BASE_URL}/${s}`;
+  };
