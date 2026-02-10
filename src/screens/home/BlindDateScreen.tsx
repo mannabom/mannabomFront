@@ -17,6 +17,7 @@ import FilterModal from '../../components/common/FilterModal';
 
 import {
   DrinkingHabit,
+  CheckTingWalletResponse,
   FilterSettings,
   LoveViewMatchConditionRequest,
   ProfileMatchConditionRequest,
@@ -24,6 +25,7 @@ import {
 } from '../../types/DatingAPI';
 import { defaultFilterSettings } from '../../utils/DatingUtils';
 import { datingApiService } from '../../services/DatingApiService';
+import { API_BASE_URL } from '../../config/api';
 const petalImg = require('../../assets/images/petal.png');
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -41,6 +43,7 @@ type BlindProfileCard = {
   nickname: string;
   age: number;
   mbti: string;
+  photoUris: string[];
   mainPhotoUrl: string;
   smoking: SmokingHabit;
   drinking: DrinkingHabit;
@@ -68,6 +71,33 @@ const firstNonEmptyString = (...vals: any[]): string | undefined => {
     if (typeof v === 'string' && v.trim().length > 0) return v;
   }
   return undefined;
+};
+const toAbsoluteUri = (uri: string | undefined): string => {
+  const s = (uri ?? '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('/')) return `${API_BASE_URL}${s}`;
+  return `${API_BASE_URL}/${s}`;
+};
+const extractPhotoUris = (raw: any): string[] => {
+  const candidates: string[] = [];
+  const push = (v: any) => {
+    if (typeof v === 'string' && v.trim()) candidates.push(toAbsoluteUri(v));
+  };
+  push(raw?.profileImageUrl);
+  push(raw?.profileImage);
+  push(raw?.imageUrl);
+  push(raw?.mainPhotoUrl);
+  if (Array.isArray(raw?.photoUris)) raw.photoUris.forEach(push);
+  if (Array.isArray(raw?.profilePhotoUrls)) raw.profilePhotoUrls.forEach(push);
+  if (Array.isArray(raw?.photos)) {
+    raw.photos.forEach((p: any) => {
+      push(p?.url);
+      push(p?.photoUrl);
+      push(p?.imageUrl);
+    });
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
 };
 
 const toPositiveId = (...vals: any[]): number | undefined => {
@@ -145,9 +175,18 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // ✅ 재화/구독 (지금은 임시값)
-  const [tingBalance, setTingBalance] = useState<number>(225); // ♥
-  const [coinBalance, setCoinBalance] = useState<number>(100); // 이벤트 팅(임시)
+  // ✅ 재화/카운트
+  const [tingBalance, setTingBalance] = useState<number>(0);
+  const [coinBalance, setCoinBalance] = useState<number>(0);
+  const [walletInfo, setWalletInfo] = useState<CheckTingWalletResponse>({
+    freeLikeNum: 0,
+    freeMessageNum: 0,
+    eventTingNum: 0,
+    tingNum: 0,
+    freeProfileNum: 0,
+    freeLoveViewNum: 0,
+    additionalProfileNum: 0,
+  });
   const [isSubscribed] = useState<boolean>(true);
   const isVip = tingBalance >= 200;
 
@@ -155,6 +194,25 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     smoking[0] ?? SmokingHabit.NON_SMOKER;
   const pickDrinking = (drinking: DrinkingHabit[]) =>
     drinking[0] ?? DrinkingHabit.NON_DRINKER;
+
+  React.useEffect(() => {
+    let mounted = true;
+    const loadWallet = async () => {
+      try {
+        const wallet = await datingApiService.getTingWalletInfo();
+        if (!mounted) return;
+        setWalletInfo(wallet);
+        setTingBalance(wallet.tingNum ?? 0);
+        setCoinBalance(wallet.eventTingNum ?? 0);
+      } catch (e) {
+        console.warn('Failed to load ting wallet info', e);
+      }
+    };
+    loadWallet();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const parseLoveCodeCard = (raw: any): BlindLoveCodeCard | null => {
     const loveViewRes: any = firstLoveCandidate(raw);
     if (!loveViewRes) return null;
@@ -226,6 +284,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     const profileId =
       toPositiveId(profileRes?.profileId, profileRes?.userId, profileRes?.id) ?? 1;
 
+    const photoUris = extractPhotoUris(profileRes);
     return {
       profileId,
       name: firstNonEmptyString(profileRes?.name),
@@ -234,15 +293,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         '회원',
       age: Number(profileRes?.age ?? 0),
       mbti: String(profileRes?.mbti ?? ''),
+      photoUris,
       smoking: profileRes?.smoking ?? SmokingHabit.NON_SMOKER,
       drinking: profileRes?.drinking ?? DrinkingHabit.NON_DRINKER,
-      mainPhotoUrl:
-        firstNonEmptyString(
-          profileRes?.profileImageUrl,
-          profileRes?.profileImage,
-          profileRes?.imageUrl,
-          profileRes?.mainPhotoUrl,
-        ) ?? '',
+      mainPhotoUrl: photoUris[0] ?? '',
     };
   };
 
@@ -343,7 +397,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         mbti: p.mbti,
         smoking: p.smoking,
         drinking: p.drinking,
-        photoUris: [p.mainPhotoUrl],
+        photoUris: p.photoUris.length ? p.photoUris : [p.mainPhotoUrl],
       })),
     [profileCards],
   );
@@ -365,7 +419,9 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             mbti: previewProfile.mbti,
             smoking: previewProfile.smoking,
             drinking: previewProfile.drinking,
-            photoUris: [previewProfile.mainPhotoUrl],
+            photoUris: previewProfile.photoUris.length
+              ? previewProfile.photoUris
+              : [previewProfile.mainPhotoUrl],
           },
         ];
       }
@@ -383,7 +439,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             mbti: fresh.mbti,
             smoking: fresh.smoking,
             drinking: fresh.drinking,
-            photoUris: [fresh.mainPhotoUrl],
+            photoUris: fresh.photoUris.length ? fresh.photoUris : [fresh.mainPhotoUrl],
           },
         ];
       }
@@ -394,17 +450,21 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         isSubscribed,
         tingBalance,
         eventTingBalance: coinBalance,
+        freeProfileNum: walletInfo.freeProfileNum,
+        additionalProfileNum: walletInfo.additionalProfileNum,
       });
     } catch (e: any) {
       if (isNoProfileQuotaError(e)) {
         navigation.navigate('ProfilePreview', {
           profiles: [],
           isVip,
-          isSubscribed,
-          tingBalance,
-          eventTingBalance: coinBalance,
-          noCards: true,
-        });
+        isSubscribed,
+        tingBalance,
+        eventTingBalance: coinBalance,
+        freeProfileNum: walletInfo.freeProfileNum,
+        additionalProfileNum: walletInfo.additionalProfileNum,
+        noCards: true,
+      });
         return;
       }
       Alert.alert('오류', '일반 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
@@ -543,7 +603,7 @@ const styles = StyleSheet.create({
 
   topBar: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 22,
     paddingBottom: 8,
     alignItems: 'flex-end',
   },

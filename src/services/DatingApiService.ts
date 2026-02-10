@@ -9,6 +9,7 @@ import {
   LoveViewMatchConditionResponse,
   TodayLoveViewMatchListResponse,
   TodayProfileMatchListResponse,
+  CheckTingWalletResponse,
 } from '../types/DatingAPI';
 
 class DatingApiService {
@@ -108,6 +109,12 @@ class DatingApiService {
       { additionalProfileNumByTing },
     );
     return response.status >= 200 && response.status < 300;
+  }
+
+  // 무료/유료 프로필 및 재화 조회
+  async getTingWalletInfo(): Promise<CheckTingWalletResponse> {
+    const response = await apiClient.get(API_ENDPOINTS_LIST.CHECK_TING_WALLET);
+    return this.unwrap<CheckTingWalletResponse>(response.data);
   }
 
 
