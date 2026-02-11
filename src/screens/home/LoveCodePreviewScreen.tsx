@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  Animated,
+  Easing,
   Image,
   Modal,
   Pressable,
@@ -22,27 +25,154 @@ const petalImg = require('../../assets/images/petal.png');
 const freeProfileImg = require('../../assets/images/freeprofile.png');
 const paidProfileImg = require('../../assets/images/paidprofile.png');
 
+type ChoiceQA = {
+  id: string;
+  title: string;
+  left: string;
+  right: string;
+  selected: 'LEFT' | 'RIGHT' | null;
+};
+
+type LoveCard = {
+  profileId: number;
+  nickname: string;
+  requiredQA: { question: string; answer: string }[];
+  openQA: { question: string; answer: string }[];
+  choiceQA: ChoiceQA[];
+};
+
+const FALLBACK_CHOICE_QA: ChoiceQA[] = [
+  { id: 'fight', title: '연인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', selected: null },
+  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', selected: null },
+  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', selected: null },
+  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', selected: null },
+  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', selected: null },
+  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기', selected: null },
+  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', selected: null },
+  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', selected: null },
+];
+
 export default function LoveCodePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-
-  const nickname: string = route.params?.nickname ?? '닉네임';
-  const intro: string = route.params?.intro ?? '';
-  const want: string = route.params?.want ?? '';
-  const charm: string = route.params?.charm ?? '';
 
   const isVip: boolean = route.params?.isVip ?? false;
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
   const tingBalance: number = route.params?.tingBalance ?? 0;
   const eventTingBalance: number = route.params?.eventTingBalance ?? 0;
+  const freeLoveViewNum: number = route.params?.freeLoveViewNum ?? 0;
+  const additionalProfileNum: number = route.params?.additionalProfileNum ?? 0;
 
-  const page = route.params?.page ?? 1;
-  const total = route.params?.total ?? 1;
+  const singleFallbackCard: LoveCard = useMemo(
+    () => ({
+      profileId: 0,
+      nickname: route.params?.nickname ?? '닉네임',
+      requiredQA: [
+        { question: '자기소개', answer: route.params?.intro ?? '자기소개가 없어요.' },
+        { question: '연인에게 바라는 한 가지는?', answer: route.params?.want ?? '응답이 없어요.' },
+        { question: '나를 설레게 하는 이성의 매력?', answer: route.params?.charm ?? '응답이 없어요.' },
+      ],
+      openQA: Array.isArray(route.params?.openQA)
+        ? route.params.openQA
+        : [
+            { question: '나에게 연애란 어떤 의미인가요?', answer: '아직 작성된 답변이 없어요.' },
+            { question: '나의 소울 푸드?', answer: '아직 작성된 답변이 없어요.' },
+            { question: '나의 하루 그리고 나의 휴일은?', answer: '아직 작성된 답변이 없어요.' },
+            { question: '하고 싶은 데이트는?', answer: '아직 작성된 답변이 없어요.' },
+          ],
+      choiceQA: Array.isArray(route.params?.choiceQA) ? route.params.choiceQA : FALLBACK_CHOICE_QA,
+    }),
+    [route.params],
+  );
+
+  const initialCards: LoveCard[] =
+    Array.isArray(route.params?.loveCards) && route.params.loveCards.length
+      ? route.params.loveCards
+      : [singleFallbackCard];
+
+  const [cards] = useState<LoveCard[]>(initialCards);
+  const [index, setIndex] = useState<number>(
+    Math.max(0, Math.min(route.params?.startIndex ?? 0, Math.max(0, initialCards.length - 1))),
+  );
+  const [navDirection, setNavDirection] = useState<1 | -1>(1);
   const [counterInfoVisible, setCounterInfoVisible] = useState(false);
+  const [metaAnchor, setMetaAnchor] = useState({ x: 18, y: 120, width: 120, height: 28 });
+  const metaRowRef = React.useRef<View>(null);
+  const slideX = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
+  const firstPaint = useRef(true);
+
+  const current = useMemo(
+    () => (cards.length ? cards[Math.min(index, cards.length - 1)] : singleFallbackCard),
+    [cards, index, singleFallbackCard],
+  );
+
+  const canGoPrev = index > 0;
+  const canGoNext = index < cards.length - 1;
+
+  useEffect(() => {
+    if (firstPaint.current) {
+      firstPaint.current = false;
+      return;
+    }
+    slideX.setValue(navDirection > 0 ? 24 : -24);
+    fade.setValue(0.2);
+    Animated.parallel([
+      Animated.timing(slideX, {
+        toValue: 0,
+        duration: 210,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 210,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index, navDirection, fade, slideX]);
+
+  const goPrev = () => {
+    if (!canGoPrev) return;
+    setNavDirection(-1);
+    setIndex(i => Math.max(0, i - 1));
+  };
+
+  const goNext = () => {
+    if (!canGoNext) {
+      Alert.alert('안내', '다음 연애코드가 아직 없어요.');
+      return;
+    }
+    setNavDirection(1);
+    setIndex(i => i + 1);
+  };
+
+  const openCounterInfo = () => {
+    if (metaRowRef.current) {
+      metaRowRef.current.measureInWindow((x, y, width, height) => {
+        setMetaAnchor({ x, y, width, height });
+        setCounterInfoVisible(true);
+      });
+      return;
+    }
+    setCounterInfoVisible(true);
+  };
+
+  const intro = current.requiredQA.find(item => item.question === '자기소개')?.answer ?? '자기소개가 없어요.';
+  const want =
+    current.requiredQA.find(item => item.question === '연인에게 바라는 한 가지는?')?.answer ??
+    '응답이 없어요.';
+  const charm =
+    current.requiredQA.find(item => item.question === '나를 설레게 하는 이성의 매력?')?.answer ??
+    '응답이 없어요.';
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      <Image source={petalImg} style={[styles.petal, styles.petalLeft]} />
+      <Image source={petalImg} style={[styles.petal, styles.petalRight]} />
 
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
@@ -75,48 +205,121 @@ export default function LoveCodePreviewScreen() {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={styles.metaRow}
-        activeOpacity={0.85}
-        onPress={() => setCounterInfoVisible(true)}
-      >
-        <Image source={freeProfileImg} style={styles.metaIcon} />
-        <Text style={styles.metaText}>5</Text>
-        <Image source={paidProfileImg} style={styles.metaIcon} />
-        <Text style={[styles.metaText, { color: '#E76A8C' }]}>5</Text>
-      </TouchableOpacity>
+      <View style={styles.contentLayer}>
+        <View style={styles.metaWrap}>
+          <View ref={metaRowRef} collapsable={false}>
+            <TouchableOpacity style={styles.metaRow} activeOpacity={0.85} onPress={openCounterInfo}>
+              <Image source={freeProfileImg} style={styles.metaIconLarge} />
+              <Text style={styles.metaTextLarge}>{freeLoveViewNum}</Text>
+              <Image source={paidProfileImg} style={styles.metaIconLarge} />
+              <Text style={[styles.metaTextLarge, { color: '#E76A8C' }]}>{additionalProfileNum}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      <View style={styles.contentWrap}>
-        <Pressable style={styles.sideBtn}>
-          <Text style={styles.sideArrow}>{'‹'}</Text>
-        </Pressable>
+        <View style={styles.contentWrap}>
+          <Pressable style={[styles.sideBtn, !canGoPrev && styles.sideBtnDisabled]} onPress={goPrev}>
+            <Text style={[styles.sideArrow, !canGoPrev && styles.sideArrowDisabled]}>{'‹'}</Text>
+          </Pressable>
 
-        <ScrollView style={styles.card} contentContainerStyle={styles.cardContent}>
-          <Text style={styles.title}>{nickname}의 연애코드</Text>
+          <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateX: slideX }] }}>
+            <ScrollView style={styles.card} contentContainerStyle={styles.cardContent} showsVerticalScrollIndicator>
+              <Text style={styles.title}>{current.nickname}님의 연애코드</Text>
 
-          <Text style={styles.qTitle}>자기소개</Text>
-          <Text style={styles.answer}>{intro || '자기소개가 없어요.'}</Text>
+              <View style={styles.qaBlock}>
+                <Text style={styles.qTitle}>자기소개</Text>
+                <Text style={styles.answer}>{intro}</Text>
+              </View>
 
-          <Text style={styles.qTitle}>연인에게 바라는 한 가지는?</Text>
-          <Text style={styles.answer}>{want || '응답이 없어요.'}</Text>
+              <View style={styles.qaBlock}>
+                <Text style={styles.qTitle}>연인에게 바라는 한 가지는?</Text>
+                <Text style={styles.answer}>{want}</Text>
+              </View>
 
-          <Text style={styles.qTitle}>나를 설레게 하는 이성의 매력?</Text>
-          <Text style={styles.answer}>{charm || '응답이 없어요.'}</Text>
-        </ScrollView>
+              <View style={styles.qaBlock}>
+                <Text style={styles.qTitle}>나를 설레게 하는 이성의 매력?</Text>
+                <Text style={styles.answer}>{charm}</Text>
+              </View>
 
-        <Pressable style={styles.sideBtn}>
-          <Text style={styles.sideArrow}>{'›'}</Text>
-        </Pressable>
+              {current.openQA.map(item => (
+                <View key={item.question} style={styles.qaBlock}>
+                  <Text style={styles.qTitle}>{item.question}</Text>
+                  <Text style={styles.answer}>{item.answer || '응답이 없어요.'}</Text>
+                </View>
+              ))}
+
+              <Text style={styles.dotDivider}>• • •</Text>
+
+              {(current.choiceQA.length ? current.choiceQA : FALLBACK_CHOICE_QA).map(q => {
+                const leftSelected = q.selected === 'LEFT';
+                const rightSelected = q.selected === 'RIGHT';
+
+                return (
+                  <View key={q.id} style={styles.questionBlock}>
+                    <Text style={styles.choiceTitle}>{q.title}</Text>
+                    <View style={styles.choiceRow}>
+                      <View
+                        style={[
+                          styles.choiceButton,
+                          leftSelected ? styles.choiceButtonSelected : styles.choiceButtonIdle,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceText,
+                            leftSelected ? styles.choiceTextSelected : styles.choiceTextIdle,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {q.left}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.vsText}>VS</Text>
+
+                      <View
+                        style={[
+                          styles.choiceButton,
+                          rightSelected ? styles.choiceButtonSelected : styles.choiceButtonIdle,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceText,
+                            rightSelected ? styles.choiceTextSelected : styles.choiceTextIdle,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {q.right}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+
+          <Pressable style={[styles.sideBtn, !canGoNext && styles.sideBtnDisabled]} onPress={goNext}>
+            <Text style={[styles.sideArrow, !canGoNext && styles.sideArrowDisabled]}>{'›'}</Text>
+          </Pressable>
+        </View>
+
+        <TouchableOpacity
+          style={styles.nextBtn}
+          activeOpacity={0.9}
+          onPress={() => {
+            if (!current?.profileId) return;
+            navigation.navigate('MatchDetail', {
+              source: 'LOVE_VIEW_MATCH',
+              targetProfileId: current.profileId,
+              previewName: current.nickname,
+            });
+          }}
+        >
+          <Text style={styles.nextBtnText}>프로필 보기</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.profileBtn} activeOpacity={0.9}>
-        <Text style={styles.profileBtnText}>프로필 보기</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.pageText}>{`${page}/${total}`}</Text>
-
-      <Image source={petalImg} style={[styles.petal, styles.petalLeft]} />
-      <Image source={petalImg} style={[styles.petal, styles.petalRight]} />
 
       <BottomNavigationBar
         activeTab="dating"
@@ -130,7 +333,13 @@ export default function LoveCodePreviewScreen() {
         onRequestClose={() => setCounterInfoVisible(false)}
       >
         <Pressable style={styles.counterBackdrop} onPress={() => setCounterInfoVisible(false)}>
-          <Pressable style={styles.counterCard} onPress={() => {}}>
+          <Pressable
+            style={[
+              styles.counterCard,
+              { left: Math.max(10, metaAnchor.x - 2), top: metaAnchor.y + metaAnchor.height + 6 },
+            ]}
+            onPress={() => {}}
+          >
             <View style={styles.counterHeader}>
               <Text style={styles.counterTitle}>정보</Text>
               <Pressable onPress={() => setCounterInfoVisible(false)} hitSlop={10}>
@@ -152,17 +361,20 @@ export default function LoveCodePreviewScreen() {
   );
 }
 
+const PINK = '#F5BBC8';
+const BORDER = '#DADADA';
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
+    paddingHorizontal: 12,
+    paddingTop: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 2,
   },
   back: { fontSize: 22, color: '#111', fontWeight: '700' },
-
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   chip: {
     height: 24,
@@ -191,58 +403,99 @@ const styles = StyleSheet.create({
   balanceIcon: { width: 19, height: 19, resizeMode: 'contain' },
   balanceNumber: { marginLeft: 10, fontSize: 16, fontWeight: '400', color: '#111' },
 
-  metaRow: { paddingHorizontal: 16, marginTop: 10, flexDirection: 'row', gap: 4, alignItems: 'center' },
-  metaIcon: { width: 18, height: 18, resizeMode: 'contain' },
-  metaText: { fontSize: 14, color: '#111', fontWeight: '700' },
+  contentLayer: { flex: 1, zIndex: 2 },
+  metaWrap: { width: '100%', marginTop: 8 },
+  metaRow: {
+    width: '82%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  metaIconLarge: { width: 22, height: 22, resizeMode: 'contain' },
+  metaTextLarge: { fontSize: 21, color: '#111', fontWeight: '800' },
 
-  contentWrap: { marginTop: 10, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  contentWrap: { flex: 1, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   sideBtn: { width: 18, alignItems: 'center' },
-  sideArrow: { fontSize: 22, color: '#111' },
+  sideBtnDisabled: { opacity: 0.35 },
+  sideArrow: { fontSize: 26, color: '#111' },
+  sideArrowDisabled: { color: '#999' },
   card: {
     flex: 1,
-    maxHeight: 360,
     borderWidth: 1,
-    borderColor: '#D7D7D7',
-    borderRadius: 14,
-    backgroundColor: '#F9F9F9',
+    borderColor: BORDER,
+    borderRadius: 20,
+    backgroundColor: '#F8F8F8',
   },
-  cardContent: { padding: 14 },
-  title: { fontSize: 28, fontWeight: '900', color: '#111', marginBottom: 14, textAlign: 'center' },
-  qTitle: { fontSize: 14, fontWeight: '900', color: '#111', marginTop: 8, marginBottom: 6 },
-  answer: { fontSize: 12, color: '#444', lineHeight: 18, fontWeight: '600' },
+  cardContent: { paddingHorizontal: 12, paddingVertical: 16 },
+  title: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#111',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  qaBlock: { marginBottom: 24 },
+  qTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 10 },
+  answer: { fontSize: 13, color: '#444', lineHeight: 22, fontWeight: '600' },
+  dotDivider: {
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 10,
+    color: '#F198AF',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
 
-  profileBtn: {
-    marginTop: 10,
+  questionBlock: { marginBottom: 12 },
+  choiceTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  choiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  vsText: { fontSize: 13, fontWeight: '800', color: '#666', marginHorizontal: 10 },
+  choiceButton: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 34,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceButtonIdle: { backgroundColor: '#FFF', borderColor: BORDER },
+  choiceButtonSelected: { backgroundColor: PINK, borderColor: '#E8AAB8' },
+  choiceText: { fontSize: 11, fontWeight: '700' },
+  choiceTextIdle: { color: '#222' },
+  choiceTextSelected: { color: '#222' },
+
+  nextBtn: {
+    marginTop: 8,
+    marginBottom: 10,
     alignSelf: 'center',
-    width: 90,
-    height: 34,
-    borderRadius: 8,
+    width: 112,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: '#F8C5D2',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileBtnText: { fontSize: 12, color: '#111', fontWeight: '800' },
-  pageText: {
-    position: 'absolute',
-    right: 10,
-    bottom: 4,
-    color: '#111',
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  nextBtnText: { fontSize: 16, color: '#111', fontWeight: '800' },
 
-  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9 },
-  petalLeft: { left: 14, bottom: 10, transform: [{ rotate: '-18deg' }] },
+  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9, zIndex: 0 },
+  petalLeft: { left: 14, bottom: 20, transform: [{ rotate: '-18deg' }] },
   petalRight: { right: 16, top: '44%', transform: [{ rotate: '18deg' }] },
 
-  counterBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 74,
-  },
+  counterBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' },
   counterCard: {
+    position: 'absolute',
     width: 210,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,

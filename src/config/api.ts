@@ -59,6 +59,13 @@ export const API_ENDPOINTS_LIST = {
   LOVEVIEW_MATCH_SIMPLE_TODAY: '/api/match/loveview/simple/today',
   EXTRA_PROFILE_BY_TING: '/api/extra_profile/ting',
   CHECK_TING_WALLET: '/api/check_tingwallet',
+  PROFILE_DETAIL: '/api/profile/detail',
+  LOVEVIEW_DETAIL: '/api/loveview/detail',
+  PROFILE_DETAIL_EXTRA_PHOTO: '/api/profile/detail/extra_photo',
+  LIKE_SEND: '/api/like/send',
+  MESSAGE_SEND: '/api/messageRequest/send',
+  SCORE_IS_RECEIVED: '/api/score/isReceived',
+  SCORE_RECEIVED: '/api/score/received',
 
 } as const;
 

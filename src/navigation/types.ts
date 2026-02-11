@@ -2,6 +2,7 @@
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { Gender } from '../types/KakaoAPI';
+import { DrinkingHabit, MatchSource, SmokingHabit } from '../types/DatingAPI';
 
 export type RootStackParamList = {
   SplashScreen: undefined;
@@ -39,6 +40,10 @@ export type RootStackParamList = {
     eventTingBalance: number;
     freeProfileNum?: number;
     additionalProfileNum?: number;
+    minAge?: number;
+    maxAge?: number;
+    smoking?: SmokingHabit[];
+    drinking?: DrinkingHabit[];
     noCards?: boolean;
   };
   LoveCodePreview: {
@@ -46,12 +51,46 @@ export type RootStackParamList = {
     intro?: string;
     want?: string;
     charm?: string;
+    loveCards?: Array<{
+      profileId: number;
+      nickname: string;
+      requiredQA: Array<{ question: string; answer: string }>;
+      openQA: Array<{ question: string; answer: string }>;
+      choiceQA: Array<{
+        id: string;
+        title: string;
+        left: string;
+        right: string;
+        selected: 'LEFT' | 'RIGHT' | null;
+      }>;
+    }>;
+    startIndex?: number;
+    openQA?: Array<{
+      question: string;
+      answer: string;
+    }>;
+    choiceQA?: Array<{
+      id: string;
+      title: string;
+      left: string;
+      right: string;
+      selected: 'LEFT' | 'RIGHT' | null;
+    }>;
     isVip: boolean;
     isSubscribed: boolean;
     tingBalance: number;
     eventTingBalance: number;
+    freeLoveViewNum?: number;
+    additionalProfileNum?: number;
     page?: number;
     total?: number;
+  };
+
+  MatchDetail: {
+    source: MatchSource;
+    targetProfileId: number;
+    previewName?: string;
+    previewImageUrl?: string;
   };
 
   // ✅ 스토어 (간단 화면)

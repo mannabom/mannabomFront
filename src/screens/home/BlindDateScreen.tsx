@@ -53,7 +53,14 @@ type BlindLoveCodeCard = {
   profileId: number;
   nickname: string;
   requiredQA: { question: string; answer: string }[];
-  optionalQA: { question: string; answer: string }[];
+  openQA: { question: string; answer: string }[];
+  choiceQA: {
+    id: string;
+    title: string;
+    left: string;
+    right: string;
+    selected: 'LEFT' | 'RIGHT' | null;
+  }[];
 };
 type PreviewModalProfile = {
   profileId: number;
@@ -129,6 +136,54 @@ const firstLoveCandidate = (raw: any): any => {
   return raw?.loveView ?? raw?.matchLoveView ?? raw;
 };
 
+const normalizeQuestionKey = (value: string | undefined): string =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+
+const CHOICE_QUESTIONS = [
+  { id: 'fight', title: '연인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다' },
+  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다' },
+  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘' },
+  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기' },
+  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다' },
+  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기' },
+  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습' },
+  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기' },
+] as const;
+
+const CHOICE_QUESTION_ID_BY_KEY: Record<string, number> = {
+  fight: 8,
+  photo: 9,
+  important: 10,
+  date: 11,
+  jealousy: 12,
+  idealDay: 13,
+  attracted: 14,
+  friends: 15,
+};
+
+const CHOICE_CODE_TO_SIDE: Record<string, 'LEFT' | 'RIGHT'> = {
+  CALM_AFTER_TIME: 'RIGHT',
+  SOLVE_IMMEDIATELY: 'LEFT',
+  SNS_SHARE_YES: 'LEFT',
+  SNS_SHARE_NO: 'RIGHT',
+  COMFORT: 'LEFT',
+  EXCITEMENT: 'RIGHT',
+  THRILL: 'RIGHT',
+  INDOOR_DATE: 'LEFT',
+  OUTDOOR_DATE: 'RIGHT',
+  SLIGHT_JEALOUSY_OK: 'LEFT',
+  COOL_AND_CALM: 'RIGHT',
+  COMFY_DAILY: 'LEFT',
+  ACTIVE_DATE: 'RIGHT',
+  CONSIDERATE: 'LEFT',
+  LEADERSHIP: 'RIGHT',
+  MIX_WITH_FRIENDS: 'LEFT',
+  KEEP_DISTANCE: 'RIGHT',
+};
+
 const isNoFreeTicketError = (e: any) => {
   const status = e?.response?.status;
   const msg = String(e?.response?.data?.message ?? '');
@@ -190,11 +245,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const [isSubscribed] = useState<boolean>(true);
   const isVip = tingBalance >= 200;
 
-  const pickSmoking = (smoking: SmokingHabit[]) =>
-    smoking[0] ?? SmokingHabit.NON_SMOKER;
-  const pickDrinking = (drinking: DrinkingHabit[]) =>
-    drinking[0] ?? DrinkingHabit.NON_DRINKER;
-
   React.useEffect(() => {
     let mounted = true;
     const loadWallet = async () => {
@@ -220,25 +270,119 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     const loveProfileId =
       toPositiveId(loveViewRes?.profileId, loveViewRes?.userId, loveViewRes?.id) ?? 1;
 
+    const questionAnswers = Array.isArray(loveViewRes?.questionAnswers) ? loveViewRes.questionAnswers : [];
+    const qaMap = new Map<string, string>();
+    const qaById = new Map<number, string>();
+
+    questionAnswers.forEach((item: any) => {
+      const answer = String(item?.answer ?? '').trim();
+      if (!answer) return;
+
+      const qObj = item?.question;
+      const questionText =
+        typeof qObj === 'string'
+          ? qObj
+          : firstNonEmptyString(qObj?.question, qObj?.title, qObj?.content, item?.questionText);
+      const questionIdRaw =
+        typeof qObj === 'object' ? (qObj?.questionId ?? qObj?.id) : item?.questionId;
+      const questionId = Number(questionIdRaw);
+
+      if (questionText) {
+        qaMap.set(normalizeQuestionKey(questionText), answer);
+      }
+      if (Number.isFinite(questionId) && questionId > 0) {
+        qaById.set(questionId, answer);
+      }
+    });
+
+    const findAnswer = (
+      questionCandidates: string[],
+      fieldCandidates: any[] = [],
+      questionIds: number[] = [],
+    ): string => {
+      for (const id of questionIds) {
+        const foundById = qaById.get(id);
+        if (foundById) return foundById;
+      }
+      for (const q of questionCandidates) {
+        const found = qaMap.get(normalizeQuestionKey(q));
+        if (found) return found;
+      }
+      const byField = firstNonEmptyString(...fieldCandidates);
+      return byField ?? '';
+    };
+
     const introText =
-      firstNonEmptyString(
-        loveViewRes?.intro,
-        loveViewRes?.selfIntroduction,
-        loveViewRes?.description,
-        loveViewRes?.bio,
-      ) ?? '자기소개가 아직 등록되지 않았어요.';
+      findAnswer(
+        ['자기소개'],
+        [loveViewRes?.intro, loveViewRes?.selfIntroduction, loveViewRes?.description, loveViewRes?.bio],
+        [1],
+      ) || '자기소개가 아직 등록되지 않았어요.';
     const wantText =
-      firstNonEmptyString(
-        loveViewRes?.want,
-        loveViewRes?.desiredPartnerTrait,
-        loveViewRes?.requiredAnswer1,
-      ) ?? '연인에게 바라는 한 가지 응답이 없어요.';
+      findAnswer(
+        ['연인에게 꼭 바라는 한 가지는?', '연인에게 바라는 한 가지는?', '연인에게 바라는 한 가지'],
+        [loveViewRes?.want, loveViewRes?.desiredPartnerTrait, loveViewRes?.requiredAnswer1],
+        [3],
+      ) || '연인에게 바라는 한 가지 응답이 없어요.';
     const charmText =
-      firstNonEmptyString(
-        loveViewRes?.charm,
-        loveViewRes?.attractivePartnerTrait,
-        loveViewRes?.requiredAnswer2,
-      ) ?? '매력 응답이 아직 없어요.';
+      findAnswer(
+        ['나를 설레게 하는 이성의 매력?', '나를 설레게 하는 이성의 매력'],
+        [loveViewRes?.charm, loveViewRes?.attractivePartnerTrait, loveViewRes?.requiredAnswer2],
+        [2],
+      ) || '매력 응답이 아직 없어요.';
+
+    const openQA = [
+      {
+        question: '나에게 연애란 어떤 의미인가요?',
+        answer:
+          findAnswer(['나에게 연애란?', '나에게 연애란 어떤 의미인가요?', '나에게 연애란'], [], [4]) ||
+          firstNonEmptyString(loveViewRes?.meaningOfLove) ||
+          '아직 작성된 답변이 없어요.',
+      },
+      {
+        question: '나의 소울 푸드?',
+        answer:
+          findAnswer(['나의 소울 푸드는?', '나의 소울 푸드?'], [], [5]) ||
+          firstNonEmptyString(loveViewRes?.soulFood) ||
+          '아직 작성된 답변이 없어요.',
+      },
+      {
+        question: '나의 하루 그리고 나의 휴일은?',
+        answer:
+          findAnswer(['나의 하루, 그리고 나의 휴일은?', '나의 하루 그리고 나의 휴일은?'], [], [6]) ||
+          firstNonEmptyString(loveViewRes?.dailyAndHoliday) ||
+          '아직 작성된 답변이 없어요.',
+      },
+      {
+        question: '하고 싶은 데이트는?',
+        answer:
+          findAnswer(['하고 싶은 데이트는?'], [], [7]) ||
+          firstNonEmptyString(loveViewRes?.idealDate) ||
+          '아직 작성된 답변이 없어요.',
+      },
+    ];
+
+    const choiceQA = CHOICE_QUESTIONS.map(q => {
+      const choiceQuestionId = CHOICE_QUESTION_ID_BY_KEY[q.id];
+      const answer =
+        findAnswer([q.title, `${q.title}?`], [loveViewRes?.[q.id]], [choiceQuestionId]) || '';
+      const normalizedAnswer = normalizeQuestionKey(answer);
+      const leftKey = normalizeQuestionKey(q.left);
+      const rightKey = normalizeQuestionKey(q.right);
+      const selectedByCode = CHOICE_CODE_TO_SIDE[answer];
+      const selected: 'LEFT' | 'RIGHT' | null =
+        selectedByCode ??
+        (normalizedAnswer && normalizedAnswer === leftKey
+          ? 'LEFT'
+          : normalizedAnswer && normalizedAnswer === rightKey
+            ? 'RIGHT'
+            : null);
+
+      return {
+        ...q,
+        selected,
+      };
+    });
 
     return {
       profileId: loveProfileId,
@@ -253,7 +397,8 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         { question: '연인에게 바라는 한 가지는?', answer: wantText },
         { question: '나를 설레게 하는 이성의 매력?', answer: charmText },
       ],
-      optionalQA: [],
+      openQA,
+      choiceQA,
     };
   };
 
@@ -304,8 +449,8 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     const loveViewCondition: LoveViewMatchConditionRequest = {
       minAge: filterSettings.ageRange.min,
       maxAge: filterSettings.ageRange.max,
-      smoking: pickSmoking(filterSettings.smoking),
-      drinking: pickDrinking(filterSettings.drinking),
+      smoking: filterSettings.smoking,
+      drinking: filterSettings.drinking,
     };
     let loveRaw: any;
     try {
@@ -403,8 +548,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   );
 
   const firstLoveCode = loveCodeCards[0];
-  const findAnswer = (q: string | undefined) =>
-    firstLoveCode?.requiredQA.find(item => item.question === q)?.answer;
 
   const openProfilePreview = async () => {
     try {
@@ -452,19 +595,27 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         eventTingBalance: coinBalance,
         freeProfileNum: walletInfo.freeProfileNum,
         additionalProfileNum: walletInfo.additionalProfileNum,
+        minAge: filterSettings.ageRange.min,
+        maxAge: filterSettings.ageRange.max,
+        smoking: filterSettings.smoking,
+        drinking: filterSettings.drinking,
       });
     } catch (e: any) {
       if (isNoProfileQuotaError(e)) {
         navigation.navigate('ProfilePreview', {
           profiles: [],
           isVip,
-        isSubscribed,
-        tingBalance,
-        eventTingBalance: coinBalance,
-        freeProfileNum: walletInfo.freeProfileNum,
-        additionalProfileNum: walletInfo.additionalProfileNum,
-        noCards: true,
-      });
+          isSubscribed,
+          tingBalance,
+          eventTingBalance: coinBalance,
+          freeProfileNum: walletInfo.freeProfileNum,
+          additionalProfileNum: walletInfo.additionalProfileNum,
+          minAge: filterSettings.ageRange.min,
+          maxAge: filterSettings.ageRange.max,
+          smoking: filterSettings.smoking,
+          drinking: filterSettings.drinking,
+          noCards: true,
+        });
         return;
       }
       Alert.alert('오류', '일반 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
@@ -473,27 +624,59 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
 
   const openLoveCodePreview = async () => {
     try {
-      let card = firstLoveCode;
-      if (!card && previewLoveCode) {
-        card = previewLoveCode;
+      let cards = [...loveCodeCards];
+      if (!cards.length && previewLoveCode) {
+        cards = [previewLoveCode];
       }
-      if (!card) {
+
+      try {
+        const todayList = await withNetworkRetry(() => datingApiService.getTodayLoveViewMatching(), 2);
+        if (Array.isArray(todayList) && todayList.length) {
+          const parsed = todayList
+            .map(raw => parseLoveCodeCard(raw))
+            .filter((item): item is BlindLoveCodeCard => !!item);
+          if (parsed.length) {
+            const seen = new Set<number>();
+            cards = [...cards, ...parsed].filter(item => {
+              if (seen.has(item.profileId)) return false;
+              seen.add(item.profileId);
+              return true;
+            });
+            setLoveCodeCards(cards);
+            if (!previewLoveCode && cards.length) {
+              setPreviewLoveCode(cards[0]);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load today love cards', e);
+      }
+
+      if (!cards.length) {
         const fresh = await fetchLovePreview();
         if (!fresh) throw new Error('empty love');
-        setLoveCodeCards([fresh]);
+        cards = [fresh];
+        setLoveCodeCards(cards);
         setPreviewLoveCode(fresh);
-        card = fresh;
       }
+
+      const card = cards[0];
 
       navigation.navigate('LoveCodePreview', {
         nickname: card.nickname,
         intro: card.requiredQA.find(q => q.question === '자기소개')?.answer,
         want: card.requiredQA.find(q => q.question === '연인에게 바라는 한 가지는?')?.answer,
         charm: card.requiredQA.find(q => q.question === '나를 설레게 하는 이성의 매력?')?.answer,
+        loveCards: cards,
+        startIndex: 0,
+        openQA: card.openQA,
+        choiceQA: card.choiceQA,
         isVip,
         isSubscribed,
         tingBalance,
         eventTingBalance: coinBalance,
+        freeLoveViewNum: walletInfo.freeLoveViewNum,
+        additionalProfileNum: walletInfo.additionalProfileNum,
         page: 1,
         total: loveCodeCards.length || 1,
       });
