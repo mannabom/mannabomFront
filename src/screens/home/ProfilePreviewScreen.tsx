@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -15,6 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import BottomNavigationBar from '../../components/common/BottomNavigationBar';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_BASE_URL } from '../../config/api';
+import { DrinkingHabit, ProfileMatchConditionRequest, SmokingHabit } from '../../types/DatingAPI';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -33,6 +35,46 @@ type ProfileCard = {
   photoUris?: string[];
 };
 
+const firstNonEmptyString = (...vals: any[]): string | undefined => {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return undefined;
+};
+
+const toPositiveId = (...vals: any[]): number | undefined => {
+  for (const v of vals) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string' && v.trim().length > 0) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return undefined;
+};
+
+const toAbsoluteUri = (uri: string | undefined): string => {
+  const s = (uri ?? '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('/')) return `${API_BASE_URL}${s}`;
+  return `${API_BASE_URL}/${s}`;
+};
+
+const extractPhotoUris = (raw: any): string[] => {
+  const candidates: string[] = [];
+  const push = (v: any) => {
+    if (typeof v === 'string' && v.trim()) candidates.push(toAbsoluteUri(v));
+  };
+  push(raw?.profileImageUrl);
+  push(raw?.profileImage);
+  push(raw?.imageUrl);
+  push(raw?.mainPhotoUrl);
+  if (Array.isArray(raw?.photoUris)) raw.photoUris.forEach(push);
+  if (Array.isArray(raw?.profilePhotoUrls)) raw.profilePhotoUrls.forEach(push);
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
 export default function ProfilePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -46,6 +88,20 @@ export default function ProfilePreviewScreen() {
   const [additionalProfileNum, setAdditionalProfileNum] = useState<number>(
     route.params?.additionalProfileNum ?? 5,
   );
+  const initialFilterCondition: ProfileMatchConditionRequest = {
+    minAge: route.params?.minAge ?? 20,
+    maxAge: route.params?.maxAge ?? 45,
+    smoking: route.params?.smoking ?? [
+      SmokingHabit.NON_SMOKER,
+      SmokingHabit.VAPE_ONLY,
+      SmokingHabit.REGULAR_SMOKER,
+    ],
+    drinking: route.params?.drinking ?? [
+      DrinkingHabit.NON_DRINKER,
+      DrinkingHabit.OCCASIONAL_DRINKER,
+      DrinkingHabit.FREQUENT_DRINKER,
+    ],
+  };
   const noCards: boolean = route.params?.noCards ?? profiles.length === 0;
 
   const [index, setIndex] = useState(0);
@@ -74,44 +130,93 @@ export default function ProfilePreviewScreen() {
   const loadMoreProfiles = async (): Promise<boolean> => {
     try {
       const todayList = await datingApiService.getTodayMatchingProfiles();
-      if (!Array.isArray(todayList) || !todayList.length) return false;
+      if (Array.isArray(todayList) && todayList.length) {
+        const mappedRaw: ProfileCard[] = todayList
+          .map(p => ({
+            profileId: p.profileId ?? p.userId ?? 0,
+            name: p.name ?? p.nickname ?? p.nickName,
+            nickname: p.nickname ?? p.nickName ?? p.name ?? '회원',
+            age: p.age ?? 0,
+            mbti: p.mbti ?? '',
+            photoUris: [toAbsoluteUri(p.profileImageUrl)],
+          }))
+          .filter(p => p.profileId > 0);
 
-      const existing = new Set(profiles.map(p => p.profileId));
-      const mapped: ProfileCard[] = todayList
-        .map(p => ({
-          profileId: p.profileId ?? p.userId ?? 0,
-          name: p.name ?? p.nickname,
-          nickname: p.nickname ?? p.name ?? '회원',
-          age: p.age ?? 0,
-          mbti: p.mbti ?? '',
-          photoUris: [toAbsoluteUri(p.profileImageUrl)],
-        }))
-        .filter(p => p.profileId > 0 && !existing.has(p.profileId));
+        if (mappedRaw.length) {
+          setProfiles(prev => {
+            const existing = new Set(prev.map(item => item.profileId));
+            const deduped = mappedRaw.filter(item => !existing.has(item.profileId));
+            if (!deduped.length) return prev;
+            return [...prev, ...deduped];
+          });
+          return true;
+        }
+      }
 
-      if (!mapped.length) return false;
-      setProfiles(prev => [...prev, ...mapped]);
+      let raw: any;
+      try {
+        raw = await datingApiService.getMatchingProfile(initialFilterCondition);
+      } catch {
+        raw = await datingApiService.getMatchingProfileExtra(initialFilterCondition);
+      }
+
+      const profileId = toPositiveId(raw?.profileId, raw?.userId, raw?.id);
+      if (!profileId) return false;
+
+      const mapped: ProfileCard = {
+        profileId,
+        name: firstNonEmptyString(raw?.name),
+        nickname: firstNonEmptyString(raw?.nickname, raw?.nickName, raw?.name) ?? '회원',
+        age: Number(raw?.age ?? 0),
+        mbti: String(raw?.mbti ?? ''),
+        photoUris: extractPhotoUris(raw),
+      };
+
+      setProfiles(prev => {
+        if (prev.some(item => item.profileId === mapped.profileId)) {
+          return prev;
+        }
+        return [...prev, mapped];
+      });
       return true;
     } catch {
       return false;
     }
   };
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!profiles.length) return;
     if (rated <= 0) {
       return;
     }
+    if (current?.profileId) {
+      try {
+        await datingApiService.rateProfile({
+          targetProfileId: current.profileId,
+          score: rated,
+        });
+      } catch {
+        // 별점 저장 실패여도 UX를 막지 않는다.
+      }
+    }
+
     const nextIndex = index + 1;
     if (nextIndex < profiles.length) {
       setIndex(nextIndex);
       setRated(0);
       return;
     }
-    loadMoreProfiles().then(loaded => {
-      if (loaded) {
-        setIndex(nextIndex);
-      }
+    const loaded = await loadMoreProfiles();
+    if (loaded) {
+      setIndex(nextIndex);
       setRated(0);
-    });
+      return;
+    }
+    setRated(0);
+    if (profiles.length > 1) {
+      goNext();
+      return;
+    }
+    Alert.alert('안내', '다음으로 보여줄 일반 프로필이 아직 없어요.');
   };
   const openCounterInfo = () => {
     if (metaRowRef.current) {
@@ -268,7 +373,15 @@ export default function ProfilePreviewScreen() {
             <TouchableOpacity
               style={[styles.profileBtn, rated <= 0 && styles.profileBtnDisabled]}
               activeOpacity={0.9}
-              onPress={handleNext}
+              onPress={() => {
+                if (!current?.profileId) return;
+                navigation.navigate('MatchDetail', {
+                  source: 'PROFILE_MATCH',
+                  targetProfileId: current.profileId,
+                  previewName: displayName,
+                  previewImageUrl: current.photoUris?.[0],
+                });
+              }}
               disabled={rated <= 0}
             >
               <Text style={styles.profileBtnText}>프로필 보기</Text>
@@ -564,10 +677,3 @@ const styles = StyleSheet.create({
   counterIcon: { width: 16, height: 16, resizeMode: 'contain' },
   counterText: { fontSize: 12, color: '#111', fontWeight: '700' },
 });
-  const toAbsoluteUri = (uri: string | undefined): string => {
-    const s = (uri ?? '').trim();
-    if (!s) return '';
-    if (/^https?:\/\//i.test(s)) return s;
-    if (s.startsWith('/')) return `${API_BASE_URL}${s}`;
-    return `${API_BASE_URL}/${s}`;
-  };

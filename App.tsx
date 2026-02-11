@@ -20,6 +20,7 @@ import ProfileDetail from './src/screens/MyPage/ProfileDetail';
 import StoreScreen from './src/screens/store/StoreScreen'; // ✅ 추가
 import ProfilePreviewScreen from './src/screens/home/ProfilePreviewScreen';
 import LoveCodePreviewScreen from './src/screens/home/LoveCodePreviewScreen';
+import MatchDetailScreen from './src/screens/home/MatchDetailScreen';
 
 import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
@@ -261,6 +262,7 @@ const App: React.FC = () => {
             <Stack.Screen name="ProfileDetail" component={ProfileDetail} />
             <Stack.Screen name="ProfilePreview" component={ProfilePreviewScreen} />
             <Stack.Screen name="LoveCodePreview" component={LoveCodePreviewScreen} />
+            <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
 
             {/* ✅ 스토어 */}
             <Stack.Screen name="Store" component={StoreScreen} />

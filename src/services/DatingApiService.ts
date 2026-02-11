@@ -10,6 +10,10 @@ import {
   TodayLoveViewMatchListResponse,
   TodayProfileMatchListResponse,
   CheckTingWalletResponse,
+  ProfileMatchDetailResponse,
+  LoveViewMatchDetailResponse,
+  ExtraPhotoUnlockResponse,
+  MatchSource,
 } from '../types/DatingAPI';
 
 class DatingApiService {
@@ -115,6 +119,68 @@ class DatingApiService {
   async getTingWalletInfo(): Promise<CheckTingWalletResponse> {
     const response = await apiClient.get(API_ENDPOINTS_LIST.CHECK_TING_WALLET);
     return this.unwrap<CheckTingWalletResponse>(response.data);
+  }
+
+  // 상대 일반 프로필 상세
+  async getProfileDetail(targetProfileId: number): Promise<ProfileMatchDetailResponse> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.PROFILE_DETAIL, {
+      targetProfileId,
+    });
+    return this.unwrap<ProfileMatchDetailResponse>(response.data);
+  }
+
+  // 상대 연애관 상세
+  async getLoveViewDetail(targetProfileId: number): Promise<LoveViewMatchDetailResponse> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.LOVEVIEW_DETAIL, {
+      targetProfileId,
+    });
+    return this.unwrap<LoveViewMatchDetailResponse>(response.data);
+  }
+
+  // 추가 사진 열람
+  async unlockExtraPhoto(targetProfileId: number, photoId: number): Promise<ExtraPhotoUnlockResponse> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.PROFILE_DETAIL_EXTRA_PHOTO, {
+      targetProfileId,
+      photoId,
+    });
+    return this.unwrap<ExtraPhotoUnlockResponse>(response.data);
+  }
+
+  // 호감 보내기
+  async sendLike(targetProfileId: number, source: MatchSource): Promise<CheckTingWalletResponse> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.LIKE_SEND, {
+      targetProfileId,
+      source,
+    });
+    return this.unwrap<CheckTingWalletResponse>(response.data);
+  }
+
+  // 메시지 보내기
+  async sendMessage(
+    targetProfileId: number,
+    message: string,
+    source: MatchSource,
+  ): Promise<CheckTingWalletResponse> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.MESSAGE_SEND, {
+      targetProfileId,
+      message,
+      source,
+    });
+    return this.unwrap<CheckTingWalletResponse>(response.data);
+  }
+
+  async checkReceivedScore(targetProfileId: number): Promise<{ received: boolean }> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.SCORE_IS_RECEIVED, {
+      targetProfileId,
+    });
+    return this.unwrap<{ received: boolean }>(response.data);
+  }
+
+  async getReceivedScore(targetProfileId: number): Promise<{ score: number }> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.SCORE_RECEIVED, {
+      targetProfileId,
+    });
+    return this.unwrap<{ score: number }>(response.data);
   }
 
 

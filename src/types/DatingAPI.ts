@@ -33,13 +33,13 @@ export interface ProfileMatchConditionResponse {
   smoking: SmokingHabit;
 
   // ✅ 닉네임 내려오면 쓰려고 optional
+  nickName?: string;
   nickname?: string;
   name?: string;
 }
 
 export interface MatchProfileRatingRequest {
-  // 서버가 userId를 쓰든 profileId를 쓰든, 일단 기존 필드명 유지
-  targetUserId: number;
+  targetProfileId: number;
   score: number; // 1~5
 }
 
@@ -47,8 +47,8 @@ export interface LoveViewMatchConditionRequest {
   minAge: number;
   maxAge: number;
   region?: string;
-  smoking: SmokingHabit;
-  drinking: DrinkingHabit;
+  smoking: SmokingHabit[];
+  drinking: DrinkingHabit[];
 }
 
 export interface LoveViewMatchConditionResponse {
@@ -83,6 +83,74 @@ export interface CheckTingWalletResponse {
   freeProfileNum: number;
   freeLoveViewNum: number;
   additionalProfileNum: number;
+}
+
+export type MatchSource = 'PROFILE_MATCH' | 'LOVE_VIEW_MATCH';
+export type LikeStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+export type MessageStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface MatchActionState<T extends string> {
+  sent: boolean;
+  likeStatus?: T extends 'like' ? LikeStatus : never;
+  messageStatus?: T extends 'message' ? MessageStatus : never;
+}
+
+export interface MatchQuestionAnswer {
+  question?: {
+    questionId?: number;
+    question?: string;
+    questionType?: string;
+  } | string;
+  answer?: string;
+}
+
+export interface MatchPhoto {
+  photoId: number;
+  imageUrl?: string;
+  ImageUrl?: string;
+  blind?: boolean;
+}
+
+export interface ProfileMatchDetailResponse {
+  nickname?: string;
+  nickName?: string;
+  age?: number;
+  region?: string;
+  questionAnswers?: MatchQuestionAnswer[];
+  photos?: MatchPhoto[];
+  smoking?: SmokingHabit;
+  drinking?: DrinkingHabit;
+  liked?: {
+    sent: boolean;
+    likeStatus: LikeStatus;
+  };
+  messaged?: {
+    sent: boolean;
+    messageStatus: MessageStatus;
+  };
+}
+
+export interface LoveViewMatchDetailResponse {
+  nickname?: string;
+  nickName?: string;
+  age?: number;
+  region?: string;
+  questionAnswers?: MatchQuestionAnswer[];
+  smoking?: SmokingHabit;
+  drinking?: DrinkingHabit;
+  liked?: {
+    sent: boolean;
+    likeStatus: LikeStatus;
+  };
+  messaged?: {
+    sent: boolean;
+    messageStatus: MessageStatus;
+  };
+}
+
+export interface ExtraPhotoUnlockResponse {
+  tingRemains: number;
+  eventTingRemains: number;
 }
 
 // 프론트 확장
