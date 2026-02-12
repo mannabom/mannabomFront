@@ -379,6 +379,7 @@ export default function ProfilePreviewScreen() {
                   source: 'PROFILE_MATCH',
                   targetProfileId: current.profileId,
                   previewName: displayName,
+                  previewMbti: current.mbti,
                   previewImageUrl: current.photoUris?.[0],
                 });
               }}
@@ -616,8 +617,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9 },
-  petalLeft: { left: 14, bottom: 10, transform: [{ rotate: '-18deg' }] },
+  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9, zIndex: 0, elevation: 0 },
+  petalLeft: { left: 14, bottom: 96, transform: [{ rotate: '-18deg' }] },
   petalRight: { right: 16, top: '44%', transform: [{ rotate: '18deg' }] },
 
   modalBackdrop: {

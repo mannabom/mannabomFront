@@ -36,6 +36,7 @@ type ChoiceQA = {
 type LoveCard = {
   profileId: number;
   nickname: string;
+  mbti: string;
   requiredQA: { question: string; answer: string }[];
   openQA: { question: string; answer: string }[];
   choiceQA: ChoiceQA[];
@@ -55,6 +56,7 @@ const FALLBACK_CHOICE_QA: ChoiceQA[] = [
 export default function LoveCodePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const cardScrollRef = useRef<ScrollView>(null);
 
   const isVip: boolean = route.params?.isVip ?? false;
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
@@ -67,6 +69,7 @@ export default function LoveCodePreviewScreen() {
     () => ({
       profileId: 0,
       nickname: route.params?.nickname ?? '닉네임',
+      mbti: route.params?.mbti ?? '',
       requiredQA: [
         { question: '자기소개', answer: route.params?.intro ?? '자기소개가 없어요.' },
         { question: '연인에게 바라는 한 가지는?', answer: route.params?.want ?? '응답이 없어요.' },
@@ -135,6 +138,7 @@ export default function LoveCodePreviewScreen() {
 
   const goPrev = () => {
     if (!canGoPrev) return;
+    cardScrollRef.current?.scrollTo({ y: 0, animated: false });
     setNavDirection(-1);
     setIndex(i => Math.max(0, i - 1));
   };
@@ -144,6 +148,7 @@ export default function LoveCodePreviewScreen() {
       Alert.alert('안내', '다음 연애코드가 아직 없어요.');
       return;
     }
+    cardScrollRef.current?.scrollTo({ y: 0, animated: false });
     setNavDirection(1);
     setIndex(i => i + 1);
   };
@@ -223,8 +228,15 @@ export default function LoveCodePreviewScreen() {
           </Pressable>
 
           <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateX: slideX }] }}>
-            <ScrollView style={styles.card} contentContainerStyle={styles.cardContent} showsVerticalScrollIndicator>
-              <Text style={styles.title}>{current.nickname}님의 연애코드</Text>
+            <ScrollView
+              ref={cardScrollRef}
+              style={styles.card}
+              contentContainerStyle={styles.cardContent}
+              showsVerticalScrollIndicator
+            >
+              <Text style={styles.title}>
+                <Text style={styles.titleNickname}>{current.nickname}님</Text>의 연애코드
+              </Text>
 
               <View style={styles.qaBlock}>
                 <Text style={styles.qTitle}>자기소개</Text>
@@ -247,8 +259,6 @@ export default function LoveCodePreviewScreen() {
                   <Text style={styles.answer}>{item.answer || '응답이 없어요.'}</Text>
                 </View>
               ))}
-
-              <Text style={styles.dotDivider}>• • •</Text>
 
               {(current.choiceQA.length ? current.choiceQA : FALLBACK_CHOICE_QA).map(q => {
                 const leftSelected = q.selected === 'LEFT';
@@ -314,6 +324,7 @@ export default function LoveCodePreviewScreen() {
               source: 'LOVE_VIEW_MATCH',
               targetProfileId: current.profileId,
               previewName: current.nickname,
+              previewMbti: current.mbti,
             });
           }}
         >
@@ -368,7 +379,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     paddingHorizontal: 12,
-    paddingTop: 18,
+    paddingTop: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -403,54 +414,46 @@ const styles = StyleSheet.create({
   balanceIcon: { width: 19, height: 19, resizeMode: 'contain' },
   balanceNumber: { marginLeft: 10, fontSize: 16, fontWeight: '400', color: '#111' },
 
-  contentLayer: { flex: 1, zIndex: 2 },
-  metaWrap: { width: '100%', marginTop: 8 },
+  contentLayer: { flex: 1, zIndex: 2, paddingBottom: 4 },
+  metaWrap: { width: '100%', marginTop: 2 },
   metaRow: {
     width: '82%',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 6,
+    marginBottom: 2,
     paddingHorizontal: 2,
     paddingVertical: 2,
   },
   metaIconLarge: { width: 22, height: 22, resizeMode: 'contain' },
   metaTextLarge: { fontSize: 21, color: '#111', fontWeight: '800' },
 
-  contentWrap: { flex: 1, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
-  sideBtn: { width: 18, alignItems: 'center' },
+  contentWrap: { height: '80%', paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  sideBtn: { width: 26, alignItems: 'center' },
   sideBtnDisabled: { opacity: 0.35 },
-  sideArrow: { fontSize: 26, color: '#111' },
+  sideArrow: { fontSize: 36, color: '#111' },
   sideArrowDisabled: { color: '#999' },
   card: {
     flex: 1,
+    maxHeight: '84%',
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: 20,
-    backgroundColor: '#F8F8F8',
+    backgroundColor: '#FFFFFF',
   },
   cardContent: { paddingHorizontal: 12, paddingVertical: 16 },
   title: {
     fontSize: 22,
-    fontWeight: '900',
+    fontWeight: '500',
     color: '#111',
     marginBottom: 24,
     textAlign: 'center',
   },
+  titleNickname: { fontWeight: '900' },
   qaBlock: { marginBottom: 24 },
   qTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 10 },
   answer: { fontSize: 13, color: '#444', lineHeight: 22, fontWeight: '600' },
-  dotDivider: {
-    textAlign: 'center',
-    marginTop: 2,
-    marginBottom: 10,
-    color: '#F198AF',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 3,
-  },
-
   questionBlock: { marginBottom: 12 },
   choiceTitle: {
     fontSize: 14,
@@ -477,8 +480,8 @@ const styles = StyleSheet.create({
   choiceTextSelected: { color: '#222' },
 
   nextBtn: {
-    marginTop: 8,
-    marginBottom: 10,
+    marginTop: 4,
+    marginBottom: 2,
     alignSelf: 'center',
     width: 112,
     height: 40,
@@ -489,8 +492,15 @@ const styles = StyleSheet.create({
   },
   nextBtnText: { fontSize: 16, color: '#111', fontWeight: '800' },
 
-  petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9, zIndex: 0 },
-  petalLeft: { left: 14, bottom: 20, transform: [{ rotate: '-18deg' }] },
+  petal: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    opacity: 0.9,
+    zIndex: 0,
+    elevation: 0,
+  },
+  petalLeft: { left: 14, bottom: 96, transform: [{ rotate: '-18deg' }] },
   petalRight: { right: 16, top: '44%', transform: [{ rotate: '18deg' }] },
 
   counterBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' },

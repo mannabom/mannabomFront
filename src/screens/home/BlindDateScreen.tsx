@@ -52,6 +52,7 @@ type BlindProfileCard = {
 type BlindLoveCodeCard = {
   profileId: number;
   nickname: string;
+  mbti: string;
   requiredQA: { question: string; answer: string }[];
   openQA: { question: string; answer: string }[];
   choiceQA: {
@@ -165,24 +166,47 @@ const CHOICE_QUESTION_ID_BY_KEY: Record<string, number> = {
 };
 
 const CHOICE_CODE_TO_SIDE: Record<string, 'LEFT' | 'RIGHT'> = {
+  IMMEDIATE_RESOLVE: 'LEFT',
   CALM_AFTER_TIME: 'RIGHT',
   SOLVE_IMMEDIATELY: 'LEFT',
+  TAKE_TIME: 'RIGHT',
+  SNS_SHARE_OK: 'LEFT',
   SNS_SHARE_YES: 'LEFT',
   SNS_SHARE_NO: 'RIGHT',
+  PRIVATE_MEMORY: 'RIGHT',
   COMFORT: 'LEFT',
   EXCITEMENT: 'RIGHT',
   THRILL: 'RIGHT',
+  INDOOR: 'LEFT',
   INDOOR_DATE: 'LEFT',
+  OUTDOOR: 'RIGHT',
   OUTDOOR_DATE: 'RIGHT',
+  MODERATE_JEALOUSY: 'LEFT',
   SLIGHT_JEALOUSY_OK: 'LEFT',
   COOL_AND_CALM: 'RIGHT',
+  COOL_ATTITUDE: 'RIGHT',
+  COMFORTABLE_DAILY: 'LEFT',
   COMFY_DAILY: 'LEFT',
+  NEW_EXPERIENCE: 'RIGHT',
   ACTIVE_DATE: 'RIGHT',
+  CONSIDERATION: 'LEFT',
   CONSIDERATE: 'LEFT',
+  STRONG_OPINION: 'RIGHT',
   LEADERSHIP: 'RIGHT',
+  MIX_WELL: 'LEFT',
   MIX_WITH_FRIENDS: 'LEFT',
+  SEPARATE_CIRCLE: 'RIGHT',
   KEEP_DISTANCE: 'RIGHT',
 };
+
+const normalizeChoiceCode = (value: string | undefined): string =>
+  String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+
+const getChoiceSideByCode = (answer: string | undefined): 'LEFT' | 'RIGHT' | undefined =>
+  CHOICE_CODE_TO_SIDE[normalizeChoiceCode(answer)];
 
 const isNoFreeTicketError = (e: any) => {
   const status = e?.response?.status;
@@ -369,7 +393,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       const normalizedAnswer = normalizeQuestionKey(answer);
       const leftKey = normalizeQuestionKey(q.left);
       const rightKey = normalizeQuestionKey(q.right);
-      const selectedByCode = CHOICE_CODE_TO_SIDE[answer];
+      const selectedByCode = getChoiceSideByCode(answer);
       const selected: 'LEFT' | 'RIGHT' | null =
         selectedByCode ??
         (normalizedAnswer && normalizedAnswer === leftKey
@@ -392,6 +416,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           loveViewRes?.nickname,
           loveViewRes?.nickName,
         ) ?? '회원',
+      mbti: String(loveViewRes?.mbti ?? ''),
       requiredQA: [
         { question: '자기소개', answer: introText },
         { question: '연인에게 바라는 한 가지는?', answer: wantText },
@@ -664,6 +689,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
 
       navigation.navigate('LoveCodePreview', {
         nickname: card.nickname,
+        mbti: card.mbti,
         intro: card.requiredQA.find(q => q.question === '자기소개')?.answer,
         want: card.requiredQA.find(q => q.question === '연인에게 바라는 한 가지는?')?.answer,
         charm: card.requiredQA.find(q => q.question === '나를 설레게 하는 이성의 매력?')?.answer,
@@ -932,26 +958,26 @@ const styles = StyleSheet.create({
   },
   blindBlur: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(240,240,240,0.97)',
+    backgroundColor: 'rgba(240,240,240,0.995)',
   },
   blindLabel: {
     fontSize: 12,
     fontWeight: '900',
     color: '#111',
     marginBottom: 10,
-    opacity: 0.18,
+    opacity: 0.1,
   },
   blindText: {
     color: '#111',
     fontWeight: '900',
     textAlign: 'center',
-    opacity: 0.08,
-    letterSpacing: 3.6,
+    opacity: 0.04,
+    letterSpacing: 4.2,
     textShadowColor: '#000',
-    textShadowRadius: 16,
+    textShadowRadius: 18,
     textShadowOffset: { width: 2, height: 2 },
     lineHeight: 20,
-    transform: [{ scaleX: 0.82 }, { scaleY: 0.8 }],
+    transform: [{ scaleX: 0.78 }, { scaleY: 0.76 }],
   },
 
   petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9 },
