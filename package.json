@@ -6,6 +6,8 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
+    "metro:clean": "node scripts/reset-metro-cache.js",
+    "start:clean": "npm run metro:clean && react-native start --reset-cache",
     "start": "react-native start",
     "test": "jest"
   },

@@ -136,11 +136,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
   // =========================
   const trackWidthRef = useRef(0);
   const [trackWidth, setTrackWidth] = useState(0);
-  const [activeAgeHandle, setActiveAgeHandle] = useState<'min' | 'max'>('min');
+  const ageRangeRef = useRef(ageRange);
 
   const THUMB = 18; // 스샷 느낌으로 살짝 작게
   const usable = Math.max(1, trackWidth - THUMB);
-  const stepPx = usable / STEP_COUNT;
 
   const snapValue = (v: number) => Math.round(snapToAgeStep(v));
 
@@ -160,6 +159,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const minStartRef = useRef(ageRange.min);
   const maxStartRef = useRef(ageRange.max);
 
+  useEffect(() => {
+    ageRangeRef.current = ageRange;
+  }, [ageRange]);
+
   const onTrackLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
     trackWidthRef.current = w;
@@ -172,23 +175,21 @@ const FilterModal: React.FC<FilterModalProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        setActiveAgeHandle('min');
-        minStartRef.current = ageRange.min;
+        minStartRef.current = ageRangeRef.current.min;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
-        const stepDelta = Math.round(g.dx / Math.max(1, stepPx));
-        const nextMin = clamp(
-          snapValue(minStartRef.current + stepDelta),
-          MIN_AGE,
-          ageRange.max,
-        );
+        const usableWidth = Math.max(1, trackWidthRef.current - THUMB);
+        const stepPxNow = usableWidth / STEP_COUNT;
+        const stepDelta = Math.round(g.dx / Math.max(1, stepPxNow));
+        const currentMax = ageRangeRef.current.max;
+        const nextMin = clamp(snapValue(minStartRef.current + stepDelta), MIN_AGE, currentMax);
 
         setAgeRange(prev => ({ ...prev, min: nextMin }));
       },
       onPanResponderRelease: () => {
-        const snapped = snapValue(ageRange.min);
+        const snapped = snapValue(ageRangeRef.current.min);
         setAgeRange(prev => ({ ...prev, min: Math.min(snapped, prev.max) }));
       },
     }),
@@ -200,23 +201,21 @@ const FilterModal: React.FC<FilterModalProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        setActiveAgeHandle('max');
-        maxStartRef.current = ageRange.max;
+        maxStartRef.current = ageRangeRef.current.max;
       },
       onPanResponderMove: (_, g) => {
         if (!trackWidthRef.current) return;
 
-        const stepDelta = Math.round(g.dx / Math.max(1, stepPx));
-        const nextMax = clamp(
-          snapValue(maxStartRef.current + stepDelta),
-          ageRange.min,
-          MAX_AGE,
-        );
+        const usableWidth = Math.max(1, trackWidthRef.current - THUMB);
+        const stepPxNow = usableWidth / STEP_COUNT;
+        const stepDelta = Math.round(g.dx / Math.max(1, stepPxNow));
+        const currentMin = ageRangeRef.current.min;
+        const nextMax = clamp(snapValue(maxStartRef.current + stepDelta), currentMin, MAX_AGE);
 
         setAgeRange(prev => ({ ...prev, max: nextMax }));
       },
       onPanResponderRelease: () => {
-        const snapped = snapValue(ageRange.max);
+        const snapped = snapValue(ageRangeRef.current.max);
         setAgeRange(prev => ({ ...prev, max: Math.max(snapped, prev.min) }));
       },
     }),
@@ -234,10 +233,14 @@ const FilterModal: React.FC<FilterModalProps> = ({
   };
   const onTapAge = (age: number) => {
     setAgeRange(prev => {
-      if (activeAgeHandle === 'min') {
-        return { min: age, max: Math.max(age, prev.max) };
+      const distToMin = Math.abs(age - prev.min);
+      const distToMax = Math.abs(age - prev.max);
+
+      if (distToMin <= distToMax) {
+        return { min: clamp(age, MIN_AGE, prev.max), max: prev.max };
       }
-      return { min: Math.min(prev.min, age), max: age };
+
+      return { min: prev.min, max: clamp(age, prev.min, MAX_AGE) };
     });
   };
 
@@ -296,21 +299,6 @@ const FilterModal: React.FC<FilterModalProps> = ({
                 </TouchableOpacity>
               ))}
             </View>
-            <View style={styles.ageSelectRow}>
-              <TouchableOpacity
-                style={[styles.ageHandleBtn, activeAgeHandle === 'min' && styles.ageHandleBtnActive]}
-                onPress={() => setActiveAgeHandle('min')}
-              >
-                <Text style={styles.ageHandleText}>최소 {ageRange.min}세</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ageHandleBtn, activeAgeHandle === 'max' && styles.ageHandleBtnActive]}
-                onPress={() => setActiveAgeHandle('max')}
-              >
-                <Text style={styles.ageHandleText}>최대 {ageRange.max}세</Text>
-              </TouchableOpacity>
-            </View>
-
             {/* 흡연 */}
             <Text style={styles.blockTitle}>흡연</Text>
             <View style={styles.buttonGroup}>
@@ -448,27 +436,6 @@ const styles = StyleSheet.create({
   },
   tickText: { fontSize: 11, fontWeight: '800', color: '#111' },
   tickTextActive: { color: PINK, fontWeight: '900' },
-  ageSelectRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  ageHandleBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: BORDER,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  ageHandleBtnActive: {
-    borderColor: PINK,
-    backgroundColor: '#FFE8F1',
-  },
-  ageHandleText: { fontSize: 12, color: '#111', fontWeight: '800' },
-
   blockTitle: { marginTop: 14, fontSize: 14, fontWeight: '900', color: '#111' },
 
   buttonGroup: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
