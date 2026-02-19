@@ -248,7 +248,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.card, { height: SCREEN_H * 0.62 }]} onPress={() => {}}>
+        <Pressable style={[styles.card, { height: SCREEN_H * 0.45 }]} onPress={() => {}}>
           <View style={styles.header}>
             <Text style={styles.title}>조건 설정</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}>
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   defaultBtnText: { fontSize: 12, fontWeight: '800', color: '#111' },
 
   rangeWrap: {
-    marginTop: 12,
+    marginTop: 26,
     marginBottom: 8,
     height: 44,
     position: 'relative',
