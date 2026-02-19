@@ -14,6 +14,12 @@ import {
   LoveViewMatchDetailResponse,
   ExtraPhotoUnlockResponse,
   MatchSource,
+  ToMeSignalResponseDTO,
+  FromMeSignalResponseDTO,
+  ToMeSignalProfileDto,
+  FromMeSignalProfileDto,
+  RespondLikeRequestDTO,
+  RespondMessageRequestDTO,
 } from '../types/DatingAPI';
 
 class DatingApiService {
@@ -181,6 +187,40 @@ class DatingApiService {
       targetProfileId,
     });
     return this.unwrap<{ score: number }>(response.data);
+  }
+
+  async getReceivedInterests(): Promise<ToMeSignalProfileDto[]> {
+    try {
+      const response = await apiClient.get(API_ENDPOINTS_LIST.INTEREST_RECEIVED);
+      const data = this.unwrap<ToMeSignalResponseDTO>(response.data);
+      return Array.isArray(data?.profiles) ? data.profiles : [];
+    } catch (e: any) {
+      // 서버 철자 이슈(recieved) 호환 폴백
+      if (e?.response?.status === 404) {
+        const fallback = await apiClient.get('/api/interest/recieved');
+        const data = this.unwrap<ToMeSignalResponseDTO>(fallback.data);
+        return Array.isArray(data?.profiles) ? data.profiles : [];
+      }
+      throw e;
+    }
+  }
+
+  async getSentInterests(): Promise<FromMeSignalProfileDto[]> {
+    const response = await apiClient.get(API_ENDPOINTS_LIST.INTEREST_SENT);
+    const data = this.unwrap<FromMeSignalResponseDTO>(response.data);
+    return Array.isArray(data?.profiles) ? data.profiles : [];
+  }
+
+  // 서버 API 개발완료 후 UI 연결 예정
+  async respondLike(payload: RespondLikeRequestDTO): Promise<boolean> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.LIKE_RESPOND, payload);
+    return response.status >= 200 && response.status < 300;
+  }
+
+  // 서버 API 개발완료 후 UI 연결 예정
+  async respondMessage(payload: RespondMessageRequestDTO): Promise<boolean> {
+    const response = await apiClient.post(API_ENDPOINTS_LIST.MESSAGE_RESPOND, payload);
+    return response.status >= 200 && response.status < 300;
   }
 
 

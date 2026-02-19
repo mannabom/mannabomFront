@@ -66,6 +66,10 @@ export const API_ENDPOINTS_LIST = {
   MESSAGE_SEND: '/api/messageRequest/send',
   SCORE_IS_RECEIVED: '/api/score/isReceived',
   SCORE_RECEIVED: '/api/score/received',
+  INTEREST_RECEIVED: '/api/interest/received',
+  INTEREST_SENT: '/api/interest/sent',
+  LIKE_RESPOND: '/api/match/like/respond',
+  MESSAGE_RESPOND: '/api/match/message/respond',
 
 } as const;
 

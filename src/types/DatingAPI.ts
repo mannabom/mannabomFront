@@ -85,6 +85,53 @@ export interface CheckTingWalletResponse {
   additionalProfileNum: number;
 }
 
+export type InterestType = 'LIKE' | 'MESSAGE' | 'HIGH_SCORE';
+export type InterestMatchType = 'PROFILE' | 'LOVE_VIEW';
+
+export interface ToMeSignalProfileDto {
+  id: number;
+  profileId?: number;
+  type: InterestType;
+  matchType?: InterestMatchType | null;
+  fromUserNickname?: string;
+  fromUserImageUrl?: string | null;
+  message?: string | null;
+  receivedAt: string;
+}
+
+export interface FromMeSignalProfileDto {
+  id: number;
+  profileId?: number;
+  type: InterestType;
+  matchType?: InterestMatchType | null;
+  toUserNickname?: string;
+  toUserImageUrl?: string | null;
+  message?: string | null;
+  status?: 'PENDING' | 'REJECT' | 'REJECTED' | 'ACCEPT' | 'ACCEPTED' | null;
+  rejectReason?: string | null;
+  receivedAt: string;
+}
+
+export interface ToMeSignalResponseDTO {
+  profiles: ToMeSignalProfileDto[];
+}
+
+export interface FromMeSignalResponseDTO {
+  profiles: FromMeSignalProfileDto[];
+}
+
+export interface RespondLikeRequestDTO {
+  likeRequestId: number;
+  accepted: boolean;
+  rejectReason?: string;
+}
+
+export interface RespondMessageRequestDTO {
+  messageRequestId: number;
+  accepted: boolean;
+  rejectReason?: string;
+}
+
 export type MatchSource = 'PROFILE_MATCH' | 'LOVE_VIEW_MATCH';
 export type LikeStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 export type MessageStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
