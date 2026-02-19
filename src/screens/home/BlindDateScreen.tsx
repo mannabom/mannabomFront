@@ -1,5 +1,5 @@
 // src/screens/BlindDate/BlindDateScreen.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   View,
@@ -11,7 +11,7 @@ import {
   ImageBackground,
   Image,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import FilterModal from '../../components/common/FilterModal';
 
@@ -25,7 +25,9 @@ import {
 } from '../../types/DatingAPI';
 import { defaultFilterSettings } from '../../utils/DatingUtils';
 import { datingApiService } from '../../services/DatingApiService';
-import { API_BASE_URL } from '../../config/api';
+import apiClient from '../../services/apiClient';
+import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
+import { getProfilePreviewState } from '../../utils/ProfilePreviewStore';
 const petalImg = require('../../assets/images/petal.png');
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -266,8 +268,44 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     freeLoveViewNum: 0,
     additionalProfileNum: 0,
   });
-  const [isSubscribed] = useState<boolean>(true);
+  const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
   const isVip = tingBalance >= 200;
+
+  const refreshWalletInfo = useCallback(async () => {
+    try {
+      const wallet = await datingApiService.getTingWalletInfo();
+      setWalletInfo(wallet);
+      setTingBalance(wallet.tingNum ?? 0);
+      setCoinBalance(wallet.eventTingNum ?? 0);
+    } catch (e) {
+      console.warn('Failed to load ting wallet info', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWalletInfo();
+      const saved = getProfilePreviewState();
+      if (saved?.profiles?.length) {
+        const safeIdx = Math.max(0, Math.min(saved.index ?? 0, saved.profiles.length - 1));
+        const current = saved.profiles[safeIdx];
+        if (current?.profileId) {
+          setPreviewProfile({
+            profileId: current.profileId,
+            name: current.name,
+            nickname: current.nickname,
+            age: current.age,
+            mbti: current.mbti ?? '',
+            smoking: SmokingHabit.NON_SMOKER,
+            drinking: DrinkingHabit.NON_DRINKER,
+            photoUris: current.photoUris?.length ? current.photoUris : [''],
+            mainPhotoUrl: current.photoUris?.[0] ?? '',
+          });
+        }
+      }
+      return undefined;
+    }, [refreshWalletInfo]),
+  );
 
   React.useEffect(() => {
     let mounted = true;
@@ -283,6 +321,52 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       }
     };
     loadWallet();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const loadSubscription = async () => {
+      try {
+        const profileRes = await apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE);
+        const profileData: any = profileRes.data?.data ?? profileRes.data;
+        const profileSub = Boolean(
+          profileData?.isSubscribed ??
+            profileData?.subscribed ??
+            profileData?.profile?.isSubscribed ??
+            profileData?.profile?.subscribed ??
+            false,
+        );
+
+        let membershipSub: boolean | null = null;
+        try {
+          const membershipRes = await apiClient.get(API_ENDPOINTS_LIST.USER_MEMBERSHIP);
+          const membershipData: any = membershipRes.data?.data ?? membershipRes.data;
+          membershipSub = Boolean(
+            membershipData?.isSubscribed ??
+              membershipData?.subscribed ??
+              membershipData?.active ??
+              membershipData?.membershipActive ??
+              false,
+          );
+        } catch (membershipErr: any) {
+          if (membershipErr?.response?.status !== 404) {
+            console.warn('Failed to load membership info', membershipErr);
+          }
+        }
+
+        if (!mounted) return;
+        setIsSubscribed(membershipSub ?? profileSub);
+      } catch (e) {
+        if (!mounted) return;
+        setIsSubscribed(false);
+        console.warn('Failed to load subscription status', e);
+      }
+    };
+
+    loadSubscription();
     return () => {
       mounted = false;
     };
@@ -576,7 +660,23 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
 
   const openProfilePreview = async () => {
     try {
+      const saved = getProfilePreviewState();
       let profiles: PreviewModalProfile[] = mapProfilesForModal;
+      if (saved?.profiles?.length) {
+        profiles = saved.profiles.map(p => {
+          const matched = profileCards.find(card => card.profileId === p.profileId);
+          return {
+            profileId: p.profileId,
+            name: p.name ?? p.nickname,
+            nickname: p.nickname,
+            age: p.age,
+            mbti: p.mbti ?? '',
+            smoking: matched?.smoking ?? SmokingHabit.NON_SMOKER,
+            drinking: matched?.drinking ?? DrinkingHabit.NON_DRINKER,
+            photoUris: p.photoUris?.length ? p.photoUris : [''],
+          };
+        });
+      }
       if (!profiles.length && previewProfile) {
         profiles = [
           {
@@ -614,6 +714,9 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
 
       navigation.navigate('ProfilePreview', {
         profiles,
+        startIndex: saved?.index ?? 0,
+        ratedByProfileId: saved?.ratedByProfileId ?? {},
+        lockedRatedProfileIds: saved?.lockedRatedProfileIds ?? [],
         isVip,
         isSubscribed,
         tingBalance,
@@ -701,6 +804,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         isSubscribed,
         tingBalance,
         eventTingBalance: coinBalance,
+        freeProfileNum: walletInfo.freeProfileNum,
         freeLoveViewNum: walletInfo.freeLoveViewNum,
         additionalProfileNum: walletInfo.additionalProfileNum,
         page: 1,

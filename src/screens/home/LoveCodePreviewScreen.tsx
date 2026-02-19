@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -14,8 +14,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import BottomNavigationBar from '../../components/common/BottomNavigationBar';
+import { datingApiService } from '../../services/DatingApiService';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -60,10 +61,16 @@ export default function LoveCodePreviewScreen() {
 
   const isVip: boolean = route.params?.isVip ?? false;
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
-  const tingBalance: number = route.params?.tingBalance ?? 0;
-  const eventTingBalance: number = route.params?.eventTingBalance ?? 0;
-  const freeLoveViewNum: number = route.params?.freeLoveViewNum ?? 0;
-  const additionalProfileNum: number = route.params?.additionalProfileNum ?? 0;
+  const [tingBalance, setTingBalance] = useState<number>(route.params?.tingBalance ?? 0);
+  const [eventTingBalance, setEventTingBalance] = useState<number>(
+    route.params?.eventTingBalance ?? 0,
+  );
+  const [freeProfileNum, setFreeProfileNum] = useState<number>(
+    route.params?.freeProfileNum ?? route.params?.freeLoveViewNum ?? 0,
+  );
+  const [additionalProfileNum, setAdditionalProfileNum] = useState<number>(
+    route.params?.additionalProfileNum ?? 0,
+  );
 
   const singleFallbackCard: LoveCard = useMemo(
     () => ({
@@ -104,6 +111,25 @@ export default function LoveCodePreviewScreen() {
   const slideX = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const firstPaint = useRef(true);
+
+  const refreshWalletInfo = useCallback(async () => {
+    try {
+      const wallet = await datingApiService.getTingWalletInfo();
+      setTingBalance(wallet.tingNum ?? 0);
+      setEventTingBalance(wallet.eventTingNum ?? 0);
+      setFreeProfileNum(wallet.freeProfileNum ?? wallet.freeLoveViewNum ?? 0);
+      setAdditionalProfileNum(wallet.additionalProfileNum ?? 0);
+    } catch (e) {
+      console.warn('Failed to refresh loveview wallet info', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWalletInfo();
+      return undefined;
+    }, [refreshWalletInfo]),
+  );
 
   const current = useMemo(
     () => (cards.length ? cards[Math.min(index, cards.length - 1)] : singleFallbackCard),
@@ -215,7 +241,7 @@ export default function LoveCodePreviewScreen() {
           <View ref={metaRowRef} collapsable={false}>
             <TouchableOpacity style={styles.metaRow} activeOpacity={0.85} onPress={openCounterInfo}>
               <Image source={freeProfileImg} style={styles.metaIconLarge} />
-              <Text style={styles.metaTextLarge}>{freeLoveViewNum}</Text>
+              <Text style={styles.metaTextLarge}>{freeProfileNum}</Text>
               <Image source={paidProfileImg} style={styles.metaIconLarge} />
               <Text style={[styles.metaTextLarge, { color: '#E76A8C' }]}>{additionalProfileNum}</Text>
             </TouchableOpacity>
