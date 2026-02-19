@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,11 +12,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import BottomNavigationBar from '../../components/common/BottomNavigationBar';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_BASE_URL } from '../../config/api';
 import { DrinkingHabit, ProfileMatchConditionRequest, SmokingHabit } from '../../types/DatingAPI';
+import { getProfilePreviewState, setProfilePreviewState } from '../../utils/ProfilePreviewStore';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -78,12 +79,17 @@ const extractPhotoUris = (raw: any): string[] => {
 export default function ProfilePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const savedState = getProfilePreviewState();
 
-  const [profiles, setProfiles] = useState<ProfileCard[]>(route.params?.profiles ?? []);
+  const [profiles, setProfiles] = useState<ProfileCard[]>(
+    savedState?.profiles?.length ? savedState.profiles : route.params?.profiles ?? [],
+  );
   const isVip: boolean = route.params?.isVip ?? false;
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
   const [tingBalance, setTingBalance] = useState<number>(route.params?.tingBalance ?? 0);
-  const eventTingBalance: number = route.params?.eventTingBalance ?? 0;
+  const [eventTingBalance, setEventTingBalance] = useState<number>(
+    route.params?.eventTingBalance ?? 0,
+  );
   const [freeProfileNum, setFreeProfileNum] = useState<number>(route.params?.freeProfileNum ?? 5);
   const [additionalProfileNum, setAdditionalProfileNum] = useState<number>(
     route.params?.additionalProfileNum ?? 5,
@@ -102,20 +108,62 @@ export default function ProfilePreviewScreen() {
       DrinkingHabit.FREQUENT_DRINKER,
     ],
   };
-  const noCards: boolean = route.params?.noCards ?? profiles.length === 0;
+  const noCards: boolean = profiles.length === 0;
 
-  const [index, setIndex] = useState(0);
-  const [rated, setRated] = useState(0);
+  const [index, setIndex] = useState<number>(() => {
+    const seed = savedState?.index ?? route.params?.startIndex ?? 0;
+    const maxIdx = Math.max(0, (savedState?.profiles?.length ?? route.params?.profiles?.length ?? 1) - 1);
+    return Math.max(0, Math.min(seed, maxIdx));
+  });
+  const [ratedByProfileId, setRatedByProfileId] = useState<Record<number, number>>(
+    savedState?.ratedByProfileId ?? route.params?.ratedByProfileId ?? {},
+  );
+  const [lockedRatedProfileIds, setLockedRatedProfileIds] = useState<number[]>(
+    savedState?.lockedRatedProfileIds ?? route.params?.lockedRatedProfileIds ?? [],
+  );
   const [shortageVisible, setShortageVisible] = useState(false);
   const [purchasing, setPurchasing] = useState<1 | 5 | null>(null);
   const [counterInfoVisible, setCounterInfoVisible] = useState(false);
   const [metaAnchor, setMetaAnchor] = useState({ x: 18, y: 120, width: 120, height: 28 });
   const metaRowRef = React.useRef<View>(null);
 
+  const refreshWalletInfo = useCallback(async () => {
+    try {
+      const wallet = await datingApiService.getTingWalletInfo();
+      setTingBalance(wallet.tingNum ?? 0);
+      setEventTingBalance(wallet.eventTingNum ?? 0);
+      setFreeProfileNum(wallet.freeProfileNum ?? 0);
+      setAdditionalProfileNum(wallet.additionalProfileNum ?? 0);
+    } catch (e) {
+      console.warn('Failed to refresh profile wallet info', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWalletInfo();
+      return undefined;
+    }, [refreshWalletInfo]),
+  );
+
+  React.useEffect(() => {
+    const safeIndex = Math.max(0, Math.min(index, Math.max(0, profiles.length - 1)));
+    setProfilePreviewState({
+      profiles,
+      index: safeIndex,
+      ratedByProfileId,
+      lockedRatedProfileIds,
+    });
+  }, [profiles, index, ratedByProfileId, lockedRatedProfileIds]);
+
   const current = useMemo(
     () => (profiles.length ? profiles[Math.min(index, profiles.length - 1)] : null),
     [profiles, index],
   );
+  const currentRated = current ? ratedByProfileId[current.profileId] ?? 0 : 0;
+  const isCurrentRatingLocked = current
+    ? lockedRatedProfileIds.includes(current.profileId)
+    : false;
   const displayName = useMemo(() => {
     const raw = current?.name ?? current?.nickname ?? '';
     return raw.trim() && raw.trim() !== '익명' ? raw : '회원';
@@ -143,13 +191,17 @@ export default function ProfilePreviewScreen() {
           .filter(p => p.profileId > 0);
 
         if (mappedRaw.length) {
-          setProfiles(prev => {
-            const existing = new Set(prev.map(item => item.profileId));
-            const deduped = mappedRaw.filter(item => !existing.has(item.profileId));
-            if (!deduped.length) return prev;
-            return [...prev, ...deduped];
-          });
-          return true;
+          const existing = new Set(profiles.map(item => item.profileId));
+          const ratedSet = new Set(lockedRatedProfileIds);
+          const deduped = mappedRaw.filter(
+            item => !existing.has(item.profileId) && !ratedSet.has(item.profileId),
+          );
+          if (!deduped.length) {
+            // 오늘 목록이 와도 이미 본/평가한 카드뿐이면 다음 소스를 시도한다.
+          } else {
+            setProfiles(prev => [...prev, ...deduped]);
+            return true;
+          }
         }
       }
 
@@ -162,6 +214,8 @@ export default function ProfilePreviewScreen() {
 
       const profileId = toPositiveId(raw?.profileId, raw?.userId, raw?.id);
       if (!profileId) return false;
+      if (profiles.some(item => item.profileId === profileId)) return false;
+      if (lockedRatedProfileIds.includes(profileId)) return false;
 
       const mapped: ProfileCard = {
         profileId,
@@ -172,12 +226,7 @@ export default function ProfilePreviewScreen() {
         photoUris: extractPhotoUris(raw),
       };
 
-      setProfiles(prev => {
-        if (prev.some(item => item.profileId === mapped.profileId)) {
-          return prev;
-        }
-        return [...prev, mapped];
-      });
+      setProfiles(prev => [...prev, mapped]);
       return true;
     } catch {
       return false;
@@ -185,35 +234,38 @@ export default function ProfilePreviewScreen() {
   };
   const handleNext = async () => {
     if (!profiles.length) return;
-    if (rated <= 0) {
+    if (currentRated <= 0) {
       return;
     }
-    if (current?.profileId) {
+    if (!current?.profileId) return;
+
+    const currentProfileId = current.profileId;
+    const alreadyLocked = lockedRatedProfileIds.includes(currentProfileId);
+    if (!alreadyLocked) {
       try {
         await datingApiService.rateProfile({
-          targetProfileId: current.profileId,
-          score: rated,
+          targetProfileId: currentProfileId,
+          score: currentRated,
         });
       } catch {
         // 별점 저장 실패여도 UX를 막지 않는다.
       }
+      setLockedRatedProfileIds(prev =>
+        prev.includes(currentProfileId) ? prev : [...prev, currentProfileId],
+      );
+      await refreshWalletInfo();
     }
 
     const nextIndex = index + 1;
     if (nextIndex < profiles.length) {
       setIndex(nextIndex);
-      setRated(0);
       return;
     }
+
     const loaded = await loadMoreProfiles();
     if (loaded) {
+      await refreshWalletInfo();
       setIndex(nextIndex);
-      setRated(0);
-      return;
-    }
-    setRated(0);
-    if (profiles.length > 1) {
-      goNext();
       return;
     }
     Alert.alert('안내', '다음으로 보여줄 일반 프로필이 아직 없어요.');
@@ -364,14 +416,21 @@ export default function ProfilePreviewScreen() {
 
             <View style={styles.heartRow}>
               {[1, 2, 3, 4, 5].map(n => (
-                <Pressable key={n} onPress={() => setRated(n)}>
-                  <Text style={[styles.heart, n <= rated && styles.heartActive]}>♡</Text>
+                <Pressable
+                  key={n}
+                  onPress={() => {
+                    if (!current?.profileId || isCurrentRatingLocked) return;
+                    setRatedByProfileId(prev => ({ ...prev, [current.profileId]: n }));
+                  }}
+                  disabled={isCurrentRatingLocked}
+                >
+                  <Text style={[styles.heart, n <= currentRated && styles.heartActive]}>♡</Text>
                 </Pressable>
               ))}
             </View>
 
             <TouchableOpacity
-              style={[styles.profileBtn, rated <= 0 && styles.profileBtnDisabled]}
+              style={[styles.profileBtn, currentRated <= 0 && styles.profileBtnDisabled]}
               activeOpacity={0.9}
               onPress={() => {
                 if (!current?.profileId) return;
@@ -383,7 +442,7 @@ export default function ProfilePreviewScreen() {
                   previewImageUrl: current.photoUris?.[0],
                 });
               }}
-              disabled={rated <= 0}
+              disabled={currentRated <= 0}
             >
               <Text style={styles.profileBtnText}>프로필 보기</Text>
             </TouchableOpacity>

@@ -34,6 +34,9 @@ export type RootStackParamList = {
       mbti?: string;
       photoUris?: string[];
     }>;
+    startIndex?: number;
+    ratedByProfileId?: Record<number, number>;
+    lockedRatedProfileIds?: number[];
     isVip: boolean;
     isSubscribed: boolean;
     tingBalance: number;
@@ -80,6 +83,7 @@ export type RootStackParamList = {
     isSubscribed: boolean;
     tingBalance: number;
     eventTingBalance: number;
+    freeProfileNum?: number;
     freeLoveViewNum?: number;
     additionalProfileNum?: number;
     page?: number;

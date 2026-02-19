@@ -42,6 +42,7 @@ const STEP_COUNT = 9; // 20~29 사이 9칸
 const STEP_SIZE = (MAX_AGE - MIN_AGE) / STEP_COUNT; // 1
 const DEFAULT_MIN = 20;
 const DEFAULT_MAX = 29;
+const AGE_BADGE_W = 30;
 const AGE_VALUES = Array.from(
   { length: MAX_AGE - MIN_AGE + 1 },
   (_, i) => MIN_AGE + i,
@@ -265,6 +266,31 @@ const FilterModal: React.FC<FilterModalProps> = ({
             </View>
 
             <View style={styles.rangeWrap} onLayout={onTrackLayout}>
+              {trackWidth > 0 && (
+                <>
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.ageBadge,
+                      { left: minX + THUMB / 2 - AGE_BADGE_W / 2 },
+                    ]}
+                  >
+                    <Text style={styles.ageBadgeText}>{ageRange.min}</Text>
+                    <View style={styles.ageBadgeTail} />
+                  </View>
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.ageBadge,
+                      { left: maxX + THUMB / 2 - AGE_BADGE_W / 2 },
+                    ]}
+                  >
+                    <Text style={styles.ageBadgeText}>{ageRange.max}</Text>
+                    <View style={styles.ageBadgeTail} />
+                  </View>
+                </>
+              )}
+
               <View style={styles.track} />
 
               {trackWidth > 0 && (
@@ -283,25 +309,9 @@ const FilterModal: React.FC<FilterModalProps> = ({
               <View style={[styles.thumb, { left: maxX }]} {...maxPan.panHandlers} />
             </View>
 
-            {/* tick 20~29 전체 표시 */}
-            <View style={styles.ticks}>
-              {AGE_VALUES.map(age => (
-                <TouchableOpacity key={age} style={styles.tickItem} onPress={() => onTapAge(age)}>
-                  <View style={styles.tickMark} />
-                  <Text
-                    style={[
-                      styles.tickText,
-                      age >= ageRange.min && age <= ageRange.max && styles.tickTextActive,
-                    ]}
-                  >
-                    {age}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
             {/* 흡연 */}
             <Text style={styles.blockTitle}>흡연</Text>
-            <View style={styles.buttonGroup}>
+            <View style={[styles.buttonGroup, styles.lastButtonGroup]}>
               {allSmokingHabits.map(habit => {
                 const active = selectedSmoking.includes(habit);
                 return (
@@ -378,7 +388,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '900', color: '#111' },
   close: { fontSize: 16, color: '#111' },
 
-  content: { paddingHorizontal: 16, paddingBottom: 8 },
+  content: { paddingHorizontal: 16, paddingBottom: 0 },
 
   sectionRow: {
     flexDirection: 'row',
@@ -399,20 +409,50 @@ const styles = StyleSheet.create({
 
   rangeWrap: {
     marginTop: 12,
-    height: 28,
-    justifyContent: 'center',
+    marginBottom: 8,
+    height: 44,
+    position: 'relative',
   },
-  track: { height: 6, borderRadius: 6, backgroundColor: '#E5E7EB' },
+  ageBadge: {
+    position: 'absolute',
+    top: -20,
+    width: AGE_BADGE_W,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F2E8EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  ageBadgeText: { fontSize: 12, fontWeight: '900', color: '#333' },
+  ageBadgeTail: {
+    position: 'absolute',
+    bottom: -4,
+    left: AGE_BADGE_W / 2 - 4,
+    width: 8,
+    height: 8,
+    backgroundColor: '#F2E8EA',
+    transform: [{ rotate: '45deg' }],
+  },
+  track: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 19,
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: '#E5E7EB',
+  },
   selectedTrack: {
     position: 'absolute',
+    top: 19,
     height: 6,
     borderRadius: 6,
     backgroundColor: PINK,
-    top: 11,
   },
   thumb: {
     position: 'absolute',
-    top: 5,
+    top: 13,
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -420,25 +460,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: PINK,
   },
-
-  ticks: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  tickItem: { alignItems: 'center', width: 24 },
-  tickMark: {
-    width: 1,
-    height: 6,
-    backgroundColor: '#C5CAD3',
-    marginBottom: 3,
-  },
-  tickText: { fontSize: 11, fontWeight: '800', color: '#111' },
-  tickTextActive: { color: PINK, fontWeight: '900' },
   blockTitle: { marginTop: 14, fontSize: 14, fontWeight: '900', color: '#111' },
 
-  buttonGroup: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  buttonGroup: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
+  lastButtonGroup: { marginBottom: 0 },
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -447,7 +472,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     backgroundColor: '#FFFFFF',
     marginRight: 10,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   pillActive: {
     backgroundColor: '#FFE8F1',
@@ -456,7 +481,7 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 12, fontWeight: '800', color: '#111' },
   pillTextActive: { color: '#111', fontWeight: '900' },
 
-  footer: { padding: 14 },
+  footer: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 0 },
   saveBtn: {
     height: 44,
     borderRadius: 12,

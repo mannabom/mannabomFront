@@ -38,6 +38,8 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const likeableImg = require('../../assets/images/likeable.png');
 const interestImg = require('../../assets/images/interest.png');
 const letterImg = require('../../assets/images/letter.png');
+const letter2Img = require('../../assets/images/Letter2.png');
+const giftImg = require('../../assets/images/Gift.png');
 const tingIconImg = require('../../assets/images/Ting.png');
 
 type DetailData = {
@@ -117,6 +119,13 @@ const normalizeChoiceCode = (value: string | undefined): string =>
 const getChoiceSideByCode = (answer: string | undefined): 'LEFT' | 'RIGHT' | undefined =>
   CHOICE_CODE_TO_SIDE[normalizeChoiceCode(answer)];
 
+const isInsufficientTingError = (e: any): boolean => {
+  const status = e?.response?.status;
+  const message = String(e?.response?.data?.message ?? '').toLowerCase();
+  if (status === 402) return true;
+  return message.includes('팅') && (message.includes('부족') || message.includes('없'));
+};
+
 const BODY_TYPE_LABELS: Record<string, string> = {
   SLIM: '마름',
   AVERAGE: '보통',
@@ -192,9 +201,35 @@ const parseDetail = (
     nickname: String(raw?.nickname ?? raw?.nickName ?? previewName ?? '회원'),
     age: Number(raw?.age ?? 0),
     mbti: String(raw?.mbti ?? raw?.MBTI ?? previewMbti ?? ''),
-    height: Number(raw?.height ?? 0) || undefined,
-    bodyType: String(raw?.bodyType ?? ''),
-    university: String(raw?.university ?? raw?.school ?? raw?.schoolName ?? ''),
+    height:
+      Number(
+        raw?.height ??
+          raw?.profile?.height ??
+          raw?.userProfile?.height ??
+          0,
+      ) || undefined,
+    bodyType: String(
+      raw?.bodyType ??
+        raw?.bodyShape ??
+        raw?.physique ??
+        raw?.profile?.bodyType ??
+        raw?.profile?.bodyShape ??
+        raw?.userProfile?.bodyType ??
+        '',
+    ),
+    university: String(
+      raw?.university ??
+        raw?.universityName ??
+        raw?.school ??
+        raw?.schoolName ??
+        raw?.college ??
+        raw?.profile?.university ??
+        raw?.profile?.universityName ??
+        raw?.profile?.school ??
+        raw?.profile?.schoolName ??
+        raw?.userProfile?.university ??
+        '',
+    ),
     region: regionText || mergedRegion,
     smoking: raw?.smoking ?? raw?.smokingHabit,
     drinking: raw?.drinking ?? raw?.drinkingHabit,
@@ -387,9 +422,16 @@ export default function MatchDetailScreen() {
       setWallet(nextWallet);
       setLikeConfirmVisible(false);
       setLikeSuccessVisible(true);
-    } catch {
+    } catch (e: any) {
       setLikeConfirmVisible(false);
-      setLikeShortageVisible(true);
+      if (isInsufficientTingError(e)) {
+        setLikeShortageVisible(true);
+        return;
+      }
+      const msg =
+        String(e?.response?.data?.message ?? '').replace(/^'+|'+$/g, '') ||
+        '호감 전송에 실패했어요. 잠시 후 다시 시도해 주세요.';
+      Alert.alert('안내', msg);
     } finally {
       setSendingLike(false);
     }
@@ -440,10 +482,23 @@ export default function MatchDetailScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{isProfileSource ? '프로필' : '연애관 프로필'}</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.85}>
-            <Text style={styles.backBtnText}>뒤로가기</Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack?.()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('MainTabs');
+              }
+            }}
+            style={styles.backBtn}
+            activeOpacity={0.85}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Text style={styles.backBtnText}>{'<'}</Text>
           </TouchableOpacity>
+          <Text style={styles.headerTitle} pointerEvents="none">
+            {isProfileSource ? '프로필' : '연애관 프로필'}
+          </Text>
         </View>
 
         {isProfileSource ? (
@@ -642,9 +697,9 @@ export default function MatchDetailScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setMessageVisible(false)}>
           <Pressable style={styles.messageModalCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>메시지 보내기</Text>
+              <Text style={[styles.modalTitle, styles.messageModalTitle]}>메시지 보내기</Text>
               <TouchableOpacity onPress={() => setMessageVisible(false)}>
-                <Text style={styles.modalClose}>✕</Text>
+                <Text style={[styles.modalClose, styles.messageModalClose]}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -657,7 +712,7 @@ export default function MatchDetailScreen() {
                 placeholder="자유롭게 입력해주세요."
                 placeholderTextColor="#B9B9B9"
               />
-              <Image source={letterImg} style={styles.messageLetter} />
+              <Image source={letter2Img} style={styles.messageLetter} />
               {selectedGift ? (
                 <View style={styles.giftTag}>
                   <Text style={styles.giftTagText}>{`선물 - ${selectedGift.title} ${selectedGift.price}`}</Text>
@@ -686,7 +741,7 @@ export default function MatchDetailScreen() {
                 style={styles.giftBtn}
                 onPress={() => navigation.navigate('Store', { pickGiftMode: true })}
               >
-                <Text style={styles.giftBtnIcon}>🎁</Text>
+                <Image source={giftImg} style={styles.giftBtnIcon} />
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -742,32 +797,40 @@ const styles = StyleSheet.create({
   header: {
     height: 48,
     paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#EFEFEF',
     backgroundColor: '#FFFFFF',
+    position: 'relative',
   },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#111111' },
+  headerTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111111',
+  },
   backBtn: {
-    paddingHorizontal: 10,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#DEDEDE',
-    alignItems: 'center',
+    position: 'absolute',
+    left: 8,
+    top: 0,
+    bottom: 0,
+    width: 32,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    zIndex: 2,
+    elevation: 2,
   },
-  backBtnText: { fontSize: 12, fontWeight: '700', color: '#111' },
+  backBtnText: { fontSize: 24, fontWeight: '500', color: '#111' },
   scrollContent: { paddingBottom: 24 },
 
   heroWrap: { width: SCREEN_W, height: 420, backgroundColor: '#FFFFFF' },
   heroImage: { width: SCREEN_W, height: 420, resizeMode: 'cover' },
   photoDots: { position: 'absolute', top: 14, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center' },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF88', marginHorizontal: 4 },
-  dotActive: { backgroundColor: '#FFFFFF' },
+  dotActive: { backgroundColor: '#FF5D60' },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.42)',
@@ -859,10 +922,21 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', paddingHorizontal: 16 },
   modalCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 16 },
   modalCardSmall: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, maxWidth: 360 },
-  messageModalCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 16 },
+  messageModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    alignSelf: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalTitle: { fontSize: 18, color: '#101B4D', fontWeight: '900' },
   modalClose: { fontSize: 32, color: '#333' },
+  messageModalTitle: { fontSize: 17 },
+  messageModalClose: { fontSize: 28 },
   modalMessage: { marginTop: 12, fontSize: 17, lineHeight: 28, color: '#111' },
   modalDoneText: { marginTop: 20, marginBottom: 16, textAlign: 'center', fontSize: 19, fontWeight: '700', color: '#111' },
   pinkActionBtn: {
@@ -905,60 +979,63 @@ const styles = StyleSheet.create({
   pinkDoneText: { fontSize: 18, fontWeight: '800', color: '#111' },
 
   messageInputWrap: {
-    marginTop: 12,
+    marginTop: 8,
     borderWidth: 1,
     borderColor: '#B7B7B7',
-    borderRadius: 22,
-    minHeight: 156,
-    overflow: 'hidden',
+    borderRadius: 18,
+    minHeight: 122,
+    overflow: 'visible',
   },
   messageInput: {
-    minHeight: 130,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    fontSize: 20,
+    minHeight: 108,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingRight: 14,
+    fontSize: 14,
     color: '#111',
   },
   messageLetter: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    right: 8,
-    bottom: 8,
+    width: 69,
+    height: 48,
+    right: -18,
+    bottom: -12,
+    transform: [{ rotate: '-18deg' }],
     resizeMode: 'contain',
-    opacity: 0.95,
+    opacity: 1,
+    zIndex: 2,
   },
   giftTag: {
-    height: 32,
+    height: 28,
     backgroundColor: '#F4C2CC',
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
-    paddingHorizontal: 12,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   giftTagText: { fontSize: 12, fontWeight: '700', color: '#111', maxWidth: '90%' },
   giftTagX: { fontSize: 18, fontWeight: '900', color: '#111' },
-  messageActions: { marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  messageActions: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sendBtn: {
-    width: 186,
-    height: 68,
-    borderRadius: 18,
+    width: 158,
+    height: 58,
+    borderRadius: 16,
     backgroundColor: '#F5B3C2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
   },
-  sendBtnText: { fontSize: 20, fontWeight: '800', color: '#111' },
+  sendBtnText: { fontSize: 16, fontWeight: '800', color: '#111' },
   giftBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 16,
     backgroundColor: '#F5E7B3',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  giftBtnIcon: { fontSize: 34 },
+  giftBtnIcon: { width: 34, height: 34, resizeMode: 'contain' },
 });
