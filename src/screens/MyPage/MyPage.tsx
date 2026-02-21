@@ -1,5 +1,5 @@
 // src/screens/MyPage/MyPage.tsx
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import ConfirmModal from '../../components/common/ConfirmModal';
 import apiClient from '../../services/apiClient';
+import { datingApiService } from '../../services/DatingApiService';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 
 import type { RootStackParamList } from '../../navigation/types';
@@ -40,6 +42,7 @@ type ServerProfile = {
   university?: string;
   profileImageUrl?: string;
   coins?: number;
+  eventTingNum?: number;
   isSubscribed?: boolean;
 };
 
@@ -93,12 +96,20 @@ export default function MyPage({ onLogout }: MyPageProps) {
           data?.profileImage ??
           data?.profile?.profileImageUrl,
         coins: data?.coins ?? data?.points ?? data?.myCoins ?? 0,
+        eventTingNum: data?.eventTingNum ?? 0,
         isSubscribed: data?.isSubscribed ?? data?.subscribed ?? false,
       };
 
       setProfile(nextProfile);
+      const profileSubscribed = Boolean(
+        data?.isSubscribed ??
+          data?.subscribed ??
+          data?.profile?.isSubscribed ??
+          data?.profile?.subscribed ??
+          false,
+      );
       setCoins(Number(nextProfile.coins ?? 0));
-      setIsSubscribed(Boolean(nextProfile.isSubscribed ?? false));
+      setIsSubscribed(profileSubscribed);
 
       // 2) 메인 사진
       try {
@@ -124,26 +135,20 @@ export default function MyPage({ onLogout }: MyPageProps) {
         setMainPhotoUrl(null);
       }
 
-      // 3) 구독 여부
+      // 3) 보유 팅(지갑)
       try {
-        const membershipRes = await apiClient.get(API_ENDPOINTS_LIST.USER_MEMBERSHIP);
-        const membershipData: any = membershipRes.data?.data ?? membershipRes.data;
-        const active =
-          membershipData?.isSubscribed ??
-          membershipData?.subscribed ??
-          membershipData?.active ??
-          membershipData?.membershipActive;
-        setIsSubscribed(Boolean(active));
-      } catch (membershipErr: any) {
-        const status = membershipErr?.response?.status;
+        const wallet = await datingApiService.getTingWalletInfo();
+        const ownedTing = Number(wallet?.tingNum ?? 0);
+        const eventTing = Number(wallet?.eventTingNum ?? 0);
+        setCoins(ownedTing + eventTing);
+      } catch (walletErr: any) {
+        const status = walletErr?.response?.status;
         if (status === 401) {
-          console.warn('🔒 [MyPage] 구독 여부 401 - 로그인 필요');
+          console.warn('🔒 [MyPage] 지갑 조회 401 - 로그인 필요');
         } else {
-          console.error(
-            '❌ [MyPage] USER_MEMBERSHIP error:',
-            membershipErr?.response?.data ||
-              membershipErr?.message ||
-              membershipErr,
+          console.warn(
+            '⚠️ [MyPage] CHECK_TING_WALLET fallback to profile coins:',
+            walletErr?.response?.data || walletErr?.message || walletErr,
           );
         }
       }
@@ -171,9 +176,12 @@ export default function MyPage({ onLogout }: MyPageProps) {
     }
   }, [/* loadMyPage는 내부에서 참조 */]);
 
-  useEffect(() => {
-    loadMyPage();
-  }, [loadMyPage]);
+  useFocusEffect(
+    useCallback(() => {
+      loadMyPage();
+      return undefined;
+    }, [loadMyPage]),
+  );
 
   // ✅ 로그아웃 API 호출 후 로컬 정리 + 로그인 화면 이동
   // 백엔드: POST /api/auth/logout + body { deviceToken: String }
@@ -297,10 +305,10 @@ export default function MyPage({ onLogout }: MyPageProps) {
       {/* 보유 팅 + 구독 카드 */}
       <View style={styles.cardBox}>
         {[
-          { label: `보유 팅 : ${coins}개`, action: () => console.log('충전 이동') },
+          { label: `보유 팅 : ${coins}개`, action: () => navigation.navigate('Store') },
           {
             label: `구독 : ${isSubscribed ? '구독중' : '미구독'}`,
-            action: () => console.log('구독 이동'),
+            action: () => navigation.navigate('Store'),
           },
         ].map((item, idx, arr) => {
           const isLast = idx === arr.length - 1;
@@ -330,7 +338,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
             label: '1. 프로필 수정',
             action: () => navigation.navigate('ProfileDetail'),
           },
-          { label: '2. 스토어', action: () => console.log('스토어') },
+          { label: '2. 스토어', action: () => navigation.navigate('Store') },
           { label: '3. 고객센터', action: () => console.log('고객센터') },
           { label: '4. 앱정보', action: () => console.log('앱정보') },
           { label: '5. 로그아웃', action: () => setLogoutVisible(true) },
