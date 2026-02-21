@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  findNodeHandle,
   Image,
   Modal,
   NativeScrollEvent,
@@ -47,6 +48,7 @@ type ServerProfile = {
 };
 
 type QuestionAnswer = {
+  questionId?: number;
   question?: string;
   answer?: string;
 };
@@ -110,6 +112,34 @@ const TEXT_QA_ITEMS = [
   { label: '하고 싶은 데이트는?', matchKey: '하고 싶은 데이트', fallbackTitle: '하고 싶은 데이트는?' },
 ];
 
+const INVALID_FIELD_ORDER = [
+  'intro',
+  'ideal',
+  'charm',
+  'meaningOfLove',
+  'soulFood',
+  'dailyAndHoliday',
+  'idealDate',
+] as const;
+
+const QUESTION_ID_BY_KEYWORD: Array<{ key: string; id: number }> = [
+  { key: '자기소개', id: 1 },
+  { key: '설레게', id: 2 },
+  { key: '바라는', id: 3 },
+  { key: '연애란', id: 4 },
+  { key: '소울', id: 5 },
+  { key: '휴일', id: 6 },
+  { key: '하고 싶은 데이트', id: 7 },
+  { key: '싸웠을', id: 8 },
+  { key: '사진', id: 9 },
+  { key: '중요한 것은', id: 10 },
+  { key: '데이트에서', id: 11 },
+  { key: '질투', id: 12 },
+  { key: '이상적인 하루', id: 13 },
+  { key: '끌리는', id: 14 },
+  { key: '친구들과', id: 15 },
+];
+
 const labelBodyType = (v?: string) => BODY_TYPE_OPTIONS.find(o => o.value === v)?.label || '';
 
 const labelSmoking = (v?: string) => {
@@ -162,6 +192,12 @@ const splitMbti = (mbti?: string) => {
 const isMbtiValid = (arr: string[]) => arr.length === 4 && arr.every(x => x && x.length === 1);
 
 const norm = (s?: string) => (s || '').replace(/\s+/g, '').toLowerCase();
+const resolveQuestionId = (text?: string): number | undefined => {
+  const normalized = norm(text);
+  if (!normalized) return undefined;
+  const found = QUESTION_ID_BY_KEYWORD.find(item => normalized.includes(norm(item.key)));
+  return found?.id;
+};
 
 // ✅ 핵심: 3단 고정 스냅 (0 / 50 / 100)
 const snapToTri = (raw: number) => {
@@ -180,6 +216,8 @@ export default function ProfileDetail() {
   const [questionAnswers, setQuestionAnswers] = useState<QuestionAnswer[]>([]);
 
   const photoScrollRef = useRef<ScrollView>(null);
+  const formScrollRef = useRef<ScrollView>(null);
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
 
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
@@ -211,6 +249,7 @@ export default function ProfileDetail() {
   const [showBodyTypeDropdown, setShowBodyTypeDropdown] = useState(false);
   const [showRegionDropdown, setShowRegionDropdown] = useState(false);
   const [showDistrictDropdown, setShowDistrictDropdown] = useState(false);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   const openBasicModal = () => {
     setDraftHeight(form.height || '');
@@ -270,25 +309,45 @@ export default function ProfileDetail() {
   };
 
   const findQuestionTitleByKey = (keyword: string, fallback: string) => {
-    const found = questionAnswers.find(q => norm(q.question).includes(norm(keyword)))?.question;
+    const targetId = resolveQuestionId(keyword);
+    const found = questionAnswers.find(q =>
+      targetId ? q.questionId === targetId : norm(q.question).includes(norm(keyword)),
+    )?.question;
     return found || fallback;
   };
 
   const getAnswer = (keyword: string) => {
-    const found = questionAnswers.find(q => norm(q.question).includes(norm(keyword)))?.answer ?? '';
+    const targetId = resolveQuestionId(keyword);
+    const found = questionAnswers.find(q =>
+      targetId ? q.questionId === targetId : norm(q.question).includes(norm(keyword)),
+    )?.answer ?? '';
     return typeof found === 'string' ? found : '';
   };
 
   const upsertAnswer = (questionKey: string, questionTitleFallback: string, answer: string) => {
     setQuestionAnswers(prev => {
       const next = [...prev];
-      const idx = next.findIndex(q => norm(q.question).includes(norm(questionKey)));
+      const targetId =
+        resolveQuestionId(questionKey) ?? resolveQuestionId(questionTitleFallback);
+      const idx = next.findIndex(q =>
+        targetId
+          ? q.questionId === targetId
+          : norm(q.question).includes(norm(questionKey)),
+      );
 
       if (idx >= 0) {
-        next[idx] = { ...next[idx], answer };
+        next[idx] = {
+          ...next[idx],
+          questionId: next[idx].questionId ?? targetId,
+          answer,
+        };
       } else {
         const serverTitle = prev.find(q => norm(q.question).includes(norm(questionKey)))?.question;
-        next.push({ question: serverTitle || questionTitleFallback, answer });
+        next.push({
+          questionId: targetId,
+          question: serverTitle || questionTitleFallback,
+          answer,
+        });
       }
       return next;
     });
@@ -345,6 +404,8 @@ export default function ProfileDetail() {
 
       const answers: QuestionAnswer[] = (Array.isArray(answersRaw) ? answersRaw : [])
         .map((item: any, idx: number) => {
+          const qIdRaw = item?.question?.questionId ?? item?.questionId ?? item?.id;
+          const qId = Number.isFinite(Number(qIdRaw)) ? Number(qIdRaw) : undefined;
           const qText =
             item?.question?.question ??
             item?.question ??
@@ -360,7 +421,11 @@ export default function ProfileDetail() {
             item?.answerText ??
             '';
 
-          return { question: String(qText), answer: typeof aText === 'string' ? aText : String(aText ?? '') };
+          return {
+            questionId: qId,
+            question: String(qText),
+            answer: typeof aText === 'string' ? aText : String(aText ?? ''),
+          };
         })
         .filter(a => a.question && a.answer !== undefined);
 
@@ -422,40 +487,83 @@ export default function ProfileDetail() {
     return a.trim();
   }, [form.regionSido, form.regionSigungu]);
 
+  const getTextLength = (keyword: string) => getAnswer(keyword).trim().length;
+  const isOptionalTooShort = (keyword: string) => {
+    const len = getTextLength(keyword);
+    return len > 0 && len < OPTIONAL_MIN;
+  };
+
+  const setInputRef = (key: string) => (ref: TextInput | null) => {
+    inputRefs.current[key] = ref;
+  };
+
+  const focusInvalidField = (key: string): boolean => {
+    const input = inputRefs.current[key];
+    if (!input) return false;
+    input.focus();
+
+    const node = findNodeHandle(input);
+    const scrollToKeyboard = (formScrollRef.current as any)
+      ?.scrollResponderScrollNativeHandleToKeyboard;
+    if (node && typeof scrollToKeyboard === 'function') {
+      scrollToKeyboard(node, 80, true);
+    }
+
+    return true;
+  };
+
+  const focusTopmostInvalidField = (keys: string[]) => {
+    const firstByVisualOrder = INVALID_FIELD_ORDER.find(key => keys.includes(key));
+    if (!firstByVisualOrder) return;
+    focusInvalidField(firstByVisualOrder);
+  };
+
   const validateBeforeSave = () => {
     const intro = getAnswer('자기소개').trim();
     const charm = getAnswer('설레게').trim();
     const ideal = getAnswer('바라는').trim();
-
-    if (intro.length < REQUIRED_INTRO_MIN) {
-      Alert.alert('알림', `자기소개는 ${REQUIRED_INTRO_MIN}자 이상 입력해주세요.`);
-      return false;
-    }
-    if (charm.length < REQUIRED_SHORT_MIN) {
-      Alert.alert('알림', `나를 설레게 하는 매력은 ${REQUIRED_SHORT_MIN}자 이상 입력해주세요.`);
-      return false;
-    }
-    if (ideal.length < REQUIRED_SHORT_MIN) {
-      Alert.alert('알림', `연인에게 바라는 한가지는 ${REQUIRED_SHORT_MIN}자 이상 입력해주세요.`);
-      return false;
-    }
+    const invalidFieldKeys: string[] = [];
+    if (intro.length < REQUIRED_INTRO_MIN) invalidFieldKeys.push('intro');
+    if (ideal.length < REQUIRED_SHORT_MIN) invalidFieldKeys.push('ideal');
+    if (charm.length < REQUIRED_SHORT_MIN) invalidFieldKeys.push('charm');
+    if (isOptionalTooShort('연애란')) invalidFieldKeys.push('meaningOfLove');
+    if (isOptionalTooShort('소울')) invalidFieldKeys.push('soulFood');
+    if (isOptionalTooShort('휴일')) invalidFieldKeys.push('dailyAndHoliday');
+    if (isOptionalTooShort('하고 싶은 데이트')) invalidFieldKeys.push('idealDate');
 
     const mbtiArr = splitMbti(form.mbti);
-    if (!isMbtiValid(mbtiArr)) {
-      Alert.alert('알림', 'MBTI(4글자)를 입력/선택해주세요.');
-      return false;
-    }
-    return true;
+    const mbtiInvalid = !isMbtiValid(mbtiArr);
+
+    return {
+      isValid: invalidFieldKeys.length === 0 && !mbtiInvalid,
+      invalidFieldKeys,
+      mbtiInvalid,
+    };
   };
 
   const handleSave = async () => {
     if (saving) return;
-    if (!validateBeforeSave()) return;
+    setShowValidationErrors(true);
+    const validation = validateBeforeSave();
+    if (!validation.isValid) {
+      if (validation.invalidFieldKeys.length > 0) {
+        focusTopmostInvalidField(validation.invalidFieldKeys);
+      } else if (validation.mbtiInvalid) {
+        Alert.alert('알림', 'MBTI(4글자)를 입력/선택해주세요.');
+      }
+      return;
+    }
 
     setSaving(true);
     try {
       const mbtiValue = (form.mbti || '').toUpperCase();
-      const payloadQuestionAnswers = (questionAnswers || []).map(({ question, answer }) => ({ question, answer }));
+      const payloadQuestionAnswers = (questionAnswers || []).map(
+        ({ questionId, question, answer }) => ({
+          questionId: questionId ?? resolveQuestionId(question) ?? undefined,
+          question,
+          answer,
+        }),
+      );
 
       const payload = {
         profile: {
@@ -480,8 +588,13 @@ export default function ProfileDetail() {
         questionAnswers: payloadQuestionAnswers,
       };
 
-      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, payload);
+      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, {
+        ...payload,
+        // 서버 구현별 키 차이를 동시에 호환
+        questionAnswerList: payloadQuestionAnswers,
+      });
       Alert.alert('저장 완료', '프로필이 업데이트 되었어요.');
+      setShowValidationErrors(false);
       await loadProfile();
       navigation.goBack();
     } catch (e: any) {
@@ -580,7 +693,11 @@ export default function ProfileDetail() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={formScrollRef}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>프로필</Text>
         </View>
@@ -661,52 +778,78 @@ export default function ProfileDetail() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.cardTitle}>자기소개</Text>
-          <View style={styles.inputBox}>
-            <TextInput
-              style={styles.textArea}
-              multiline
-              placeholder="자기소개를 입력해주세요"
-              placeholderTextColor="#999"
-              value={getAnswer('자기소개')}
-              onChangeText={txt => upsertAnswer('자기소개', findQuestionTitleByKey('자기소개', '자기소개 (필수)'), txt)}
-              textAlignVertical="top"
-            />
+          <View>
+            <Text style={styles.cardTitle}>자기소개</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                ref={setInputRef('intro')}
+                style={styles.textArea}
+                multiline
+                placeholder="자기소개를 입력해주세요"
+                placeholderTextColor="#999"
+                value={getAnswer('자기소개')}
+                onChangeText={txt => upsertAnswer('자기소개', findQuestionTitleByKey('자기소개', '자기소개 (필수)'), txt)}
+                textAlignVertical="top"
+              />
+            </View>
+            {showValidationErrors && getTextLength('자기소개') < REQUIRED_INTRO_MIN ? (
+              <Text style={styles.hintTextError}>{REQUIRED_INTRO_MIN}자 이상 입력해주세요</Text>
+            ) : null}
           </View>
-          <Text style={styles.hintText}>{REQUIRED_INTRO_MIN}자 이상 입력해주세요</Text>
 
-          <Text style={[styles.cardTitle, { marginTop: 18 }]}>연인에게 바라는 한가지는?</Text>
-          <View style={styles.inputBox}>
-            <TextInput
-              style={styles.input}
-              placeholder="바라는 점을 입력해주세요"
-              placeholderTextColor="#999"
-              value={getAnswer('바라는')}
-              onChangeText={txt => upsertAnswer('바라는', findQuestionTitleByKey('바라는', '연인에게 꼭 바라는 한 가지는?'), txt)}
-            />
+          <View>
+            <Text style={[styles.cardTitle, { marginTop: 18 }]}>연인에게 바라는 한가지는?</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                ref={setInputRef('ideal')}
+                style={styles.input}
+                placeholder="바라는 점을 입력해주세요"
+                placeholderTextColor="#999"
+                value={getAnswer('바라는')}
+                onChangeText={txt => upsertAnswer('바라는', findQuestionTitleByKey('바라는', '연인에게 꼭 바라는 한 가지는?'), txt)}
+              />
+            </View>
+            {showValidationErrors && getTextLength('바라는') < REQUIRED_SHORT_MIN ? (
+              <Text style={styles.hintTextError}>{REQUIRED_SHORT_MIN}자 이상 입력해주세요</Text>
+            ) : null}
           </View>
-          <Text style={styles.hintText}>{REQUIRED_SHORT_MIN}자 이상 입력해주세요</Text>
 
-          <Text style={[styles.cardTitle, { marginTop: 18 }]}>나를 설레게 하는 이성의 매력</Text>
-          <View style={styles.inputBox}>
-            <TextInput
-              style={styles.input}
-              placeholder="매력 포인트를 입력해주세요"
-              placeholderTextColor="#999"
-              value={getAnswer('설레게')}
-              onChangeText={txt => upsertAnswer('설레게', findQuestionTitleByKey('설레게', '나를 설레게 하는 이성의 매력?'), txt)}
-            />
+          <View>
+            <Text style={[styles.cardTitle, { marginTop: 18 }]}>나를 설레게 하는 이성의 매력</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                ref={setInputRef('charm')}
+                style={styles.input}
+                placeholder="매력 포인트를 입력해주세요"
+                placeholderTextColor="#999"
+                value={getAnswer('설레게')}
+                onChangeText={txt => upsertAnswer('설레게', findQuestionTitleByKey('설레게', '나를 설레게 하는 이성의 매력?'), txt)}
+              />
+            </View>
+            {showValidationErrors && getTextLength('설레게') < REQUIRED_SHORT_MIN ? (
+              <Text style={styles.hintTextError}>{REQUIRED_SHORT_MIN}자 이상 입력해주세요</Text>
+            ) : null}
           </View>
-          <Text style={styles.hintText}>{REQUIRED_SHORT_MIN}자 이상 입력해주세요</Text>
         </View>
 
         <View style={styles.section}>
           {TEXT_QA_ITEMS.map((item, idx) => {
             const val = getAnswer(item.matchKey);
             const first = !val?.trim();
+            const fieldKey =
+              item.matchKey === '연애란'
+                ? 'meaningOfLove'
+                : item.matchKey === '소울'
+                  ? 'soulFood'
+                  : item.matchKey === '휴일'
+                    ? 'dailyAndHoliday'
+                    : 'idealDate';
 
             return (
-              <View key={item.matchKey} style={{ marginBottom: idx === TEXT_QA_ITEMS.length - 1 ? 0 : 18 }}>
+              <View
+                key={item.matchKey}
+                style={{ marginBottom: idx === TEXT_QA_ITEMS.length - 1 ? 0 : 18 }}
+              >
                 <Text style={styles.qTitle}>
                   {item.label}{' '}
                   {first ? <Text style={styles.qBonus}>(첫 입력 시 5포인트팅 지급!)</Text> : null}
@@ -714,6 +857,7 @@ export default function ProfileDetail() {
 
                 <View style={styles.inputBox}>
                   <TextInput
+                    ref={setInputRef(fieldKey)}
                     style={styles.textArea}
                     multiline
                     placeholder={first ? '내용을 입력해주세요! (첫 입력 시 5포인트팅 지급!)' : '내용을 입력해주세요'}
@@ -724,7 +868,9 @@ export default function ProfileDetail() {
                   />
                 </View>
 
-                <Text style={styles.hintText}>{OPTIONAL_MIN}자 이상 입력해주세요</Text>
+                {showValidationErrors && isOptionalTooShort(item.matchKey) ? (
+                  <Text style={styles.hintTextError}>{OPTIONAL_MIN}자 이상 입력해주세요</Text>
+                ) : null}
               </View>
             );
           })}
@@ -1078,7 +1224,7 @@ const styles = StyleSheet.create({
   },
   input: { height: 44, color: '#111' },
   textArea: { minHeight: 90, color: '#111' },
-  hintText: { marginTop: 6, color: '#999', fontSize: 12 },
+  hintTextError: { marginTop: 6, color: '#FF4D4F', fontSize: 12, fontWeight: '700' },
 
   qTitle: { fontSize: 14, fontWeight: '800', color: '#111', marginBottom: 8 },
   qBonus: { color: '#999', fontWeight: '700', fontSize: 12 },

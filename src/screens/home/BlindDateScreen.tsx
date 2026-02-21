@@ -340,25 +340,8 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             false,
         );
 
-        let membershipSub: boolean | null = null;
-        try {
-          const membershipRes = await apiClient.get(API_ENDPOINTS_LIST.USER_MEMBERSHIP);
-          const membershipData: any = membershipRes.data?.data ?? membershipRes.data;
-          membershipSub = Boolean(
-            membershipData?.isSubscribed ??
-              membershipData?.subscribed ??
-              membershipData?.active ??
-              membershipData?.membershipActive ??
-              false,
-          );
-        } catch (membershipErr: any) {
-          if (membershipErr?.response?.status !== 404) {
-            console.warn('Failed to load membership info', membershipErr);
-          }
-        }
-
         if (!mounted) return;
-        setIsSubscribed(membershipSub ?? profileSub);
+        setIsSubscribed(profileSub);
       } catch (e) {
         if (!mounted) return;
         setIsSubscribed(false);

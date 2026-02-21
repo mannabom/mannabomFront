@@ -5,6 +5,7 @@ import BottomNavigationBar from '../components/common/BottomNavigationBar';
 
 import BlindDateScreen from '../screens/home/BlindDateScreen';
 import MyPage from '../screens/MyPage/MyPage';
+import InterestScreen from '../screens/interest/InterestScreen';
 
 import { View, Text } from 'react-native';
 
@@ -52,7 +53,7 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
       </Tab.Screen>
 
       <Tab.Screen name="interest">
-        {() => <Placeholder label="관심" />}
+        {() => <InterestScreen />}
       </Tab.Screen>
 
       <Tab.Screen name="chat">
