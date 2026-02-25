@@ -126,6 +126,13 @@ const isInsufficientTingError = (e: any): boolean => {
   return message.includes('팅') && (message.includes('부족') || message.includes('없'));
 };
 
+const isAlreadyRequestedError = (e: any): boolean => {
+  const status = e?.response?.status;
+  const message = String(e?.response?.data?.message ?? '');
+  if (status !== 400) return false;
+  return message.includes('이미 요청');
+};
+
 const BODY_TYPE_LABELS: Record<string, string> = {
   SLIM: '마름',
   AVERAGE: '보통',
@@ -258,8 +265,32 @@ export default function MatchDetailScreen() {
   const [messageShortageVisible, setMessageShortageVisible] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [selectedGift, setSelectedGiftState] = useState<SelectedGift | null>(null);
+  const [likedAlreadySent, setLikedAlreadySent] = useState<boolean>(
+    !!route.params?.initialLikedSent,
+  );
+  const [messagedAlreadySent, setMessagedAlreadySent] = useState<boolean>(
+    !!route.params?.initialMessagedSent,
+  );
+  const [sentMessagePreview, setSentMessagePreview] = useState<string>(
+    String(route.params?.initialSentMessage ?? ''),
+  );
+  const [sentGiftPreview, setSentGiftPreview] = useState<string>(
+    String(route.params?.initialSentGiftName ?? ''),
+  );
+  const [sentGiftVisible, setSentGiftVisible] = useState(false);
   const [sendingLike, setSendingLike] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+
+  const handleBackPress = useCallback(() => {
+    if (navigation.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs', params: { screen: 'interest' } }],
+    });
+  }, [navigation]);
 
   const loadAll = useCallback(async () => {
     try {
@@ -279,6 +310,40 @@ export default function MatchDetailScreen() {
           route.params?.previewImageUrl,
         ),
       );
+      const detailAny: any = detailRes;
+      const likeSentByApi = Boolean(
+        detailAny?.liked?.sent ??
+          detailAny?.liked?.isSent ??
+          detailAny?.likeSent ??
+          detailAny?.isLikeSent ??
+          false,
+      );
+      const messageSentByApi = Boolean(
+        detailAny?.messaged?.sent ??
+          detailAny?.messaged?.isSent ??
+          detailAny?.messageSent ??
+          detailAny?.isMessageSent ??
+          false,
+      );
+      const sentMessageByApi = String(
+        detailAny?.messaged?.message ??
+          detailAny?.message ??
+          detailAny?.sentMessage ??
+          route.params?.initialSentMessage ??
+          '',
+      );
+      const sentGiftByApi = String(
+        detailAny?.messaged?.giftName ??
+          detailAny?.giftName ??
+          detailAny?.sentGiftName ??
+          route.params?.initialSentGiftName ??
+          '',
+      );
+
+      setLikedAlreadySent(prev => prev || likeSentByApi);
+      setMessagedAlreadySent(prev => prev || messageSentByApi);
+      setSentMessagePreview(sentMessageByApi);
+      setSentGiftPreview(sentGiftByApi);
     } catch (e: any) {
       Alert.alert('오류', '상대 상세 프로필을 불러오지 못했어요.');
       console.warn('load match detail failed', e?.response?.data || e?.message || e);
@@ -286,7 +351,16 @@ export default function MatchDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [navigation, route.params?.previewImageUrl, route.params?.previewMbti, route.params?.previewName, source, targetProfileId]);
+  }, [
+    navigation,
+    route.params?.previewImageUrl,
+    route.params?.previewMbti,
+    route.params?.previewName,
+    route.params?.initialSentGiftName,
+    route.params?.initialSentMessage,
+    source,
+    targetProfileId,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -410,6 +484,10 @@ export default function MatchDetailScreen() {
   };
 
   const handleSendLike = async () => {
+    if (likedAlreadySent) {
+      Alert.alert('안내', '이미 호감을 보낸 상대입니다.');
+      return;
+    }
     if (sendingLike) return;
     if (freeLikeLeft <= 0 && availableTing < likeCost) {
       setLikeConfirmVisible(false);
@@ -420,6 +498,7 @@ export default function MatchDetailScreen() {
       setSendingLike(true);
       const nextWallet = await datingApiService.sendLike(targetProfileId, source);
       setWallet(nextWallet);
+      setLikedAlreadySent(true);
       setLikeConfirmVisible(false);
       setLikeSuccessVisible(true);
     } catch (e: any) {
@@ -438,6 +517,10 @@ export default function MatchDetailScreen() {
   };
 
   const handleSendMessage = async () => {
+    if (messagedAlreadySent) {
+      setMessageVisible(true);
+      return;
+    }
     if (sendingMessage) return;
     if (!messageText.trim()) {
       Alert.alert('안내', '메시지를 입력해 주세요.');
@@ -452,17 +535,37 @@ export default function MatchDetailScreen() {
       setSendingMessage(true);
       const nextWallet = await datingApiService.sendMessage(targetProfileId, messageText.trim(), source);
       setWallet(nextWallet);
+      setMessagedAlreadySent(true);
+      setSentMessagePreview(messageText.trim());
+      setSentGiftPreview(selectedGift?.title ?? '');
       setMessageText('');
       setSelectedGiftState(null);
       setSelectedGift(null);
       setMessageVisible(false);
       setMessageSuccessVisible(true);
-    } catch {
+    } catch (e: any) {
       setMessageVisible(false);
-      setMessageShortageVisible(true);
+      if (isInsufficientTingError(e)) {
+        setMessageShortageVisible(true);
+        return;
+      }
+      if (isAlreadyRequestedError(e)) {
+        Alert.alert('안내', '이미 요청을 보낸 상대입니다.');
+        return;
+      }
+      const msg =
+        String(e?.response?.data?.message ?? '').replace(/^'+|'+$/g, '') ||
+        '메시지 전송에 실패했어요. 잠시 후 다시 시도해 주세요.';
+      Alert.alert('안내', msg);
     } finally {
       setSendingMessage(false);
     }
+  };
+
+  const handleClearSelectedGift = () => {
+    setSelectedGiftState(null);
+    setSelectedGift(null);
+    clearSelectedGift();
   };
 
   if (loading || !detail) {
@@ -476,6 +579,17 @@ export default function MatchDetailScreen() {
   const nameLine = `${detail.nickname}${detail.age ? `(${detail.age})` : ''}${detail.mbti ? `${detail.age ? ' ' : ''}${detail.mbti}` : ''}`;
   const heightText = detail.height ? `키 ${detail.height}cm` : '키 정보 없음';
   const bodyTypeText = detail.bodyType ? `체형 ${BODY_TYPE_LABELS[detail.bodyType] || detail.bodyType}` : '체형 정보 없음';
+  const fromInterestTab = route.params?.fromInterestTab as 'received' | 'sent' | undefined;
+  const interestEntryKind = route.params?.interestEntryKind as
+    | 'LIKE'
+    | 'MESSAGE'
+    | 'HIGH_SCORE'
+    | undefined;
+  const openedFromSentMessage = fromInterestTab === 'sent' && interestEntryKind === 'MESSAGE';
+  const openedFromSentLike = fromInterestTab === 'sent' && interestEntryKind === 'LIKE';
+  const hideLikeAction = openedFromSentMessage || openedFromSentLike;
+  const isMessageReadOnly = openedFromSentMessage || (!openedFromSentLike && messagedAlreadySent);
+  const messageActionIconSource = openedFromSentMessage ? letter2Img : likeableImg;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -483,13 +597,7 @@ export default function MatchDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => {
-              if (navigation.canGoBack?.()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate('MainTabs');
-              }
-            }}
+            onPress={handleBackPress}
             style={styles.backBtn}
             activeOpacity={0.85}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -556,14 +664,22 @@ export default function MatchDetailScreen() {
                 style={[styles.iconSquare, styles.messageSquare]}
                 onPress={() => setMessageVisible(true)}
               >
-                <Image source={likeableImg} style={[styles.actionIcon, styles.messageActionIcon]} />
+                <Image source={messageActionIconSource} style={[styles.actionIcon, styles.messageActionIcon]} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.iconSquare, styles.likeSquare]}
-                onPress={() => setLikeConfirmVisible(true)}
-              >
-                <Image source={interestImg} style={styles.actionIcon} />
-              </TouchableOpacity>
+              {!hideLikeAction ? (
+                <TouchableOpacity
+                  style={[styles.iconSquare, styles.likeSquare]}
+                  onPress={() => {
+                    if (likedAlreadySent) {
+                      Alert.alert('안내', '이미 호감을 보낸 상대입니다.');
+                      return;
+                    }
+                    setLikeConfirmVisible(true);
+                  }}
+                >
+                  <Image source={interestImg} style={styles.actionIcon} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
 
@@ -663,7 +779,16 @@ export default function MatchDetailScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.modalDoneText}>전송이 완료되었습니다!</Text>
-            <TouchableOpacity style={styles.pinkDoneBtn} onPress={() => setLikeSuccessVisible(false)}>
+            <TouchableOpacity
+              style={styles.pinkDoneBtn}
+              onPress={() => {
+                setLikeSuccessVisible(false);
+                navigation.navigate('MainTabs', {
+                  screen: 'interest',
+                  params: { initialTab: 'sent' },
+                });
+              }}
+            >
               <Text style={styles.pinkDoneText}>확인하러 가기</Text>
             </TouchableOpacity>
           </Pressable>
@@ -697,52 +822,90 @@ export default function MatchDetailScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setMessageVisible(false)}>
           <Pressable style={styles.messageModalCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, styles.messageModalTitle]}>메시지 보내기</Text>
+              <Text style={[styles.modalTitle, styles.messageModalTitle]}>
+                {isMessageReadOnly ? `${detail.nickname}님의 메시지` : '메시지 보내기'}
+              </Text>
               <TouchableOpacity onPress={() => setMessageVisible(false)}>
                 <Text style={[styles.modalClose, styles.messageModalClose]}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.messageInputWrap}>
-              <TextInput
-                style={styles.messageInput}
-                multiline
-                value={messageText}
-                onChangeText={setMessageText}
-                placeholder="자유롭게 입력해주세요."
-                placeholderTextColor="#B9B9B9"
-              />
-              <Image source={letter2Img} style={styles.messageLetter} />
-              {selectedGift ? (
-                <View style={styles.giftTag}>
-                  <Text style={styles.giftTagText}>{`선물 - ${selectedGift.title} ${selectedGift.price}`}</Text>
-                  <TouchableOpacity onPress={() => setSelectedGiftState(null)}>
-                    <Text style={styles.giftTagX}>✕</Text>
+            {isMessageReadOnly ? (
+              <View style={styles.sentMessageBox}>
+                <Text style={styles.sentMessageText}>
+                  {sentMessagePreview || '텍스트 란'}
+                </Text>
+                {sentGiftPreview ? (
+                  <TouchableOpacity style={styles.sentGiftViewBtn} onPress={() => setSentGiftVisible(true)}>
+                    <Text style={styles.sentGiftViewBtnText}>선물 보기</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              <>
+                <View style={styles.messageInputWrap}>
+                  <TextInput
+                    style={styles.messageInput}
+                    multiline
+                    value={messageText}
+                    onChangeText={setMessageText}
+                    placeholder="자유롭게 입력해주세요."
+                    placeholderTextColor="#B9B9B9"
+                  />
+                  {!selectedGift ? <Image source={letter2Img} style={styles.messageLetter} /> : null}
+                  {selectedGift ? (
+                    <View style={styles.giftTag}>
+                      <Text style={styles.giftTagText}>{`선물 - ${selectedGift.title} ${selectedGift.price}`}</Text>
+                      <TouchableOpacity
+                        style={styles.giftTagXBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={handleClearSelectedGift}
+                      >
+                        <Text style={styles.giftTagX}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.messageActions}>
+                  <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage} disabled={sendingMessage}>
+                    <Text style={styles.sendBtnText}>{sendingMessage ? '전송 중...' : '보내기'}</Text>
+                    <View style={styles.costPill}>
+                      {freeMessageLeft > 0 ? (
+                        <Text style={styles.costText}>{`${Math.min(10, freeMessageLeft)}회 남음`}</Text>
+                      ) : (
+                        <>
+                          <Image source={tingIconImg} style={styles.costIcon} />
+                          <Text style={styles.costText}>{messageCost}</Text>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.giftBtn}
+                    onPress={() => navigation.navigate('Store', { pickGiftMode: true })}
+                  >
+                    <Image source={giftImg} style={styles.giftBtnIcon} />
                   </TouchableOpacity>
                 </View>
-              ) : null}
-            </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
-            <View style={styles.messageActions}>
-              <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage} disabled={sendingMessage}>
-                <Text style={styles.sendBtnText}>{sendingMessage ? '전송 중...' : '보내기'}</Text>
-                <View style={styles.costPill}>
-                  {freeMessageLeft > 0 ? (
-                    <Text style={styles.costText}>{`${Math.min(10, freeMessageLeft)}회 남음`}</Text>
-                  ) : (
-                    <>
-                      <Image source={tingIconImg} style={styles.costIcon} />
-                      <Text style={styles.costText}>{messageCost}</Text>
-                    </>
-                  )}
-                </View>
+      <Modal visible={sentGiftVisible} transparent animationType="fade" onRequestClose={() => setSentGiftVisible(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSentGiftVisible(false)}>
+          <Pressable style={styles.modalCardSmall} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{`${detail.nickname}님이 선물을 보냈어요!`}</Text>
+              <TouchableOpacity onPress={() => setSentGiftVisible(false)}>
+                <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.giftBtn}
-                onPress={() => navigation.navigate('Store', { pickGiftMode: true })}
-              >
-                <Image source={giftImg} style={styles.giftBtnIcon} />
-              </TouchableOpacity>
+            </View>
+            <Text style={styles.giftLabel}>선물명</Text>
+            <View style={styles.giftPreviewBox}>
+              <Text style={styles.giftPreviewText}>{sentGiftPreview || '이미지'}</Text>
             </View>
           </Pressable>
         </Pressable>
@@ -758,7 +921,16 @@ export default function MatchDetailScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.modalDoneText}>전송이 완료되었습니다</Text>
-            <TouchableOpacity style={styles.pinkDoneBtn} onPress={() => setMessageSuccessVisible(false)}>
+            <TouchableOpacity
+              style={styles.pinkDoneBtn}
+              onPress={() => {
+                setMessageSuccessVisible(false);
+                navigation.navigate('MainTabs', {
+                  screen: 'interest',
+                  params: { initialTab: 'sent' },
+                });
+              }}
+            >
               <Text style={styles.pinkDoneText}>확인하러 가기</Text>
             </TouchableOpacity>
           </Pressable>
@@ -1016,8 +1188,46 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   giftTagText: { fontSize: 12, fontWeight: '700', color: '#111', maxWidth: '90%' },
-  giftTagX: { fontSize: 18, fontWeight: '900', color: '#111' },
+  giftTagXBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  giftTagX: { fontSize: 30, lineHeight: 22, fontWeight: '900', color: '#111' },
   messageActions: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sentMessageBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#D7D7D7',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+  },
+  sentMessageText: { fontSize: 14, lineHeight: 20, color: '#111', fontWeight: '600' },
+  sentGiftViewBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    backgroundColor: '#F4C2CC',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sentGiftViewBtnText: { fontSize: 12, color: '#111', fontWeight: '700' },
+  giftLabel: { marginTop: 10, fontSize: 14, color: '#111', fontWeight: '700' },
+  giftPreviewBox: {
+    marginTop: 6,
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CACACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  giftPreviewText: { fontSize: 12, color: '#666', fontWeight: '700', textAlign: 'center', paddingHorizontal: 8 },
   sendBtn: {
     width: 158,
     height: 58,

@@ -80,10 +80,13 @@ export default function ProfilePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const savedState = getProfilePreviewState();
+  const initialLockedRatedProfileIds: number[] =
+    savedState?.lockedRatedProfileIds ?? route.params?.lockedRatedProfileIds ?? [];
+  const initialProfiles: ProfileCard[] = (
+    savedState?.profiles?.length ? savedState.profiles : route.params?.profiles ?? []
+  ).filter((p: ProfileCard) => !initialLockedRatedProfileIds.includes(p.profileId));
 
-  const [profiles, setProfiles] = useState<ProfileCard[]>(
-    savedState?.profiles?.length ? savedState.profiles : route.params?.profiles ?? [],
-  );
+  const [profiles, setProfiles] = useState<ProfileCard[]>(initialProfiles);
   const isVip: boolean = route.params?.isVip ?? false;
   const isSubscribed: boolean = route.params?.isSubscribed ?? false;
   const [tingBalance, setTingBalance] = useState<number>(route.params?.tingBalance ?? 0);
@@ -119,7 +122,7 @@ export default function ProfilePreviewScreen() {
     savedState?.ratedByProfileId ?? route.params?.ratedByProfileId ?? {},
   );
   const [lockedRatedProfileIds, setLockedRatedProfileIds] = useState<number[]>(
-    savedState?.lockedRatedProfileIds ?? route.params?.lockedRatedProfileIds ?? [],
+    initialLockedRatedProfileIds,
   );
   const [shortageVisible, setShortageVisible] = useState(false);
   const [purchasing, setPurchasing] = useState<1 | 5 | null>(null);
@@ -247,17 +250,25 @@ export default function ProfilePreviewScreen() {
           targetProfileId: currentProfileId,
           score: currentRated,
         });
-      } catch {
-        // 별점 저장 실패여도 UX를 막지 않는다.
+      } catch (e: any) {
+        const status = e?.response?.status;
+        const message = String(e?.response?.data?.message ?? '');
+        if (__DEV__) {
+          console.warn('rateProfile failed:', status, message);
+        }
+        // 이미 평가한 상대(400)도 포함해 저장 실패여도 UX를 막지 않는다.
       }
-      setLockedRatedProfileIds(prev =>
-        prev.includes(currentProfileId) ? prev : [...prev, currentProfileId],
-      );
       await refreshWalletInfo();
     }
 
-    const nextIndex = index + 1;
-    if (nextIndex < profiles.length) {
+    setLockedRatedProfileIds(prev =>
+      prev.includes(currentProfileId) ? prev : [...prev, currentProfileId],
+    );
+    const nextProfiles = profiles.filter(item => item.profileId !== currentProfileId);
+    setProfiles(nextProfiles);
+
+    if (nextProfiles.length) {
+      const nextIndex = Math.min(index, nextProfiles.length - 1);
       setIndex(nextIndex);
       return;
     }
@@ -265,7 +276,7 @@ export default function ProfilePreviewScreen() {
     const loaded = await loadMoreProfiles();
     if (loaded) {
       await refreshWalletInfo();
-      setIndex(nextIndex);
+      setIndex(0);
       return;
     }
     Alert.alert('안내', '다음으로 보여줄 일반 프로필이 아직 없어요.');
