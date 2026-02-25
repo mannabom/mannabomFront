@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { datingApiService } from '../../services/DatingApiService';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS_LIST } from '../../config/api';
@@ -39,6 +39,11 @@ type InterestItem = {
   kind: ItemKind;
   nickname: string;
   imageUrl?: string;
+  message?: string;
+  hasGift?: boolean;
+  giftName?: string;
+  staySeconds?: number;
+  receivedScore?: number;
   isLoveView?: boolean;
   status?: InterestStatus;
   rejectReason?: string;
@@ -70,15 +75,43 @@ const normalizeStatus = (raw: FromMeSignalProfileDto['status']): InterestStatus 
   return undefined;
 };
 
+const toPositiveId = (...vals: any[]): number | undefined => {
+  for (const v of vals) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string' && v.trim().length > 0) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return undefined;
+};
+
 const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
   const isHighScore = raw.type === 'HIGH_SCORE';
+  const anyRaw: any = raw;
+  const resolvedProfileId = toPositiveId(
+    raw.profileId,
+    anyRaw?.targetProfileId,
+    anyRaw?.toProfileId,
+    anyRaw?.profile?.profileId,
+    anyRaw?.toUserProfileId,
+    anyRaw?.toUserId,
+    anyRaw?.targetUserId,
+    anyRaw?.userId,
+    isHighScore ? raw.id : undefined,
+  );
   return {
     id: `received-${raw.type}-${raw.id}`,
     sourceId: raw.id,
-    profileId: Number(raw.profileId ?? (isHighScore ? raw.id : 0)) || undefined,
+    profileId: resolvedProfileId,
     kind: raw.type,
     nickname: String(raw.fromUserNickname ?? '회원'),
     imageUrl: raw.fromUserImageUrl ?? undefined,
+    message: raw.message ?? undefined,
+    hasGift: Boolean(anyRaw?.hasGift ?? anyRaw?.giftIncluded ?? anyRaw?.gift),
+    giftName: String(anyRaw?.giftName ?? anyRaw?.giftTitle ?? ''),
+    staySeconds: Number(anyRaw?.myProfileStaySeconds ?? anyRaw?.staySeconds ?? 0) || undefined,
+    receivedScore: Number(anyRaw?.receivedScore ?? anyRaw?.scoreToMe ?? 0) || undefined,
     isLoveView: String(raw.matchType ?? '').toUpperCase() === 'LOVE_VIEW',
     createdAt: raw.receivedAt,
   };
@@ -86,13 +119,28 @@ const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
 
 const mapSentItem = (raw: FromMeSignalProfileDto): InterestItem => {
   const isHighScore = raw.type === 'HIGH_SCORE';
+  const anyRaw: any = raw;
+  const resolvedProfileId = toPositiveId(
+    raw.profileId,
+    anyRaw?.targetProfileId,
+    anyRaw?.toProfileId,
+    anyRaw?.profile?.profileId,
+    anyRaw?.toUserProfileId,
+    anyRaw?.toUserId,
+    anyRaw?.targetUserId,
+    anyRaw?.userId,
+    isHighScore ? raw.id : undefined,
+  );
   return {
     id: `sent-${raw.type}-${raw.id}`,
     sourceId: raw.id,
-    profileId: Number(raw.profileId ?? (isHighScore ? raw.id : 0)) || undefined,
+    profileId: resolvedProfileId,
     kind: raw.type,
     nickname: String(raw.toUserNickname ?? '회원'),
     imageUrl: raw.toUserImageUrl ?? undefined,
+    message: raw.message ?? undefined,
+    hasGift: Boolean(anyRaw?.hasGift ?? anyRaw?.giftIncluded ?? anyRaw?.gift),
+    giftName: String(anyRaw?.giftName ?? anyRaw?.giftTitle ?? ''),
     isLoveView: String(raw.matchType ?? '').toUpperCase() === 'LOVE_VIEW',
     status: normalizeStatus(raw.status),
     rejectReason: raw.rejectReason ?? undefined,
@@ -102,6 +150,7 @@ const mapSentItem = (raw: FromMeSignalProfileDto): InterestItem => {
 
 export default function InterestScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [tab, setTab] = useState<InterestTab>('received');
   const [tingBalance, setTingBalance] = useState(0);
   const [eventTingBalance, setEventTingBalance] = useState(0);
@@ -176,9 +225,13 @@ export default function InterestScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const requestedTab = route.params?.initialTab;
+      if (requestedTab === 'sent' || requestedTab === 'received') {
+        setTab(requestedTab);
+      }
       refreshAll();
       return undefined;
-    }, [refreshAll]),
+    }, [refreshAll, route.params?.initialTab]),
   );
 
   const hasFreeHighScoreView = isSubscribed || tingBalance >= 200;
@@ -199,16 +252,75 @@ export default function InterestScreen() {
   const canOpenHighScoreProfile = (item: InterestItem) =>
     hasFreeHighScoreView || purchasedHighScoreIds.includes(item.id);
 
+  const resolveSentTargetProfileId = (item: InterestItem): number | undefined => {
+    if (item.profileId) return item.profileId;
+    const sentHighScores = sentItems.filter(v => v.kind === 'HIGH_SCORE' && !!v.profileId);
+    const byNickname = sentHighScores.find(v => v.nickname === item.nickname)?.profileId;
+    if (byNickname) return byNickname;
+    const byImage = sentHighScores.find(v => v.imageUrl && v.imageUrl === item.imageUrl)?.profileId;
+    if (byImage) return byImage;
+    return undefined;
+  };
+
   const openProfile = (item: InterestItem) => {
-    if (!item.profileId || item.isLoveView) {
-      Alert.alert('안내', '연애관 매칭 항목은 프로필 화면 대신 상태로 표시됩니다.');
+    const targetProfileId =
+      tab === 'sent' && item.kind !== 'HIGH_SCORE'
+        ? resolveSentTargetProfileId(item)
+        : item.profileId;
+
+    if (!targetProfileId) {
+      Alert.alert('안내', '서버 응답에 profileId가 없어 상세 프로필을 열 수 없어요.');
       return;
     }
-    navigation.navigate('MatchDetail', {
-      source: 'PROFILE_MATCH',
-      targetProfileId: item.profileId,
-      previewName: item.nickname,
-      previewImageUrl: item.imageUrl,
+    // 보낸 관심은 모두 기존 MatchDetail 화면으로 통일
+    if (tab === 'sent') {
+      navigation.navigate('MatchDetail', {
+        source: item.isLoveView ? 'LOVE_VIEW_MATCH' : 'PROFILE_MATCH',
+        targetProfileId,
+        previewName: item.nickname,
+        previewImageUrl: item.imageUrl,
+        fromInterestTab: 'sent',
+        interestEntryKind: item.kind,
+        initialLikedSent: item.kind === 'LIKE',
+        initialMessagedSent: item.kind === 'MESSAGE',
+        initialSentMessage: item.message,
+        initialSentGiftName: item.giftName,
+      });
+      return;
+    }
+
+    const isReceivedHighScore = tab === 'received' && item.kind === 'HIGH_SCORE';
+    if (isReceivedHighScore) {
+      const linkedSentItems = sentItems.filter(
+        sent => sent.profileId && item.profileId && sent.profileId === item.profileId,
+      );
+      const linkedMessage = linkedSentItems.find(sent => sent.kind === 'MESSAGE');
+      navigation.navigate('MatchDetail', {
+        source: item.isLoveView ? 'LOVE_VIEW_MATCH' : 'PROFILE_MATCH',
+        targetProfileId,
+        previewName: item.nickname,
+        previewImageUrl: item.imageUrl,
+        initialLikedSent: linkedSentItems.some(sent => sent.kind === 'LIKE'),
+        initialMessagedSent: linkedSentItems.some(sent => sent.kind === 'MESSAGE'),
+        initialSentMessage: linkedMessage?.message,
+        initialSentGiftName: linkedMessage?.giftName,
+      });
+      return;
+    }
+
+    navigation.navigate('InterestDetail', {
+      tab,
+      kind: item.kind,
+      sourceId: item.sourceId,
+      profileId: item.profileId,
+      nickname: item.nickname,
+      imageUrl: item.imageUrl,
+      isLoveView: item.isLoveView,
+      message: item.message,
+      hasGift: item.hasGift,
+      giftName: item.giftName,
+      staySeconds: item.staySeconds,
+      receivedScore: item.receivedScore,
     });
   };
 

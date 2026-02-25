@@ -95,6 +95,26 @@ export type RootStackParamList = {
     targetProfileId: number;
     previewName?: string;
     previewImageUrl?: string;
+    fromInterestTab?: 'received' | 'sent';
+    interestEntryKind?: 'LIKE' | 'MESSAGE' | 'HIGH_SCORE';
+    initialLikedSent?: boolean;
+    initialMessagedSent?: boolean;
+    initialSentMessage?: string;
+    initialSentGiftName?: string;
+  };
+  InterestDetail: {
+    tab: 'received' | 'sent';
+    kind: 'LIKE' | 'MESSAGE' | 'HIGH_SCORE';
+    sourceId: number;
+    profileId: number;
+    nickname: string;
+    imageUrl?: string;
+    isLoveView?: boolean;
+    message?: string;
+    hasGift?: boolean;
+    giftName?: string;
+    staySeconds?: number;
+    receivedScore?: number;
   };
 
   // ✅ 스토어 (간단 화면)

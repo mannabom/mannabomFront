@@ -644,6 +644,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const openProfilePreview = async () => {
     try {
       const saved = getProfilePreviewState();
+      const lockedSet = new Set<number>(saved?.lockedRatedProfileIds ?? []);
       let profiles: PreviewModalProfile[] = mapProfilesForModal;
       if (saved?.profiles?.length) {
         profiles = saved.profiles.map(p => {
@@ -658,10 +659,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             drinking: matched?.drinking ?? DrinkingHabit.NON_DRINKER,
             photoUris: p.photoUris?.length ? p.photoUris : [''],
           };
-        });
+        }).filter(p => !lockedSet.has(p.profileId));
       }
       if (!profiles.length && previewProfile) {
-        profiles = [
+        const fallback = [
           {
             profileId: previewProfile.profileId,
             nickname: previewProfile.nickname,
@@ -675,13 +676,14 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
               : [previewProfile.mainPhotoUrl],
           },
         ];
+        profiles = fallback.filter(p => !lockedSet.has(p.profileId));
       }
       if (!profiles.length) {
         const fresh = await fetchProfilePreview();
         if (!fresh) throw new Error('empty profile');
         setProfileCards([fresh]);
         setPreviewProfile(fresh);
-        profiles = [
+        const fallback = [
           {
             profileId: fresh.profileId,
             name: fresh.name ?? fresh.nickname,
@@ -693,6 +695,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             photoUris: fresh.photoUris.length ? fresh.photoUris : [fresh.mainPhotoUrl],
           },
         ];
+        profiles = fallback.filter(p => !lockedSet.has(p.profileId));
       }
 
       navigation.navigate('ProfilePreview', {

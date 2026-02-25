@@ -154,11 +154,18 @@ class DatingApiService {
 
   // 호감 보내기
   async sendLike(targetProfileId: number, source: MatchSource): Promise<CheckTingWalletResponse> {
-    const response = await apiClient.post(API_ENDPOINTS_LIST.LIKE_SEND, {
-      targetProfileId,
-      source,
-    });
-    return this.unwrap<CheckTingWalletResponse>(response.data);
+    const payload = { targetProfileId, source };
+    try {
+      const response = await apiClient.post(API_ENDPOINTS_LIST.LIKE_SEND, payload);
+      return this.unwrap<CheckTingWalletResponse>(response.data);
+    } catch (e: any) {
+      // 서버 라우트 호환: /api/like/send 미지원 시 likeRequest 경로로 재시도
+      if (e?.response?.status === 404) {
+        const fallback = await apiClient.post('/api/likeRequest/send', payload);
+        return this.unwrap<CheckTingWalletResponse>(fallback.data);
+      }
+      throw e;
+    }
   }
 
   // 메시지 보내기
