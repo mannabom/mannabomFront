@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   ImageBackground,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
@@ -800,6 +801,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       Alert.alert('오류', '블라인드 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
     }
   };
+  const blindIntroPreview =
+    previewLoveCode?.requiredQA.find(q => q.question === '자기소개')?.answer ??
+    '소개팅 프로필에 작성된 자기소개가 여기에 블러 처리되어 보여요.';
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -856,7 +861,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           >
             <ImageBackground
               source={{ uri: previewProfile?.mainPhotoUrl ?? 'https://picsum.photos/700/700' }}
-              blurRadius={7}
+              blurRadius={50}
               style={styles.cardImage}
               imageStyle={styles.cardImageStyle}
             >
@@ -873,11 +878,17 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           >
             <View style={[styles.cardImage, styles.blindPlaceholder]}>
               <View style={styles.blindBlur} />
-              <Text style={styles.blindLabel}>자기소개</Text>
-              <Text style={styles.blindText} numberOfLines={4}>
-                {previewLoveCode?.requiredQA.find(q => q.question === '자기소개')?.answer ??
-                  '소개팅 프로필에 작성된 자기소개가 여기에 블러 처리되어 보여요.'}
-              </Text>
+              <View style={styles.blindTextWrap}>
+                <Text style={styles.blindLabel}>자기소개</Text>
+                <ScrollView
+                  style={styles.blindTextScroll}
+                  contentContainerStyle={styles.blindTextContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.blindText}>{blindIntroPreview}</Text>
+                </ScrollView>
+                <View pointerEvents="none" style={styles.blindTextFog} />
+              </View>
             </View>
             <Text style={styles.cardTitle}>블라인드 소개팅</Text>
           </TouchableOpacity>
@@ -1035,12 +1046,11 @@ const styles = StyleSheet.create({
   },
 
   blindPlaceholder: {
-    borderWidth: 1,
-    borderColor: '#FFE0EA',
+    borderWidth: 0,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 10,
     width: '94%',
     alignSelf: 'center',
     flex: 1,
@@ -1048,26 +1058,57 @@ const styles = StyleSheet.create({
   },
   blindBlur: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(240,240,240,0.995)',
+    backgroundColor: 'rgba(238,238,238,0.92)',
   },
   blindLabel: {
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: '900',
-    color: '#111',
-    marginBottom: 10,
-    opacity: 0.1,
+    color: '#000',
+    marginTop: 10,
+    marginLeft: 12,
+    marginBottom: 8,
+    opacity: 0.6,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  blindTextWrap: {
+    width: '100%',
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#C5C5C5',
+    borderRadius: 18,
+    backgroundColor: '#ECECEC',
   },
   blindText: {
-    color: '#111',
+    color: '#000',
     fontWeight: '900',
-    textAlign: 'center',
-    opacity: 0.04,
-    letterSpacing: 4.2,
-    textShadowColor: '#000',
-    textShadowRadius: 18,
-    textShadowOffset: { width: 2, height: 2 },
-    lineHeight: 20,
-    transform: [{ scaleX: 0.78 }, { scaleY: 0.76 }],
+    textAlign: 'left',
+    fontSize: 16,
+    lineHeight: 28,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 14,
+    opacity: 0.17,
+    letterSpacing: 1.8,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowRadius: 30,
+    textShadowOffset: { width: 0, height: 0 },
+    transform: [{ scaleX: 0.94 }, { scaleY: 0.92 }],
+  },
+  blindTextScroll: {
+    width: '100%',
+    flex: 1,
+  },
+  blindTextContent: {
+    flexGrow: 1,
+    paddingBottom: 8,
+  },
+  blindTextFog: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(245,245,245,0.56)',
   },
 
   petal: { position: 'absolute', width: 34, height: 34, opacity: 0.9 },
