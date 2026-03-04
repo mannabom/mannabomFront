@@ -140,6 +140,84 @@ const QUESTION_ID_BY_KEYWORD: Array<{ key: string; id: number }> = [
   { key: '친구들과', id: 15 },
 ];
 
+const QUESTION_FIELD_FALLBACKS = [
+  {
+    key: '자기소개',
+    title: '자기소개',
+    answerCandidates: ['intro', 'selfIntroduction', 'description', 'bio'],
+  },
+  {
+    key: '설레게',
+    title: '나를 설레게 하는 이성의 매력?',
+    answerCandidates: ['charm', 'attractivePartnerTrait', 'requiredAnswer2'],
+  },
+  {
+    key: '바라는',
+    title: '연인에게 바라는 한 가지는?',
+    answerCandidates: ['want', 'desiredPartnerTrait', 'requiredAnswer1'],
+  },
+  {
+    key: '연애란',
+    title: '나에게 연애란?',
+    answerCandidates: ['meaningOfLove'],
+  },
+  {
+    key: '소울',
+    title: '나의 소울 푸드는?',
+    answerCandidates: ['soulFood'],
+  },
+  {
+    key: '휴일',
+    title: '나의 하루, 그리고 나의 휴일은?',
+    answerCandidates: ['dailyAndHoliday'],
+  },
+  {
+    key: '하고 싶은 데이트',
+    title: '하고 싶은 데이트는?',
+    answerCandidates: ['idealDate'],
+  },
+  {
+    key: '싸웠을',
+    title: '연인과 싸웠을 때',
+    answerCandidates: ['conflictResolution'],
+  },
+  {
+    key: '사진',
+    title: '연인과 함께한 사진',
+    answerCandidates: ['photoSharing'],
+  },
+  {
+    key: '중요한 것은',
+    title: '연애에서 더 중요한 것은',
+    answerCandidates: ['relationshipPriority'],
+  },
+  {
+    key: '데이트에서',
+    title: '연인과의 데이트에서',
+    answerCandidates: ['datePlace'],
+  },
+  {
+    key: '질투',
+    title: '연애에서 적당한 질투가',
+    answerCandidates: ['jealousyAttitude'],
+  },
+  {
+    key: '이상적인 하루',
+    title: '연인과의 이상적인 하루는',
+    answerCandidates: ['idealDay'],
+  },
+  {
+    key: '끌리는',
+    title: '연인에게 주로 끌리는 모습은',
+    answerCandidates: ['attraction'],
+  },
+  {
+    key: '친구들과',
+    title: '연인이 내 친구들과',
+    answerCandidates: ['friendInteraction'],
+  },
+] as const;
+
 const labelBodyType = (v?: string) => BODY_TYPE_OPTIONS.find(o => o.value === v)?.label || '';
 
 const labelSmoking = (v?: string) => {
@@ -197,6 +275,62 @@ const resolveQuestionId = (text?: string): number | undefined => {
   if (!normalized) return undefined;
   const found = QUESTION_ID_BY_KEYWORD.find(item => normalized.includes(norm(item.key)));
   return found?.id;
+};
+
+const firstNonEmptyString = (...values: any[]): string => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+};
+
+const buildQuestionAnswersFromProfileFields = (
+  raw: any,
+  existingAnswers: QuestionAnswer[],
+): QuestionAnswer[] => {
+  const next = [...existingAnswers];
+  const relationshipChoices = raw?.relationshipChoices ?? {};
+  const optionalAnswers = raw?.optionalAnswers ?? {};
+
+  QUESTION_FIELD_FALLBACKS.forEach(item => {
+    const answer = firstNonEmptyString(
+      ...item.answerCandidates.map(candidate =>
+        raw?.[candidate] ??
+        raw?.profile?.[candidate] ??
+        relationshipChoices?.[candidate] ??
+        optionalAnswers?.[candidate],
+      ),
+    );
+
+    if (!answer) return;
+
+    const targetId = resolveQuestionId(item.key) ?? resolveQuestionId(item.title);
+    const existingIndex = next.findIndex(q =>
+      targetId
+        ? q.questionId === targetId
+        : norm(q.question).includes(norm(item.key)),
+    );
+
+    if (existingIndex >= 0) {
+      if (!next[existingIndex]?.answer?.trim()) {
+        next[existingIndex] = {
+          ...next[existingIndex],
+          questionId: next[existingIndex].questionId ?? targetId,
+          question: next[existingIndex].question || item.title,
+          answer,
+        };
+      }
+      return;
+    }
+
+    next.push({
+      questionId: targetId,
+      question: item.title,
+      answer,
+    });
+  });
+
+  return next;
 };
 
 // ✅ 핵심: 3단 고정 스냅 (0 / 50 / 100)
@@ -429,7 +563,7 @@ export default function ProfileDetail() {
         })
         .filter(a => a.question && a.answer !== undefined);
 
-      setQuestionAnswers(answers);
+      setQuestionAnswers(buildQuestionAnswersFromProfileFields(data, answers));
       setProfile(nextProfile);
 
       setForm({
@@ -558,11 +692,16 @@ export default function ProfileDetail() {
     try {
       const mbtiValue = (form.mbti || '').toUpperCase();
       const payloadQuestionAnswers = (questionAnswers || []).map(
-        ({ questionId, question, answer }) => ({
-          questionId: questionId ?? resolveQuestionId(question) ?? undefined,
-          question,
-          answer,
-        }),
+        ({ questionId, question, answer }) => {
+          const resolvedQuestionId = questionId ?? resolveQuestionId(question) ?? undefined;
+          return {
+            questionId: resolvedQuestionId,
+            answer: (answer ?? '').trim(),
+          };
+        },
+      );
+      const filteredQuestionAnswers = payloadQuestionAnswers.filter(
+        item => item.questionId && item.answer,
       );
 
       const payload = {
@@ -585,14 +724,12 @@ export default function ProfileDetail() {
           university: form.university || undefined,
           email: form.email || undefined,
         },
-        questionAnswers: payloadQuestionAnswers,
+        questionAnswerList: filteredQuestionAnswers,
       };
 
-      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, {
-        ...payload,
-        // 서버 구현별 키 차이를 동시에 호환
-        questionAnswerList: payloadQuestionAnswers,
-      });
+      console.log('📝 [ProfileDetail] update payload:', JSON.stringify(payload, null, 2));
+
+      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, payload);
       Alert.alert('저장 완료', '프로필이 업데이트 되었어요.');
       setShowValidationErrors(false);
       await loadProfile();

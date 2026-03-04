@@ -861,7 +861,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           >
             <ImageBackground
               source={{ uri: previewProfile?.mainPhotoUrl ?? 'https://picsum.photos/700/700' }}
-              blurRadius={50}
+              blurRadius={21}
               style={styles.cardImage}
               imageStyle={styles.cardImageStyle}
             >
