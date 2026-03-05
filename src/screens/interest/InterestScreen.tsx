@@ -86,20 +86,37 @@ const toPositiveId = (...vals: any[]): number | undefined => {
   return undefined;
 };
 
-const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
-  const isHighScore = raw.type === 'HIGH_SCORE';
+const extractProfileIdCandidates = (raw: any) => {
   const anyRaw: any = raw;
-  const resolvedProfileId = toPositiveId(
-    raw.profileId,
+  return [
+    anyRaw?.profileId,
     anyRaw?.targetProfileId,
     anyRaw?.toProfileId,
+    anyRaw?.fromProfileId,
     anyRaw?.profile?.profileId,
+    anyRaw?.target?.profileId,
+    anyRaw?.toProfile?.profileId,
+    anyRaw?.fromProfile?.profileId,
     anyRaw?.toUserProfileId,
-    anyRaw?.toUserId,
-    anyRaw?.targetUserId,
+    anyRaw?.fromUserProfileId,
+    anyRaw?.targetUserProfileId,
+    anyRaw?.receiverProfileId,
+    anyRaw?.ratedProfileId,
+    anyRaw?.scoreTargetProfileId,
+    anyRaw?.matchProfileId,
     anyRaw?.userId,
-    isHighScore ? raw.id : undefined,
-  );
+    anyRaw?.targetUserId,
+    anyRaw?.toUserId,
+    anyRaw?.fromUserId,
+  ];
+};
+
+const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
+  const anyRaw: any = raw;
+  const resolvedProfileId =
+    raw.type === 'HIGH_SCORE'
+      ? toPositiveId(raw.id, ...extractProfileIdCandidates(raw))
+      : toPositiveId(...extractProfileIdCandidates(raw));
   return {
     id: `received-${raw.type}-${raw.id}`,
     sourceId: raw.id,
@@ -118,19 +135,11 @@ const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
 };
 
 const mapSentItem = (raw: FromMeSignalProfileDto): InterestItem => {
-  const isHighScore = raw.type === 'HIGH_SCORE';
   const anyRaw: any = raw;
-  const resolvedProfileId = toPositiveId(
-    raw.profileId,
-    anyRaw?.targetProfileId,
-    anyRaw?.toProfileId,
-    anyRaw?.profile?.profileId,
-    anyRaw?.toUserProfileId,
-    anyRaw?.toUserId,
-    anyRaw?.targetUserId,
-    anyRaw?.userId,
-    isHighScore ? raw.id : undefined,
-  );
+  const resolvedProfileId =
+    raw.type === 'HIGH_SCORE'
+      ? toPositiveId(raw.id, ...extractProfileIdCandidates(raw))
+      : toPositiveId(...extractProfileIdCandidates(raw));
   return {
     id: `sent-${raw.type}-${raw.id}`,
     sourceId: raw.id,
@@ -254,17 +263,24 @@ export default function InterestScreen() {
 
   const resolveSentTargetProfileId = (item: InterestItem): number | undefined => {
     if (item.profileId) return item.profileId;
-    const sentHighScores = sentItems.filter(v => v.kind === 'HIGH_SCORE' && !!v.profileId);
-    const byNickname = sentHighScores.find(v => v.nickname === item.nickname)?.profileId;
+    const sentWithProfileId = sentItems.filter(v => !!v.profileId);
+    const byNickname = sentWithProfileId.find(v => v.nickname === item.nickname)?.profileId;
     if (byNickname) return byNickname;
-    const byImage = sentHighScores.find(v => v.imageUrl && v.imageUrl === item.imageUrl)?.profileId;
+    const byImage = sentWithProfileId.find(v => v.imageUrl && v.imageUrl === item.imageUrl)?.profileId;
     if (byImage) return byImage;
+    const receivedWithProfileId = receivedItems.filter(v => !!v.profileId);
+    const byReceivedNickname = receivedWithProfileId.find(v => v.nickname === item.nickname)?.profileId;
+    if (byReceivedNickname) return byReceivedNickname;
+    const byReceivedImage = receivedWithProfileId.find(
+      v => v.imageUrl && v.imageUrl === item.imageUrl,
+    )?.profileId;
+    if (byReceivedImage) return byReceivedImage;
     return undefined;
   };
 
   const openProfile = (item: InterestItem) => {
     const targetProfileId =
-      tab === 'sent' && item.kind !== 'HIGH_SCORE'
+      tab === 'sent'
         ? resolveSentTargetProfileId(item)
         : item.profileId;
 
