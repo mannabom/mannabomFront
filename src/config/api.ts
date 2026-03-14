@@ -71,6 +71,20 @@ export const API_ENDPOINTS_LIST = {
   LIKE_RESPOND: '/api/match/like/respond',
   MESSAGE_RESPOND: '/api/match/message/respond',
 
+  // 미팅 관련
+  MEETING_MY_STATUS: '/api/meeting/my-status',
+  MEETING_ROOMS_SEARCH: '/api/meeting/rooms/search',
+  MEETING_MEMBER_PROFILES: '/api/meeting/member-profiles/{roomId}',
+  MEETING_ROOM_CREATE: '/api/meeting/rooms/create',
+  MEETING_ROOM_JOIN: '/api/meeting/rooms/join',
+  MEETING_ROOM_JOIN_BY_CODE: '/api/meeting/rooms/join-by-code',
+  MEETING_MATCHING_START: '/api/meeting/matching/start',
+  MEETING_MATCHING_CANCEL: '/api/meeting/matching/cancel',
+  MEETING_MATCHING_RESULT: '/api/meeting/matching/result/{roomId}',
+  MEETING_MATCHING_ACCEPT: '/api/meeting/matching/accept',
+  MEETING_MATCHING_REJECT: '/api/meeting/matching/reject',
+  MEETING_EVENTS_STREAM: '/api/meeting/events/stream',
+
 } as const;
 
 // API 호출 헬퍼

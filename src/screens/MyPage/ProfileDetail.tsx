@@ -140,6 +140,143 @@ const QUESTION_ID_BY_KEYWORD: Array<{ key: string; id: number }> = [
   { key: '친구들과', id: 15 },
 ];
 
+const QUESTION_TITLE_BY_ID: Record<number, string> = {
+  1: '자기소개 (필수)',
+  2: '나를 설레게 하는 이성의 매력? (필수)',
+  3: '연인에게 꼭 바라는 한 가지는? (필수)',
+  4: '나에게 연애란?',
+  5: '나의 소울 푸드는?',
+  6: '나의 하루, 그리고 나의 휴일은?',
+  7: '하고 싶은 데이트는?',
+  8: '연인과 싸웠을 때',
+  9: '연인과 함께한 사진',
+  10: '연애에서 더 중요한 것은',
+  11: '연인과의 데이트에서',
+  12: '연애에서 적당한 질투가',
+  13: '연인과의 이상적인 하루는',
+  14: '연인에게 주로 끌리는 모습은',
+  15: '연인이 내 친구들과',
+};
+
+const CHOICE_ENUM_TO_LABEL: Record<string, string> = {
+  IMMEDIATE_RESOLVE: '바로 풀고 싶다',
+  IMMEDIATE_TALK: '바로 풀고 싶다',
+  TAKE_TIME: '시간을 좀 가지고 싶다',
+  NEED_TIME: '시간을 좀 가지고 싶다',
+  SNS_SHARE_OK: 'SNS에 공유해도 된다',
+  SNS_SHARE_NO: 'SNS에 공유하기 싫다',
+  COMFORT: '편안함',
+  EXCITEMENT: '설렘',
+  THRILL: '설렘',
+  INDOOR_DATE: '실내에서 데이트하기',
+  OUTDOOR_DATE: '실외에서 데이트하기',
+  JEALOUSY_FUN: '있어야 재미있다',
+  COOL_ATTITUDE: '쿨한 게 편하다',
+  COMFORTABLE_DAILY: '편안한 일상 즐기기',
+  NEW_EXPERIENCE: '새로운 경험 해보기',
+  CONSIDERATION: '배려심 넘치는 모습',
+  INITIATIVE: '주도적인 모습',
+  WITH_FRIENDS: '어울리며 놀기',
+  SEPARATE_CIRCLE: '따로 놀기',
+};
+
+const CHOICE_LABEL_TO_ENUM: Record<string, string> = {
+  '바로 풀고 싶다': 'IMMEDIATE_RESOLVE',
+  '시간을 좀 가지고 싶다': 'TAKE_TIME',
+  'SNS에 공유해도 된다': 'SNS_SHARE_OK',
+  'SNS에 공유하기 싫다': 'SNS_SHARE_NO',
+  편안함: 'COMFORT',
+  설렘: 'EXCITEMENT',
+  '실내에서 데이트하기': 'INDOOR_DATE',
+  '실외에서 데이트하기': 'OUTDOOR_DATE',
+  '있어야 재미있다': 'JEALOUSY_FUN',
+  '쿨한 게 편하다': 'COOL_ATTITUDE',
+  '편안한 일상 즐기기': 'COMFORTABLE_DAILY',
+  '새로운 경험 해보기': 'NEW_EXPERIENCE',
+  '배려심 넘치는 모습': 'CONSIDERATION',
+  '주도적인 모습': 'INITIATIVE',
+  '어울리며 놀기': 'WITH_FRIENDS',
+  '따로 놀기': 'SEPARATE_CIRCLE',
+};
+
+const QUESTION_FIELD_FALLBACKS = [
+  {
+    key: '자기소개',
+    title: '자기소개',
+    answerCandidates: ['intro', 'selfIntroduction', 'description', 'bio'],
+  },
+  {
+    key: '설레게',
+    title: '나를 설레게 하는 이성의 매력?',
+    answerCandidates: ['charm', 'attractivePartnerTrait', 'requiredAnswer2'],
+  },
+  {
+    key: '바라는',
+    title: '연인에게 바라는 한 가지는?',
+    answerCandidates: ['want', 'desiredPartnerTrait', 'requiredAnswer1'],
+  },
+  {
+    key: '연애란',
+    title: '나에게 연애란?',
+    answerCandidates: ['meaningOfLove'],
+  },
+  {
+    key: '소울',
+    title: '나의 소울 푸드는?',
+    answerCandidates: ['soulFood'],
+  },
+  {
+    key: '휴일',
+    title: '나의 하루, 그리고 나의 휴일은?',
+    answerCandidates: ['dailyAndHoliday'],
+  },
+  {
+    key: '하고 싶은 데이트',
+    title: '하고 싶은 데이트는?',
+    answerCandidates: ['idealDate'],
+  },
+  {
+    key: '싸웠을',
+    title: '연인과 싸웠을 때',
+    answerCandidates: ['conflictResolution'],
+  },
+  {
+    key: '사진',
+    title: '연인과 함께한 사진',
+    answerCandidates: ['photoSharing'],
+  },
+  {
+    key: '중요한 것은',
+    title: '연애에서 더 중요한 것은',
+    answerCandidates: ['relationshipPriority'],
+  },
+  {
+    key: '데이트에서',
+    title: '연인과의 데이트에서',
+    answerCandidates: ['datePlace'],
+  },
+  {
+    key: '질투',
+    title: '연애에서 적당한 질투가',
+    answerCandidates: ['jealousyAttitude'],
+  },
+  {
+    key: '이상적인 하루',
+    title: '연인과의 이상적인 하루는',
+    answerCandidates: ['idealDay'],
+  },
+  {
+    key: '끌리는',
+    title: '연인에게 주로 끌리는 모습은',
+    answerCandidates: ['attraction'],
+  },
+  {
+    key: '친구들과',
+    title: '연인이 내 친구들과',
+    answerCandidates: ['friendInteraction'],
+  },
+] as const;
+
 const labelBodyType = (v?: string) => BODY_TYPE_OPTIONS.find(o => o.value === v)?.label || '';
 
 const labelSmoking = (v?: string) => {
@@ -197,6 +334,136 @@ const resolveQuestionId = (text?: string): number | undefined => {
   if (!normalized) return undefined;
   const found = QUESTION_ID_BY_KEYWORD.find(item => normalized.includes(norm(item.key)));
   return found?.id;
+};
+
+const normalizeChoiceAnswerForDisplay = (
+  questionId: number | undefined,
+  answer: string,
+): string => {
+  if (!questionId || questionId < 8 || questionId > 15) return answer;
+  return CHOICE_ENUM_TO_LABEL[answer] ?? answer;
+};
+
+const normalizeChoiceAnswerForSave = (
+  questionId: number | undefined,
+  answer: string,
+): string => {
+  if (!questionId || questionId < 8 || questionId > 15) return answer;
+  return CHOICE_LABEL_TO_ENUM[answer] ?? answer;
+};
+
+const firstNonEmptyString = (...values: any[]): string => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+};
+
+const buildQuestionAnswersFromProfileFields = (
+  raw: any,
+  existingAnswers: QuestionAnswer[],
+): QuestionAnswer[] => {
+  const next = [...existingAnswers];
+  const relationshipChoices = raw?.relationshipChoices ?? {};
+  const optionalAnswers = raw?.optionalAnswers ?? {};
+
+  QUESTION_FIELD_FALLBACKS.forEach(item => {
+    const answer = firstNonEmptyString(
+      ...item.answerCandidates.map(candidate =>
+        raw?.[candidate] ??
+        raw?.profile?.[candidate] ??
+        relationshipChoices?.[candidate] ??
+        optionalAnswers?.[candidate],
+      ),
+    );
+
+    if (!answer) return;
+
+    const targetId = resolveQuestionId(item.key) ?? resolveQuestionId(item.title);
+    const existingIndex = next.findIndex(q =>
+      targetId
+        ? q.questionId === targetId
+        : norm(q.question).includes(norm(item.key)),
+    );
+
+    if (existingIndex >= 0) {
+      if (!next[existingIndex]?.answer?.trim()) {
+        next[existingIndex] = {
+          ...next[existingIndex],
+          questionId: next[existingIndex].questionId ?? targetId,
+          question: next[existingIndex].question || item.title,
+          answer,
+        };
+      }
+      return;
+    }
+
+    next.push({
+      questionId: targetId,
+      question: item.title,
+      answer,
+    });
+  });
+
+  return next;
+};
+
+const normalizeQuestionAnswersFromResponse = (data: any): QuestionAnswer[] => {
+  const sources: any[][] = [
+    Array.isArray(data?.answers) ? data.answers : [],
+    Array.isArray(data?.questionAnswerList) ? data.questionAnswerList : [],
+    Array.isArray(data?.questionAnswers) ? data.questionAnswers : [],
+    Array.isArray(data?.list) ? data.list : [],
+    Array.isArray(data?.profile?.answers) ? data.profile.answers : [],
+    Array.isArray(data?.profile?.questionAnswerList) ? data.profile.questionAnswerList : [],
+    Array.isArray(data?.profile?.questionAnswers) ? data.profile.questionAnswers : [],
+  ];
+
+  const dedup = new Map<number, QuestionAnswer>();
+  const noIdRows: QuestionAnswer[] = [];
+
+  sources.forEach(source => {
+    source.forEach((item: any, idx: number) => {
+      const qIdRaw = item?.question?.questionId ?? item?.questionId ?? item?.id;
+      const qId = Number.isFinite(Number(qIdRaw)) ? Number(qIdRaw) : undefined;
+
+      const qTextRaw =
+        item?.question?.question ??
+        (typeof item?.question === 'string' ? item.question : undefined) ??
+        item?.title ??
+        item?.questionText ??
+        item?.questionTitle;
+
+      const aText = item?.answer ?? item?.content ?? item?.value ?? item?.answerText ?? '';
+      const answerText =
+        typeof aText === 'string'
+          ? normalizeChoiceAnswerForDisplay(qId, aText)
+          : normalizeChoiceAnswerForDisplay(qId, String(aText ?? ''));
+      const questionText = String(
+        qTextRaw ??
+          (qId ? QUESTION_TITLE_BY_ID[qId] : undefined) ??
+          `질문 ${idx + 1}`,
+      );
+
+      const row: QuestionAnswer = {
+        questionId: qId,
+        question: questionText,
+        answer: answerText,
+      };
+
+      if (!qId) {
+        noIdRows.push(row);
+        return;
+      }
+
+      const prev = dedup.get(qId);
+      if (!prev || !prev.answer?.trim()) {
+        dedup.set(qId, row);
+      }
+    });
+  });
+
+  return [...dedup.values(), ...noIdRows].filter(a => a.question && a.answer !== undefined);
 };
 
 // ✅ 핵심: 3단 고정 스냅 (0 / 50 / 100)
@@ -395,41 +662,9 @@ export default function ProfileDetail() {
         alcohol: profileData?.alcohol,
       };
 
-      const answersRaw: any[] =
-        data?.questionAnswerList ??
-        data?.questionAnswers ??
-        data?.answers ??
-        data?.list ??
-        [];
+      const answers: QuestionAnswer[] = normalizeQuestionAnswersFromResponse(data);
 
-      const answers: QuestionAnswer[] = (Array.isArray(answersRaw) ? answersRaw : [])
-        .map((item: any, idx: number) => {
-          const qIdRaw = item?.question?.questionId ?? item?.questionId ?? item?.id;
-          const qId = Number.isFinite(Number(qIdRaw)) ? Number(qIdRaw) : undefined;
-          const qText =
-            item?.question?.question ??
-            item?.question ??
-            item?.title ??
-            item?.questionText ??
-            item?.questionTitle ??
-            `질문 ${idx + 1}`;
-
-          const aText =
-            item?.answer ??
-            item?.content ??
-            item?.value ??
-            item?.answerText ??
-            '';
-
-          return {
-            questionId: qId,
-            question: String(qText),
-            answer: typeof aText === 'string' ? aText : String(aText ?? ''),
-          };
-        })
-        .filter(a => a.question && a.answer !== undefined);
-
-      setQuestionAnswers(answers);
+      setQuestionAnswers(buildQuestionAnswersFromProfileFields(data, answers));
       setProfile(nextProfile);
 
       setForm({
@@ -558,11 +793,21 @@ export default function ProfileDetail() {
     try {
       const mbtiValue = (form.mbti || '').toUpperCase();
       const payloadQuestionAnswers = (questionAnswers || []).map(
-        ({ questionId, question, answer }) => ({
-          questionId: questionId ?? resolveQuestionId(question) ?? undefined,
-          question,
-          answer,
-        }),
+        ({ questionId, question, answer }) => {
+          const resolvedQuestionId = questionId ?? resolveQuestionId(question) ?? undefined;
+          const rawAnswer = (answer ?? '').trim();
+          const normalizedAnswer = normalizeChoiceAnswerForSave(
+            resolvedQuestionId,
+            rawAnswer,
+          );
+          return {
+            questionId: resolvedQuestionId,
+            answer: normalizedAnswer,
+          };
+        },
+      );
+      const filteredQuestionAnswers = payloadQuestionAnswers.filter(
+        item => item.questionId && item.answer,
       );
 
       const payload = {
@@ -585,14 +830,16 @@ export default function ProfileDetail() {
           university: form.university || undefined,
           email: form.email || undefined,
         },
-        questionAnswers: payloadQuestionAnswers,
+        questionAnswerList: filteredQuestionAnswers,
+        answers: filteredQuestionAnswers.map(item => ({
+          question: { questionId: item.questionId },
+          answer: item.answer,
+        })),
       };
 
-      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, {
-        ...payload,
-        // 서버 구현별 키 차이를 동시에 호환
-        questionAnswerList: payloadQuestionAnswers,
-      });
+      console.log('📝 [ProfileDetail] update payload:', JSON.stringify(payload, null, 2));
+
+      await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, payload);
       Alert.alert('저장 완료', '프로필이 업데이트 되었어요.');
       setShowValidationErrors(false);
       await loadProfile();
