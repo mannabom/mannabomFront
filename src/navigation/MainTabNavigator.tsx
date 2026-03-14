@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import BottomNavigationBar from '../components/common/BottomNavigationBar';
 
 import BlindDateScreen from '../screens/home/BlindDateScreen';
+import MeetingScreen from '../screens/home/MeetingScreen';
 import MyPage from '../screens/MyPage/MyPage';
 import InterestScreen from '../screens/interest/InterestScreen';
 
@@ -49,7 +50,7 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
       </Tab.Screen>
 
       <Tab.Screen name="meeting">
-        {() => <Placeholder label="미팅" />}
+        {() => <MeetingScreen />}
       </Tab.Screen>
 
       <Tab.Screen name="interest">
