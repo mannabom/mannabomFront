@@ -14,6 +14,15 @@ import {
 } from '../types/KakaoAPI';
 
 export class KakaoLoginService {
+  private static getReadableLoginError(error: any): string {
+    return String(
+      error?.response?.data?.message ??
+        error?.response?.data?.error ??
+        error?.message ??
+        '',
+    );
+  }
+
   /**
    * 카카오 로그인 실행 (SDK 사용)
    */
@@ -25,11 +34,23 @@ export class KakaoLoginService {
       if (__DEV__) console.log('카카오 로그인 시작');
 
       // 1. 카카오 OAuth 로그인
-      const token: KakaoOAuthToken = await login();
+      let token: KakaoOAuthToken;
+      try {
+        token = await login();
+      } catch (error) {
+        if (__DEV__) console.warn('카카오 SDK 로그인 실패:', error);
+        throw error;
+      }
       if (__DEV__) console.log('카카오 OAuth 토큰 획득');
 
       // 2. 카카오 사용자 프로필 정보 가져오기
-      const profile: KakaoProfile = await getProfile();
+      let profile: KakaoProfile;
+      try {
+        profile = await getProfile();
+      } catch (error) {
+        if (__DEV__) console.warn('카카오 프로필 조회 실패:', error);
+        throw error;
+      }
       if (__DEV__) console.log('카카오 프로필 정보 조회 완료');
 
       // 3. 백엔드 서버로 카카오 로그인 요청 (수정된 부분)
@@ -39,10 +60,22 @@ export class KakaoLoginService {
 
       if (__DEV__) console.log('백엔드 로그인 요청');
 
-      const response = await apiClient.post<KakaoLoginResponseDto>(
-        API_ENDPOINTS_LIST.KAKAO_LOGIN,
-        loginData,
-      );
+      let response;
+      try {
+        response = await apiClient.post<KakaoLoginResponseDto>(
+          API_ENDPOINTS_LIST.KAKAO_LOGIN,
+          loginData,
+        );
+      } catch (error: any) {
+        const serverMessage = this.getReadableLoginError(error);
+        if (__DEV__) {
+          console.warn('백엔드 카카오 로그인 실패:', {
+            status: error?.response?.status,
+            message: serverMessage || error?.message,
+          });
+        }
+        throw new Error(serverMessage || '서버 로그인 요청에 실패했습니다.');
+      }
 
       if (__DEV__) console.log('백엔드 로그인 응답 상태:', response.data?.userStatus);
 
@@ -66,7 +99,8 @@ export class KakaoLoginService {
         }
       }
 
-      throw new Error('카카오 로그인에 실패했습니다. 다시 시도해주세요.');
+      const readableMessage = this.getReadableLoginError(error);
+      throw new Error(readableMessage || '카카오 로그인에 실패했습니다. 다시 시도해주세요.');
     }
   }
 

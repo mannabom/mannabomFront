@@ -328,6 +328,16 @@ const sortTeamMembers = (
   });
 };
 
+const isSelfTeamMember = (
+  member: MeetingTeamMember | undefined,
+  context: MeetingUserContext,
+) =>
+  Boolean(
+    member &&
+      ((context.userId && member.userId === context.userId) ||
+        (context.nickname && member.nickname === context.nickname)),
+  );
+
 const buildDisplayTeamMembers = (
   room: MyMeetingStatus | null,
   context: MeetingUserContext,
@@ -404,6 +414,18 @@ const isRoomFullError = (error: any) => {
 const isRoomNotFoundError = (error: any) => {
   const message = parseApiMessage(error);
   return /존재|없는 방|사라졌|not found/i.test(message);
+};
+
+const isNoRoomListError = (error: any) => {
+  const status = error?.response?.status;
+  const message = parseApiMessage(error);
+
+  return (
+    status === 404 ||
+    /조건.*방.*없|방.*없|생성된 방.*없|미팅.*없|meeting.*not.*found|no.*meeting|no.*room/i.test(
+      message,
+    )
+  );
 };
 
 const isInsufficientTingError = (error: any) => {
@@ -1816,9 +1838,10 @@ const MeetingScreen: React.FC = () => {
   }, [filterSettings]);
 
   const refreshWalletAndProfile = useCallback(async () => {
-    const [walletResult, profileResult, storedProfileResult] = await Promise.allSettled([
+    const [walletResult, profileResult, mainPhotoResult, storedProfileResult] = await Promise.allSettled([
       datingApiService.getTingWalletInfo(),
       apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE),
+      apiClient.get(API_ENDPOINTS_LIST.USER_MAIN_PHOTO),
       getPhysicalProfile(),
     ]);
 
@@ -1829,9 +1852,21 @@ const MeetingScreen: React.FC = () => {
 
     const storedProfile =
       storedProfileResult.status === 'fulfilled' ? storedProfileResult.value : null;
+    const mainPhotoData =
+      mainPhotoResult.status === 'fulfilled'
+        ? mainPhotoResult.value?.data?.data ?? mainPhotoResult.value?.data ?? {}
+        : {};
+    const mainPhotoUrl = toAbsoluteUri(
+      mainPhotoData?.photoURL ??
+        mainPhotoData?.photoUrl ??
+        mainPhotoData?.url ??
+        mainPhotoData?.profileImage ??
+        mainPhotoData?.profileImageUrl,
+    );
 
     if (profileResult.status === 'fulfilled') {
       const raw = profileResult.value?.data?.data ?? profileResult.value?.data ?? {};
+      const rawProfile = raw?.profile ?? {};
       const rawSido =
         raw?.region?.sido ??
         raw?.profile?.region?.sido ??
@@ -1852,16 +1887,21 @@ const MeetingScreen: React.FC = () => {
       );
 
       const nextContext: MeetingUserContext = {
-        userId: raw?.userId ?? raw?.id,
-        nickname: String(raw?.nickName ?? raw?.nickname ?? '나'),
-        gender: String(raw?.gender ?? raw?.profile?.gender ?? Gender.MALE) as Gender,
+        userId: raw?.userId ?? raw?.id ?? rawProfile?.userId ?? rawProfile?.profileId,
+        nickname: String(raw?.nickName ?? raw?.nickname ?? rawProfile?.nickName ?? rawProfile?.nickname ?? '나'),
+        gender: String(raw?.gender ?? rawProfile?.gender ?? Gender.MALE) as Gender,
         region: {
           sido: normalizedSido,
           sigungu: normalizedSigungu,
         },
-        profileImage: toAbsoluteUri(
-          raw?.profileImageUrl ?? raw?.profileImage ?? raw?.profile?.profileImageUrl,
-        ),
+        profileImage:
+          mainPhotoUrl ||
+          toAbsoluteUri(
+            raw?.profileImageUrl ??
+              raw?.profileImage ??
+              rawProfile?.profileImageUrl ??
+              rawProfile?.profileImage,
+          ),
         isSubscribed: Boolean(
           raw?.isSubscribed ??
             raw?.subscribed ??
@@ -1878,7 +1918,7 @@ const MeetingScreen: React.FC = () => {
       nickname: '나',
       gender: Gender.MALE,
       region: storedProfile?.region ?? DEFAULT_REGION,
-      profileImage: '',
+      profileImage: mainPhotoUrl,
       isSubscribed: false,
     };
     setUserContext(fallbackContext);
@@ -1891,8 +1931,10 @@ const MeetingScreen: React.FC = () => {
       const result = await meetingApiService.searchRooms(nextFilters);
       setRooms(result.meetings);
     } catch (error) {
-      if (__DEV__) console.warn('Failed to search meeting rooms', error);
-      Alert.alert('오류', '미팅 방 목록을 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+      if (__DEV__ && !isNoRoomListError(error)) {
+        console.warn('Failed to search meeting rooms', error);
+      }
+      setRooms([]);
     } finally {
       setRoomsLoading(false);
     }
@@ -2390,22 +2432,18 @@ const MeetingScreen: React.FC = () => {
               >
                 {row.map(slotIndex => {
                   const member = members[slotIndex];
-                  const isSelf =
-                    member &&
-                    ((userContext.userId && member.userId === userContext.userId) ||
-                      member.nickname === userContext.nickname);
+                  const isSelf = isSelfTeamMember(member, userContext);
+                  const imageUri =
+                    isSelf && userContext.profileImage
+                      ? userContext.profileImage
+                      : member?.profileImage;
 
                   return (
                     <View key={`slot-${slotIndex}`} style={styles.activeMemberCell}>
                       <AvatarCircle
-                        uri={
-                          isSelf && userContext.profileImage
-                            ? userContext.profileImage
-                            : member?.profileImage
-                        }
+                        uri={imageUri}
                         size={96}
-                        fallbackLabel={member?.nickname?.slice(0, 1)}
-                        placeholder={!member}
+                        placeholder={!member || !toAbsoluteUri(imageUri)}
                       />
                     </View>
                   );
