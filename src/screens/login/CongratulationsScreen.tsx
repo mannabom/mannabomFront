@@ -16,7 +16,11 @@ import {
   SignupCompleteRequestDto,
   SignupCompleteResponseDto,
 } from '../../types/NicknameAPI';
-import { getCombinedProfileData } from '../../utils/ProfileStorage';
+import {
+  getCombinedProfileData,
+  getOptionalAnswers,
+  getRelationshipChoices,
+} from '../../utils/ProfileStorage';
 
 interface CongratulationsScreenProps {
   onComplete: (userData: any) => void;
@@ -72,6 +76,59 @@ const readResponseBody = async (res: Response) => {
   } catch {
     return { text, json: null };
   }
+};
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const calculateLocalSignupPoints = async (): Promise<number> => {
+  const [optionalAnswers, relationshipChoices] = await Promise.all([
+    getOptionalAnswers(),
+    getRelationshipChoices(),
+  ]);
+
+  const optionalCount = Object.values(optionalAnswers ?? {}).filter(
+    value => typeof value === 'string' && value.trim().length >= 30,
+  ).length;
+
+  const relationshipCount = Object.values(relationshipChoices ?? {}).filter(
+    value => typeof value === 'string' && value.trim().length > 0,
+  ).length;
+
+  return optionalCount * 15 + relationshipCount * 5;
+};
+
+const extractAwardedPoints = (data: Record<string, unknown>, fallback: number) => {
+  const directValue = toFiniteNumber(data.initialPoints);
+  if (directValue !== undefined && directValue > 0) return directValue;
+
+  const candidateKeys = [
+    'initialTing',
+    'initialTings',
+    'pointTing',
+    'pointTingNum',
+    'rewardedPoints',
+    'rewardPoints',
+    'points',
+  ];
+
+  for (const key of candidateKeys) {
+    const value = toFiniteNumber(data[key]);
+    if (value !== undefined && value > 0) return value;
+  }
+
+  const eventTing = toFiniteNumber(data.eventTing ?? data.eventTingNum);
+  const normalTing = toFiniteNumber(data.ting ?? data.tingNum);
+  const walletTotal = (eventTing ?? 0) + (normalTing ?? 0);
+  if (walletTotal > 0) return walletTotal;
+
+  return fallback;
 };
 
 const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
@@ -211,6 +268,8 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         );
       }
 
+      const localSignupPoints = await calculateLocalSignupPoints();
+
       const prUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP}`;
       if (__DEV__) console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
 
@@ -254,16 +313,17 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         throw new Error(msg);
       }
 
-      // ✅ initialPoints: 서버가 계산해서 내려주는 값 그대로 표시 (숫자/문자열 모두 안전 처리)
-      const pointsRaw: any = (responseData.data as any).initialPoints;
-      const points = Number(pointsRaw ?? 0);
-      setInitialPoints(Number.isFinite(points) ? points : 0);
+      const points = extractAwardedPoints(
+        responseData.data as unknown as Record<string, unknown>,
+        localSignupPoints,
+      );
+      setInitialPoints(points);
 
       const userData = {
         userId: responseData.data.userId,
         accessToken: responseData.data.accessToken,
         refreshToken: responseData.data.refreshToken,
-        initialPoints: Number.isFinite(points) ? points : 0,
+        initialPoints: points,
       };
       setPendingUserData(userData);
     } catch (error) {

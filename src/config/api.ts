@@ -1,7 +1,7 @@
 // src/config/api.ts
 // 환경별 API 주소 설정
 const API_ENDPOINTS = {
-  development: 'http://34.47.115.21:8080',
+  development: 'http://34.22.79.59:8080',
   production: 'https://api.mannabom.com',
 };
 

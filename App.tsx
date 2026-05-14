@@ -137,9 +137,6 @@ const App: React.FC = () => {
                 {...props}
                 onLoginSuccess={() => setAppState('home')}
                 onSignupRequired={() => setAppState('emailVerification')}
-                onDevSkipSignup={
-                  __DEV__ ? () => setAppState('home') : undefined
-                }
               />
             )}
           </Stack.Screen>

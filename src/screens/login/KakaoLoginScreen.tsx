@@ -21,7 +21,6 @@ import { registerFcmTokenToServer } from '../../services/PushTokenService';
 interface KakaoLoginScreenProps {
   onLoginSuccess: (userData?: any) => void;
   onSignupRequired: (kakaoUserInfo: any) => void;
-  onDevSkipSignup?: () => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -29,7 +28,6 @@ const { width, height } = Dimensions.get('window');
 const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
   onLoginSuccess,
   onSignupRequired,
-  onDevSkipSignup,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgeRestrictionModal, setShowAgeRestrictionModal] = useState(false);
@@ -146,17 +144,6 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
               )}
             </View>
           </TouchableOpacity>
-
-          {__DEV__ && onDevSkipSignup && (
-            <TouchableOpacity
-              style={styles.devSkipButton}
-              onPress={onDevSkipSignup}
-              activeOpacity={0.85}
-              disabled={isLoading}
-            >
-              <Text style={styles.devSkipButtonText}>개발용 회원가입 건너뛰기</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </ImageBackground>
 
@@ -205,25 +192,6 @@ const styles = StyleSheet.create({
     color: '#381E1E',
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'center',
-  },
-  devSkipButton: {
-    marginTop: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 300,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#DDDDDD',
-  },
-  devSkipButtonText: {
-    color: '#333333',
-    fontSize: 15,
-    fontWeight: '800',
     textAlign: 'center',
   },
 });
