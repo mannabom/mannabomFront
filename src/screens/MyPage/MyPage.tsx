@@ -71,7 +71,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
 
       // 1) 기본 정보
       const res = await apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE);
-      console.log('🧾 [MyPage] USER_PROFILE raw response:', res.data);
+      if (__DEV__) console.log('🧾 [MyPage] USER_PROFILE loaded');
 
       const data: any = res.data?.data ?? res.data;
 
@@ -127,7 +127,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
         if (status === 401) {
           console.warn('🔒 [MyPage] 메인 사진 401 - 로그인 필요');
         } else {
-          console.error(
+          if (__DEV__) console.warn(
             '❌ [MyPage] USER_MAIN_PHOTO error:',
             photoErr?.response?.data || photoErr?.message || photoErr,
           );
@@ -159,7 +159,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
         e?.response?.data?.error ||
         e?.message ||
         'unknown';
-      console.error(
+      if (__DEV__) console.warn(
         '❌ [MyPage] USER_PROFILE error:',
         e?.response?.data || e?.message || e,
       );
@@ -206,7 +206,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
         },
       ]);
     } catch (e: any) {
-      console.error('❌ [MyPage] LOGOUT error:', e?.response?.data || e?.message || e);
+      if (__DEV__) console.warn('❌ [MyPage] LOGOUT error:', e?.response?.data || e?.message || e);
 
       // 서버 로그아웃 실패해도 UX상 로컬 로그아웃 진행
       Alert.alert('알림', '서버 로그아웃에 실패했지만 로그아웃 처리할게요.', [
@@ -240,7 +240,7 @@ export default function MyPage({ onLogout }: MyPageProps) {
         },
       ]);
     } catch (e: any) {
-      console.error('❌ [MyPage] LEAVE error:', e?.response?.data || e?.message || e);
+      if (__DEV__) console.warn('❌ [MyPage] LEAVE error:', e?.response?.data || e?.message || e);
       Alert.alert('오류', '탈퇴 처리에 실패했어요.\n잠시 후 다시 시도해주세요.');
     } finally {
       setIsLeaving(false);

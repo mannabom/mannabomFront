@@ -1,7 +1,7 @@
 // src/config/api.ts
 // 환경별 API 주소 설정
 const API_ENDPOINTS = {
-  development: 'http://3.35.234.95:8080',
+  development: 'http://34.47.115.21:8080',
   production: 'https://api.mannabom.com',
 };
 
@@ -80,6 +80,7 @@ export const API_ENDPOINTS_LIST = {
   MEETING_ROOM_JOIN_BY_CODE: '/api/meeting/rooms/join-by-code',
   MEETING_MATCHING_START: '/api/meeting/matching/start',
   MEETING_MATCHING_CANCEL: '/api/meeting/matching/cancel',
+  MEETING_MATCHING_CONTINUE: '/api/meeting/matching/continue',
   MEETING_MATCHING_RESULT: '/api/meeting/matching/result/{roomId}',
   MEETING_MATCHING_ACCEPT: '/api/meeting/matching/accept',
   MEETING_MATCHING_REJECT: '/api/meeting/matching/reject',

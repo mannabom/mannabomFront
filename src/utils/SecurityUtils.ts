@@ -21,13 +21,13 @@ export class SecurityManager {
       const currentVersion = DeviceInfo.getVersion();
       const buildNumber = DeviceInfo.getBuildNumber();
 
-      console.log('📱 앱 버전:', currentVersion, '빌드:', buildNumber);
+      if (__DEV__) console.log('📱 앱 버전:', currentVersion, '빌드:', buildNumber);
 
       // TODO: 서버에서 최소 지원 버전 가져와서 비교
       // 현재는 항상 true 반환
       return true;
     } catch (error) {
-      console.error('❌ 앱 버전 체크 오류:', error);
+      if (__DEV__) console.warn('❌ 앱 버전 체크 오류:', error);
       return true;
     }
   }
@@ -47,10 +47,10 @@ export class SecurityManager {
         platform: Platform.OS,
       };
 
-      console.log('📱 디바이스 정보:', deviceInfo);
+      if (__DEV__) console.log('📱 디바이스 정보 수집 완료');
       return deviceInfo;
     } catch (error) {
-      console.error('❌ 디바이스 정보 수집 오류:', error);
+      if (__DEV__) console.warn('❌ 디바이스 정보 수집 오류:', error);
       return null;
     }
   }
@@ -67,7 +67,7 @@ export class SecurityManager {
       // 예: react-native-jailbreak-detect, react-native-root-detection
       return false;
     } catch (error) {
-      console.error('❌ 탈옥/루팅 감지 오류:', error);
+      if (__DEV__) console.warn('❌ 탈옥/루팅 감지 오류:', error);
       return false;
     }
   }
@@ -78,7 +78,7 @@ export class SecurityManager {
       // TODO: 실제 개발자 모드 감지 구현
       return false;
     } catch (error) {
-      console.error('❌ 개발자 모드 감지 오류:', error);
+      if (__DEV__) console.warn('❌ 개발자 모드 감지 오류:', error);
       return false;
     }
   }
@@ -100,7 +100,7 @@ export class AuthManager {
     const legacyRefresh = await AsyncStorage.getItem(this.LEGACY_REFRESH_TOKEN_KEY);
 
     if (legacyAccess && legacyRefresh) {
-      console.log('🔁 [Auth] legacy 토큰(auth_token/refresh_token) 발견 → 신규 키로 마이그레이션');
+      if (__DEV__) console.log('🔁 [Auth] legacy 토큰 발견 -> 신규 키로 마이그레이션');
       await saveAuthTokens(legacyAccess, legacyRefresh);
       await AsyncStorage.multiRemove([
         this.LEGACY_ACCESS_TOKEN_KEY,
@@ -133,10 +133,10 @@ export class AuthManager {
         await saveAuthTokens(refreshed.accessToken, refreshed.refreshToken);
         accessToken = refreshed.accessToken;
         refreshToken = refreshed.refreshToken;
-        console.log('✅ [Auth] 자동로그인: 토큰 갱신 성공');
+        if (__DEV__) console.log('✅ [Auth] 자동로그인: 토큰 갱신 성공');
       } else {
         // refresh 실패면 안전하게 로그아웃 처리 (서버/토큰 상태 불명확)
-        console.warn('⚠️ [Auth] 자동로그인: 토큰 갱신 실패 → 로그아웃 처리');
+        if (__DEV__) console.warn('⚠️ [Auth] 자동로그인: 토큰 갱신 실패 -> 로그아웃 처리');
         await this.logout();
         return { isLoggedIn: false };
       }
@@ -151,7 +151,7 @@ export class AuthManager {
         user,
       };
     } catch (error) {
-      console.error('❌ [Auth] 로그인 상태 확인 오류:', error);
+      if (__DEV__) console.warn('❌ [Auth] 로그인 상태 확인 오류:', error);
       return { isLoggedIn: false };
     }
   }
@@ -180,7 +180,7 @@ export class AuthManager {
 
         if (!res.ok) {
           const text = await res.text().catch(() => '');
-          console.warn('⚠️ [Auth] refresh 실패:', res.status, url, text);
+          if (__DEV__) console.warn('⚠️ [Auth] refresh 실패:', res.status, url);
           return null;
         }
 
@@ -193,10 +193,10 @@ export class AuthManager {
           return { accessToken: nextAccess, refreshToken: nextRefresh };
         }
 
-        console.warn('⚠️ [Auth] refresh 응답 파싱 실패:', json);
+        if (__DEV__) console.warn('⚠️ [Auth] refresh 응답 파싱 실패');
         return null;
       } catch (e) {
-        console.warn('⚠️ [Auth] refresh 네트워크 오류:', url, e);
+        if (__DEV__) console.warn('⚠️ [Auth] refresh 네트워크 오류:', url, e);
         // 다음 후보로
       }
     }
@@ -223,7 +223,7 @@ export class AuthManager {
   static async performAutoLogin(): Promise<boolean> {
     const loginInfo = await this.checkLoginStatus();
     if (loginInfo.isLoggedIn && loginInfo.token) {
-      console.log('✅ [Auth] 자동 로그인 성공');
+      if (__DEV__) console.log('✅ [Auth] 자동 로그인 성공');
       return true;
     }
     return false;

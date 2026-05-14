@@ -64,9 +64,9 @@ export const savePhysicalProfile = async (
       STORAGE_KEYS.PHYSICAL_PROFILE,
       JSON.stringify(data),
     );
-    console.log('💾 신체 프로필 저장 완료:', data);
+    if (__DEV__) console.log('💾 신체 프로필 저장 완료');
   } catch (error) {
-    console.error('신체 프로필 저장 실패:', error);
+    if (__DEV__) console.warn('신체 프로필 저장 실패:', error);
     throw error;
   }
 };
@@ -81,7 +81,7 @@ export const getPhysicalProfile =
       }
       return null;
     } catch (error) {
-      console.error('신체 프로필 불러오기 실패:', error);
+      if (__DEV__) console.warn('신체 프로필 불러오기 실패:', error);
       return null;
     }
   };
@@ -95,9 +95,9 @@ export const saveSelfIntroduction = async (
       STORAGE_KEYS.SELF_INTRODUCTION,
       JSON.stringify(data),
     );
-    console.log('💾 자기소개 저장 완료:', data);
+    if (__DEV__) console.log('💾 자기소개 저장 완료');
   } catch (error) {
-    console.error('자기소개 저장 실패:', error);
+    if (__DEV__) console.warn('자기소개 저장 실패:', error);
     throw error;
   }
 };
@@ -112,7 +112,7 @@ export const getSelfIntroduction =
       }
       return null;
     } catch (error) {
-      console.error('자기소개 불러오기 실패:', error);
+      if (__DEV__) console.warn('자기소개 불러오기 실패:', error);
       return null;
     }
   };
@@ -126,9 +126,9 @@ export const saveOptionalAnswers = async (
       STORAGE_KEYS.OPTIONAL_ANSWERS,
       JSON.stringify(data),
     );
-    console.log('💾 선택 답변 저장 완료:', data);
+    if (__DEV__) console.log('💾 선택 답변 저장 완료');
   } catch (error) {
-    console.error('선택 답변 저장 실패:', error);
+    if (__DEV__) console.warn('선택 답변 저장 실패:', error);
     throw error;
   }
 };
@@ -143,7 +143,7 @@ export const getOptionalAnswers =
       }
       return null;
     } catch (error) {
-      console.error('선택 답변 불러오기 실패:', error);
+      if (__DEV__) console.warn('선택 답변 불러오기 실패:', error);
       return null;
     }
   };
@@ -157,9 +157,9 @@ export const saveRelationshipChoices = async (
       STORAGE_KEYS.RELATIONSHIP_CHOICES,
       JSON.stringify(data),
     );
-    console.log('💾 연애관 저장 완료:', data);
+    if (__DEV__) console.log('💾 연애관 저장 완료');
   } catch (error) {
-    console.error('연애관 저장 실패:', error);
+    if (__DEV__) console.warn('연애관 저장 실패:', error);
     throw error;
   }
 };
@@ -176,7 +176,7 @@ export const getRelationshipChoices =
       }
       return null;
     } catch (error) {
-      console.error('연애관 불러오기 실패:', error);
+      if (__DEV__) console.warn('연애관 불러오기 실패:', error);
       return null;
     }
   };
@@ -192,7 +192,7 @@ export const getCombinedProfileData = async (
     const relationshipChoices = await getRelationshipChoices();
 
     if (!physicalProfile || !selfIntroduction || !relationshipChoices) {
-      console.error('필수 프로필 데이터가 누락됨');
+      if (__DEV__) console.warn('필수 프로필 데이터가 누락됨');
       return null;
     }
 
@@ -204,10 +204,10 @@ export const getCombinedProfileData = async (
       relationshipChoices,
     };
 
-    console.log('🔗 전체 프로필 데이터 합치기 완료:', combinedData);
+    if (__DEV__) console.log('🔗 전체 프로필 데이터 합치기 완료');
     return combinedData;
   } catch (error) {
-    console.error('프로필 데이터 합치기 실패:', error);
+    if (__DEV__) console.warn('프로필 데이터 합치기 실패:', error);
     return null;
   }
 };
@@ -221,9 +221,9 @@ export const clearAllProfileData = async (): Promise<void> => {
       STORAGE_KEYS.OPTIONAL_ANSWERS,
       STORAGE_KEYS.RELATIONSHIP_CHOICES,
     ]);
-    console.log('🗑️ 모든 프로필 데이터 삭제 완료');
+    if (__DEV__) console.log('🗑️ 모든 프로필 데이터 삭제 완료');
   } catch (error) {
-    console.error('프로필 데이터 삭제 실패:', error);
+    if (__DEV__) console.warn('프로필 데이터 삭제 실패:', error);
     throw error;
   }
 };
@@ -255,7 +255,7 @@ export const getProfileProgress = async (): Promise<{
 
     return progress;
   } catch (error) {
-    console.error('프로필 진행도 확인 실패:', error);
+    if (__DEV__) console.warn('프로필 진행도 확인 실패:', error);
     return {
       physicalProfile: false,
       selfIntroduction: false,

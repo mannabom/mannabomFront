@@ -21,6 +21,7 @@ import { registerFcmTokenToServer } from '../../services/PushTokenService';
 interface KakaoLoginScreenProps {
   onLoginSuccess: (userData?: any) => void;
   onSignupRequired: (kakaoUserInfo: any) => void;
+  onDevSkipSignup?: () => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -28,6 +29,7 @@ const { width, height } = Dimensions.get('window');
 const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
   onLoginSuccess,
   onSignupRequired,
+  onDevSkipSignup,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgeRestrictionModal, setShowAgeRestrictionModal] = useState(false);
@@ -37,21 +39,21 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 
     try {
       setIsLoading(true);
-      console.log('카카오 로그인 시작');
+      if (__DEV__) console.log('카카오 로그인 시작');
 
       let result;
 
       // 실제 카카오 로그인 사용
-      console.log('실제 카카오 로그인 사용');
+      if (__DEV__) console.log('실제 카카오 로그인 사용');
       result = await KakaoLoginService.performKakaoLogin();
 
       // 사용자가 취소한 경우 (null 반환)
       if (result === null) {
-        console.log('사용자가 카카오 로그인을 취소했습니다.');
+        if (__DEV__) console.log('사용자가 카카오 로그인을 취소했습니다.');
         return;
       }
 
-      console.log('카카오 로그인 결과:', result);
+      if (__DEV__) console.log('카카오 로그인 다음 단계:', result.nextStep);
 
       switch (result.nextStep) {
         case 'home':
@@ -67,7 +69,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
           try {
             await registerFcmTokenToServer();
           } catch (e) {
-            console.warn('⚠️ [KakaoLogin] registerFcmTokenToServer failed (ignored):', e);
+            if (__DEV__) console.warn('⚠️ [KakaoLogin] registerFcmTokenToServer failed (ignored):', e);
           }
 
           Alert.alert(
@@ -83,12 +85,12 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
             await saveProfileId(result.userData.kakaoUserInfo.profileId);
           }
 
-          console.log('신규 사용자 - 회원가입 진행');
+          if (__DEV__) console.log('신규 사용자 - 회원가입 진행');
           onSignupRequired(result.userData.kakaoUserInfo);
           break;
 
         case 'ageRestricted':
-          console.log('연령 제한 사용자');
+          if (__DEV__) console.log('연령 제한 사용자');
           setShowAgeRestrictionModal(true);
           break;
 
@@ -96,7 +98,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
           throw new Error('알 수 없는 결과 타입');
       }
     } catch (error) {
-      console.error('카카오 로그인 오류:', error);
+      if (__DEV__) console.warn('카카오 로그인 오류:', error);
 
       const errorMessage =
         error instanceof Error
@@ -144,6 +146,17 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
               )}
             </View>
           </TouchableOpacity>
+
+          {__DEV__ && onDevSkipSignup && (
+            <TouchableOpacity
+              style={styles.devSkipButton}
+              onPress={onDevSkipSignup}
+              activeOpacity={0.85}
+              disabled={isLoading}
+            >
+              <Text style={styles.devSkipButtonText}>개발용 회원가입 건너뛰기</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ImageBackground>
 
@@ -192,6 +205,25 @@ const styles = StyleSheet.create({
     color: '#381E1E',
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  devSkipButton: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+  },
+  devSkipButtonText: {
+    color: '#333333',
+    fontSize: 15,
+    fontWeight: '800',
     textAlign: 'center',
   },
 });

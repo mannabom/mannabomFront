@@ -10,11 +10,46 @@ const apiClient = axios.create({
 
 apiClient.defaults.headers.common['Content-Type'] = 'application/json';
 
+const REDACTED = '[REDACTED]';
+const SENSITIVE_KEYS = new Set([
+  'accessToken',
+  'refreshToken',
+  'authorization',
+  'deviceToken',
+  'fcmToken',
+  'token',
+  'email',
+  'birthDate',
+  'profileImage',
+  'profileImageUrl',
+  'photoURL',
+  'photoUrl',
+  'photos',
+]);
+
 const maskToken = (token?: string | null) => {
   if (!token) return 'NO';
-  const head = token.slice(0, 12);
-  const tail = token.slice(-8);
-  return `YES(${head}...${tail}, len=${token.length})`;
+  return `YES(len=${token.length})`;
+};
+
+const isFormDataLike = (value: unknown) =>
+  !!value && typeof value === 'object' && String(value).includes('FormData');
+
+const sanitizeForLog = (value: unknown): unknown => {
+  if (value == null) return value;
+  if (isFormDataLike(value)) return '[FormData]';
+  if (Array.isArray(value)) return value.map(sanitizeForLog);
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        SENSITIVE_KEYS.has(key) ? REDACTED : sanitizeForLog(item),
+      ]),
+    );
+  }
+
+  return value;
 };
 
 apiClient.interceptors.request.use(
@@ -26,11 +61,15 @@ apiClient.interceptors.request.use(
       ? config.url
       : `${config.baseURL ?? ''}${config.url ?? ''}`;
 
-    console.log('🌐 API 요청:', (config.method || 'GET').toUpperCase(), fullUrl);
-    console.log('📝 요청 데이터:', config.data ?? '(none)');
+    if (__DEV__) {
+      console.log('🌐 API 요청:', (config.method || 'GET').toUpperCase(), fullUrl);
+      console.log('📝 요청 데이터:', sanitizeForLog(config.data) ?? '(none)');
+    }
 
     const { accessToken } = await getAuthTokens();
-    console.log('🔑 토큰 유무:', maskToken(accessToken));
+    if (__DEV__) {
+      console.log('🔑 토큰 유무:', maskToken(accessToken));
+    }
 
     // ✅ headers 타입 안전 처리
     if (!config.headers) {
@@ -49,27 +88,17 @@ apiClient.interceptors.request.use(
       config.headers.set('Content-Type', 'application/json');
     }
 
-    // ✅ "실제로 Authorization이 들어갔는지" 최종 확인 로그 (타입 안전)
-    const authHeaderRaw = config.headers.get('Authorization');
-
-    if (typeof authHeaderRaw === 'string' && authHeaderRaw.length > 0) {
-      // 문자열일 때만 replace 가능
-      const tokenOnly = authHeaderRaw.replace(/^Bearer\s+/i, '');
+    if (__DEV__) {
       console.log(
         '🧷 Authorization 헤더:',
-        `Bearer ${tokenOnly.slice(0, 12)}...${tokenOnly.slice(-8)}`,
+        config.headers.has('Authorization') ? 'Bearer [REDACTED]' : '(none)',
       );
-
-      // ⚠️ 개발 중에만 전체 토큰이 필요하면 아래 주석 해제 (절대 배포 금지)
-      // if (__DEV__) console.log('🧷 Authorization FULL:', authHeaderRaw);
-    } else {
-      console.log('🧷 Authorization 헤더: (none or non-string)', authHeaderRaw);
     }
 
     return config;
   },
   error => {
-    console.error('❌ 요청 인터셉터 에러:', error);
+    if (__DEV__) console.warn('❌ 요청 인터셉터 에러:', error);
     return Promise.reject(error);
   },
 );
@@ -84,8 +113,10 @@ apiClient.interceptors.response.use(
       ? response.config.url
       : `${response.config.baseURL ?? ''}${response.config.url ?? ''}`;
 
-    console.log('✅ API 응답:', response.status, fullUrl);
-    console.log('📄 응답 데이터:', response.data);
+    if (__DEV__) {
+      console.log('✅ API 응답:', response.status, fullUrl);
+      console.log('📄 응답 데이터:', sanitizeForLog(response.data));
+    }
     return response;
   },
   error => {
@@ -100,18 +131,20 @@ apiClient.interceptors.response.use(
       ? error.config?.url
       : `${error.config?.baseURL ?? ''}${error.config?.url ?? ''}`;
 
-    console.error('❌ API 에러:', status, fullUrl);
+    if (__DEV__) console.warn('❌ API 에러:', status, fullUrl);
 
     const wwwAuth = error.response?.headers?.['www-authenticate'];
     if (wwwAuth) {
-      console.warn('🧾 WWW-Authenticate:', wwwAuth);
+      if (__DEV__) console.warn('🧾 WWW-Authenticate:', wwwAuth);
     }
 
     if (status === 401) {
-      console.warn('📄 에러 데이터(401):', data);
-      console.warn('🔑 인증 만료/미인증 - 로그인 필요');
+      if (__DEV__) {
+        console.warn('📄 에러 데이터(401):', sanitizeForLog(data));
+        console.warn('🔑 인증 만료/미인증 - 로그인 필요');
+      }
     } else {
-      console.error('📄 에러 데이터:', data);
+      if (__DEV__) console.warn('📄 에러 데이터:', sanitizeForLog(data));
     }
 
     return Promise.reject(error);

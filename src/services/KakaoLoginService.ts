@@ -22,37 +22,33 @@ export class KakaoLoginService {
     userData?: any;
   } | null> {
     try {
-      console.log('카카오 로그인 시작');
+      if (__DEV__) console.log('카카오 로그인 시작');
 
       // 1. 카카오 OAuth 로그인
       const token: KakaoOAuthToken = await login();
-      console.log('카카오 OAuth 토큰 획득');
+      if (__DEV__) console.log('카카오 OAuth 토큰 획득');
 
       // 2. 카카오 사용자 프로필 정보 가져오기
       const profile: KakaoProfile = await getProfile();
-      console.log('카카오 프로필 정보:', {
-        id: profile.id,
-        nickname: profile.nickname,
-        email: profile.email,
-      });
+      if (__DEV__) console.log('카카오 프로필 정보 조회 완료');
 
       // 3. 백엔드 서버로 카카오 로그인 요청 (수정된 부분)
       const loginData: KakaoLoginRequestDto = {
         accessToken: token.accessToken, // authorizationCode 대신 accessToken 사용
       };
 
-      console.log('백엔드 로그인 요청');
+      if (__DEV__) console.log('백엔드 로그인 요청');
 
       const response = await apiClient.post<KakaoLoginResponseDto>(
         API_ENDPOINTS_LIST.KAKAO_LOGIN,
         loginData,
       );
 
-      console.log('백엔드 로그인 응답:', response.data);
+      if (__DEV__) console.log('백엔드 로그인 응답 상태:', response.data?.userStatus);
 
       return this.handleLoginResponse(response.data);
     } catch (error: any) {
-      console.error('카카오 로그인 오류:', error);
+      if (__DEV__) console.warn('카카오 로그인 오류:', error?.message || error);
 
       // 사용자 취소 에러 처리
       if (error) {
@@ -65,7 +61,7 @@ export class KakaoLoginService {
           errorMessage.includes('cancelled') ||
           errorMessage.includes('canceled')
         ) {
-          console.log('사용자가 카카오 로그인을 취소했습니다.');
+          if (__DEV__) console.log('사용자가 카카오 로그인을 취소했습니다.');
           return null; // 취소한 경우 null 반환
         }
       }
@@ -80,9 +76,9 @@ export class KakaoLoginService {
   static async performKakaoLogout(): Promise<void> {
     try {
       const message = await logout();
-      console.log('카카오 로그아웃 성공:', message);
+      if (__DEV__) console.log('카카오 로그아웃 성공');
     } catch (error) {
-      console.error('카카오 로그아웃 오류:', error);
+      if (__DEV__) console.warn('카카오 로그아웃 오류:', error);
       throw error;
     }
   }

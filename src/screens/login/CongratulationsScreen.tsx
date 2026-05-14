@@ -196,14 +196,14 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       setIsPreparing(true);
 
       const profileId = await getProfileId();
-      console.log('🎉 [prepareSignupResult] profileId:', profileId);
+      if (__DEV__) console.log('🎉 [prepareSignupResult] profileId:', profileId ? 'YES' : 'NO');
 
       if (!profileId) {
         throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
       }
 
       const combined = await getCombinedProfileData(profileId);
-      console.log('🔗 [prepareSignupResult] combined profile data:', combined);
+      if (__DEV__) console.log('🔗 [prepareSignupResult] combined profile data ready:', !!combined);
 
       if (!combined) {
         throw new Error(
@@ -212,7 +212,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       }
 
       const prUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP}`;
-      console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
+      if (__DEV__) console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
 
       const prRes = await fetch(prUrl, {
         method: 'POST',
@@ -221,9 +221,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       });
 
       const prBody = await readResponseBody(prRes);
-      console.log('✅ [profile-relationship] status:', prRes.status);
-      console.log('📄 [profile-relationship] body(text):', prBody.text);
-      console.log('📦 [profile-relationship] body(json):', prBody.json);
+      if (__DEV__) console.log('✅ [profile-relationship] status:', prRes.status);
 
       if (!prRes.ok || (prBody.json && prBody.json.success === false)) {
         const msg =
@@ -234,8 +232,8 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       const completeUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`;
       const requestData: SignupCompleteRequestDto = { profileId };
 
-      console.log('🌐 [prepareSignupResult] POST signup complete:', completeUrl);
-      console.log('📝 [signup complete] request:', requestData);
+      if (__DEV__) console.log('🌐 [prepareSignupResult] POST signup complete:', completeUrl);
+      if (__DEV__) console.log('📝 [signup complete] request profileId:', requestData.profileId ? 'YES' : 'NO');
 
       const res = await fetch(completeUrl, {
         method: 'POST',
@@ -244,9 +242,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       });
 
       const body = await readResponseBody(res);
-      console.log('✅ [signup complete] status:', res.status);
-      console.log('📄 [signup complete] body(text):', body.text);
-      console.log('📦 [signup complete] body(json):', body.json);
+      if (__DEV__) console.log('✅ [signup complete] status:', res.status);
 
       const responseData = body.json as SignupCompleteResponseDto | null;
 
@@ -271,7 +267,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       };
       setPendingUserData(userData);
     } catch (error) {
-      console.error('❌ 회원가입 준비 오류(prepareSignupResult):', error);
+      if (__DEV__) console.warn('❌ 회원가입 준비 오류(prepareSignupResult):', error);
 
       const msg = error instanceof Error ? error.message : '오류가 발생했습니다.';
 
@@ -291,12 +287,12 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
 
     setIsCompleting(true);
     try {
-      console.log('🔐 [handleConfirm] saveAuthTokens start');
+      if (__DEV__) console.log('🔐 [handleConfirm] saveAuthTokens start');
       await saveAuthTokens(pendingUserData.accessToken, pendingUserData.refreshToken);
-      console.log('✅ [handleConfirm] tokens saved, navigating...');
+      if (__DEV__) console.log('✅ [handleConfirm] tokens saved, navigating...');
       onComplete(pendingUserData);
     } catch (e) {
-      console.error('❌ 토큰 저장 오류:', e);
+      if (__DEV__) console.warn('❌ 토큰 저장 오류:', e);
       Alert.alert('오류', '로그인 정보 저장 중 문제가 발생했어요.');
     } finally {
       setIsCompleting(false);
@@ -358,6 +354,7 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
               <Text style={styles.confirmButtonText}>확인</Text>
             )}
           </TouchableOpacity>
+
         </View>
       </View>
     </SafeAreaView>

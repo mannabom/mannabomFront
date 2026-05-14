@@ -1,9 +1,11 @@
-import { API_ENDPOINTS_LIST, getApiUrlWithParams } from '../config/api';
+import { API_ENDPOINTS_LIST, getApiUrl, getApiUrlWithParams } from '../config/api';
 import {
   AcceptMatchRequest,
   AcceptMatchResult,
   MatchingCancelRequest,
   MatchingCancelResult,
+  MatchingContinueRequest,
+  MatchingContinueResult,
   MatchingResultData,
   MatchingStartRequest,
   MatchingStartResult,
@@ -17,6 +19,9 @@ import {
   MeetingRoomSummary,
   MeetingRoomsSearchRequest,
   MeetingRoomsSearchResult,
+  MeetingStreamEvent,
+  MeetingStreamEventName,
+  MeetingStreamHandlers,
   MeetingSearchStatus,
   MeetingStatus,
   MeetingTeamMember,
@@ -25,6 +30,7 @@ import {
   RejectMatchResult,
 } from '../types/MeetingAPI';
 import { Gender } from '../types/KakaoAPI';
+import { getAuthTokens } from '../utils/AuthUtils';
 import apiClient from './apiClient';
 
 const toNumber = (value: any, fallback = 0) => {
@@ -106,6 +112,14 @@ const normalizeRoomSummary = (raw: any): MeetingRoomSummary => ({
       }))
     : [],
 });
+
+const parseStreamPayload = (value: string): MeetingStreamEvent | null => {
+  try {
+    return JSON.parse(value) as MeetingStreamEvent;
+  } catch {
+    return null;
+  }
+};
 
 class MeetingApiService {
   private unwrap<T>(raw: any): T {
@@ -255,6 +269,64 @@ class MeetingApiService {
       payload,
     );
     return this.unwrap<MatchingCancelResult>(response.data);
+  }
+
+  async continueMatching(
+    payload: MatchingContinueRequest,
+  ): Promise<MatchingContinueResult> {
+    const response = await apiClient.post(
+      API_ENDPOINTS_LIST.MEETING_MATCHING_CONTINUE,
+      payload,
+    );
+    return this.unwrap<MatchingContinueResult>(response.data);
+  }
+
+  getEventsStreamUrl(roomId: string): string {
+    const query = new URLSearchParams({ roomId }).toString();
+    return `${getApiUrl(API_ENDPOINTS_LIST.MEETING_EVENTS_STREAM)}?${query}`;
+  }
+
+  async subscribeToMatchingEvents(
+    roomId: string,
+    handlers: MeetingStreamHandlers,
+  ): Promise<() => void> {
+    const EventSourceConstructor = (globalThis as any).EventSource;
+
+    if (!EventSourceConstructor) {
+      throw new Error(
+        'EventSource is not available. Install a React Native EventSource/SSE polyfill before subscribing.',
+      );
+    }
+
+    const { accessToken } = await getAuthTokens();
+    const source = new EventSourceConstructor(this.getEventsStreamUrl(roomId), {
+      headers: {
+        Accept: 'text/event-stream',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+
+    const eventNames: MeetingStreamEventName[] = [
+      'matching-status',
+      'match-found',
+      'matching-timeout',
+      'decision-result',
+    ];
+
+    eventNames.forEach(eventName => {
+      source.addEventListener(eventName, (event: any) => {
+        const parsed = parseStreamPayload(event?.data);
+        if (parsed) handlers.onEvent?.(parsed, eventName);
+      });
+    });
+
+    source.onerror = (error: unknown) => {
+      handlers.onError?.(error);
+    };
+
+    return () => {
+      source.close();
+    };
   }
 
   async getMatchingResult(roomId: string): Promise<MatchingResultData> {

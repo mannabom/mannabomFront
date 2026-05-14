@@ -147,6 +147,15 @@ export interface MatchingCancelResult {
   sseUnsubscribed: boolean;
 }
 
+export interface MatchingContinueRequest {
+  roomId: string;
+}
+
+export interface MatchingContinueResult {
+  continued: boolean;
+  estimatedWaitTime?: number;
+}
+
 export interface MatchingResultMember {
   userId: number;
   nickname: string;
@@ -204,4 +213,88 @@ export interface RejectMatchResult {
     remainingRematches: number;
     canRematch: boolean;
   };
+}
+
+export interface MatchingStatusStreamEvent {
+  type: 'MATCHING_STATUS';
+  roomId: string;
+  timestamp: string;
+  eventId: string;
+  data: {
+    status: MeetingStatus;
+    matchingDuration?: number;
+    timeoutWarning?: boolean;
+    estimatedWaitTime?: number;
+  };
+}
+
+export interface MatchFoundStreamEvent {
+  type: 'MATCH_FOUND';
+  roomId: string;
+  timestamp: string;
+  eventId: string;
+  data: {
+    matchId: string;
+    opponentTeam: {
+      roomId: string;
+      roomName: string;
+      members: MatchingResultMember[];
+    };
+    decisionDeadline: string;
+  };
+}
+
+export interface MatchingTimeoutStreamEvent {
+  type: 'MATCHING_TIMEOUT';
+  roomId: string;
+  timestamp: string;
+  eventId: string;
+  data: {
+    totalWaitTime: number;
+    canContinue: boolean;
+    remainingAttempts?: number;
+  };
+}
+
+export interface DecisionResultStreamEvent {
+  type: 'DECISION_RESULT';
+  roomId: string;
+  timestamp: string;
+  eventId: string;
+  data: {
+    matchId: string;
+    chatRoom?: {
+      roomId: string;
+      roomName: string;
+      participants: {
+        userId: number;
+        nickname: string;
+        profileImage: string;
+      }[];
+      matchInfo: {
+        region: MeetingRegion;
+        totalMembers: number;
+        matchedAt: string;
+      };
+    };
+    remainingRematches?: number;
+    autoUnsubscribed: boolean;
+  };
+}
+
+export type MeetingStreamEvent =
+  | MatchingStatusStreamEvent
+  | MatchFoundStreamEvent
+  | MatchingTimeoutStreamEvent
+  | DecisionResultStreamEvent;
+
+export type MeetingStreamEventName =
+  | 'matching-status'
+  | 'match-found'
+  | 'matching-timeout'
+  | 'decision-result';
+
+export interface MeetingStreamHandlers {
+  onEvent?: (event: MeetingStreamEvent, eventName: MeetingStreamEventName) => void;
+  onError?: (error: unknown) => void;
 }
