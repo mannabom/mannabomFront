@@ -18,7 +18,7 @@ export class KakaoAPIService {
         accessToken, // 수정된 부분
       };
 
-      console.log('카카오 로그인 API 호출:', requestData);
+      if (__DEV__) console.log('카카오 로그인 API 호출');
 
       const response = await fetch(
         `${API_BASE_URL}${API_ENDPOINTS_LIST.KAKAO_LOGIN}`,
@@ -39,7 +39,7 @@ export class KakaoAPIService {
 
       return responseData;
     } catch (error) {
-      console.error('카카오 로그인 API 오류:', error);
+      if (__DEV__) console.warn('카카오 로그인 API 오류:', error);
       throw error;
     }
   }

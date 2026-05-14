@@ -17,6 +17,8 @@ let foregroundMsgUnsub: null | (() => void) = null;
 
 let notifeeReady = false;
 
+const tokenState = (token?: string | null) => (token ? `YES(len=${token.length})` : 'NO');
+
 async function ensureNotifeeReady() {
   if (notifeeReady) return;
 
@@ -33,7 +35,7 @@ async function ensureNotifeeReady() {
 
     notifeeReady = true;
   } catch (e) {
-    console.warn('⚠️ [Push] ensureNotifeeReady failed (ignored):', e);
+    if (__DEV__) console.warn('⚠️ [Push] ensureNotifeeReady failed (ignored):', e);
   }
 }
 
@@ -88,12 +90,14 @@ export async function debugPushStatus() {
     const savedToken = await AsyncStorage.getItem(STORAGE_DEVICE_TOKEN);
     const fcmToken = await messaging().getToken().catch(() => null);
 
-    console.log('🧪 [PushDebug] notifee permission:', perm);
-    console.log('🧪 [PushDebug] AsyncStorage lastSent:', lastSent);
-    console.log('🧪 [PushDebug] AsyncStorage savedToken:', savedToken);
-    console.log('🧪 [PushDebug] messaging getToken():', fcmToken);
+    if (__DEV__) {
+      console.log('🧪 [PushDebug] notifee permission:', perm);
+      console.log('🧪 [PushDebug] AsyncStorage lastSent:', tokenState(lastSent));
+      console.log('🧪 [PushDebug] AsyncStorage savedToken:', tokenState(savedToken));
+      console.log('🧪 [PushDebug] messaging getToken():', tokenState(fcmToken));
+    }
   } catch (e) {
-    console.warn('⚠️ [PushDebug] failed:', e);
+    if (__DEV__) console.warn('⚠️ [PushDebug] failed:', e);
   }
 }
 
@@ -102,7 +106,7 @@ export async function registerFcmTokenToServer(opts?: { force?: boolean }): Prom
   const force = !!opts?.force;
 
   try {
-    console.log('📌 [Push] registerFcmTokenToServer start', { force });
+    if (__DEV__) console.log('📌 [Push] registerFcmTokenToServer start', { force });
 
     await ensureNotifeeReady();
 
@@ -110,10 +114,10 @@ export async function registerFcmTokenToServer(opts?: { force?: boolean }): Prom
     await messaging().requestPermission().catch(() => {});
 
     const token = await messaging().getToken();
-    console.log('✅ [Push] FCM TOKEN:', token);
+    if (__DEV__) console.log('✅ [Push] FCM token:', tokenState(token));
 
     if (!token) {
-      console.warn('⚠️ [Push] token is empty');
+      if (__DEV__) console.warn('⚠️ [Push] token is empty');
       return null;
     }
 
@@ -123,19 +127,19 @@ export async function registerFcmTokenToServer(opts?: { force?: boolean }): Prom
 
     // ✅ 문제의 핵심: 로그인/계정변경/서버초기화 대비해서, 기본은 force로 POST 하자
     if (!force && lastSent === token) {
-      console.log('⏭️ [Push] token unchanged, skip POST');
+      if (__DEV__) console.log('⏭️ [Push] token unchanged, skip POST');
       return token;
     }
 
-    console.log('🌐 [Push] POST', DEVICE_TOKEN_ENDPOINT, { deviceToken: token });
+    if (__DEV__) console.log('🌐 [Push] POST', DEVICE_TOKEN_ENDPOINT, { deviceToken: tokenState(token) });
     await apiClient.post(DEVICE_TOKEN_ENDPOINT, { deviceToken: token });
 
     await AsyncStorage.setItem(STORAGE_LAST_SENT, token);
-    console.log('✅ [Push] device token upsert success');
+    if (__DEV__) console.log('✅ [Push] device token upsert success');
 
     return token;
   } catch (e: any) {
-    console.error('❌ [Push] registerFcmTokenToServer failed:', e?.response?.data || e?.message || e);
+    if (__DEV__) console.warn('❌ [Push] registerFcmTokenToServer failed:', e?.response?.data || e?.message || e);
     return null;
   }
 }
@@ -145,16 +149,16 @@ export function startTokenRefreshListener() {
 
   tokenRefreshUnsub = messaging().onTokenRefresh(async newToken => {
     try {
-      console.log('🔄 [Push] onTokenRefresh:', newToken);
+      if (__DEV__) console.log('🔄 [Push] onTokenRefresh:', tokenState(newToken));
 
       await AsyncStorage.setItem(STORAGE_DEVICE_TOKEN, newToken);
 
       await apiClient.post(DEVICE_TOKEN_ENDPOINT, { deviceToken: newToken });
       await AsyncStorage.setItem(STORAGE_LAST_SENT, newToken);
 
-      console.log('✅ [Push] refreshed token upsert success');
+      if (__DEV__) console.log('✅ [Push] refreshed token upsert success');
     } catch (e: any) {
-      console.error('❌ [Push] token refresh upsert failed:', e?.response?.data || e?.message || e);
+      if (__DEV__) console.warn('❌ [Push] token refresh upsert failed:', e?.response?.data || e?.message || e);
     }
   });
 }
@@ -162,20 +166,22 @@ export function startTokenRefreshListener() {
 export function startForegroundNotificationListener() {
   if (foregroundMsgUnsub) return;
 
-  console.log('📌 [Push] startForegroundNotificationListener');
+  if (__DEV__) console.log('📌 [Push] startForegroundNotificationListener');
 
   void ensureNotifeeReady();
 
   foregroundMsgUnsub = messaging().onMessage(async remoteMessage => {
     try {
-      console.log('🔔 [Push] onMessage (foreground):', {
-        notification: remoteMessage?.notification,
-        data: remoteMessage?.data,
-      });
+      if (__DEV__) {
+        console.log('🔔 [Push] onMessage (foreground):', {
+          hasNotification: !!remoteMessage?.notification,
+          dataKeys: remoteMessage?.data ? Object.keys(remoteMessage.data) : [],
+        });
+      }
 
       await showLocalNotificationFromRemoteMessage(remoteMessage);
     } catch (e) {
-      console.error('❌ [Push] foreground notification failed:', e);
+      if (__DEV__) console.warn('❌ [Push] foreground notification failed:', e);
     }
   });
 }

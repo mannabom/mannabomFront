@@ -686,7 +686,7 @@ export default function ProfileDetail() {
       setPhotoUrls(url ? [url] : []);
       setActivePhotoIndex(0);
     } catch (e: any) {
-      console.error('❌ [ProfileDetail] load error:', e?.response?.data || e?.message || e);
+      if (__DEV__) console.warn('❌ [ProfileDetail] load error:', e?.response?.data || e?.message || e);
       Alert.alert('오류', '프로필 불러오기 실패', [
         { text: '뒤로가기', style: 'cancel', onPress: () => navigation.goBack() },
         { text: '다시 시도', onPress: loadProfile },
@@ -837,7 +837,7 @@ export default function ProfileDetail() {
         })),
       };
 
-      console.log('📝 [ProfileDetail] update payload:', JSON.stringify(payload, null, 2));
+      if (__DEV__) console.log('📝 [ProfileDetail] update payload ready');
 
       await apiClient.put(API_ENDPOINTS_LIST.USER_PROFILE, payload);
       Alert.alert('저장 완료', '프로필이 업데이트 되었어요.');
@@ -845,7 +845,7 @@ export default function ProfileDetail() {
       await loadProfile();
       navigation.goBack();
     } catch (e: any) {
-      console.error('❌ [ProfileDetail] save error:', e?.response?.data || e?.message || e);
+      if (__DEV__) console.warn('❌ [ProfileDetail] save error:', e?.response?.data || e?.message || e);
       Alert.alert('오류', '프로필 저장에 실패했어요. 입력값을 확인해주세요.');
     } finally {
       setSaving(false);

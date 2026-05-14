@@ -36,7 +36,7 @@ class DatingApiService {
       condition,
     );
     const data = this.unwrap<ProfileMatchConditionResponse>(response.data);
-    if (__DEV__) console.log('프로필 매칭(무료권) 성공:', data);
+    if (__DEV__) console.log('프로필 매칭(무료권) 성공:', Boolean(data?.profileId));
     return data;
   }
 
@@ -49,7 +49,7 @@ class DatingApiService {
       condition,
     );
     const data = this.unwrap<ProfileMatchConditionResponse>(response.data);
-    if (__DEV__) console.log('프로필 매칭(혜택권) 성공:', data);
+    if (__DEV__) console.log('프로필 매칭(혜택권) 성공:', Boolean(data?.profileId));
     return data;
   }
 
@@ -61,7 +61,7 @@ class DatingApiService {
     );
 
     if (__DEV__) {
-      console.log('프로필 평가 요청:', ratingData);
+      console.log('프로필 평가 요청:', { targetProfileId: ratingData.targetProfileId, score: ratingData.score });
       console.log('프로필 평가 응답:', response.status);
     }
 
@@ -88,7 +88,7 @@ class DatingApiService {
       condition,
     );
     const data = this.unwrap<LoveViewMatchConditionResponse>(response.data);
-    if (__DEV__) console.log('연애관 매칭 성공:', data);
+    if (__DEV__) console.log('연애관 매칭 성공:', Boolean(data?.userId || data?.profileId));
     return data;
   }
 

@@ -34,6 +34,7 @@ import {
   MeetingRegion,
   MeetingRoomSummary,
   MeetingStatus,
+  MeetingTeamMember,
   MyMeetingStatus,
 } from '../../types/MeetingAPI';
 import { getPhysicalProfile } from '../../utils/ProfileStorage';
@@ -327,6 +328,32 @@ const sortTeamMembers = (
   });
 };
 
+const buildDisplayTeamMembers = (
+  room: MyMeetingStatus | null,
+  context: MeetingUserContext,
+): MeetingTeamMember[] => {
+  const sortedMembers = sortTeamMembers(room?.teamMembers, context);
+  const hasSelf = sortedMembers.some(
+    member =>
+      (context.userId && member.userId === context.userId) ||
+      (context.nickname && member.nickname === context.nickname),
+  );
+
+  if (!room?.hasActiveRoom || hasSelf) {
+    return sortedMembers;
+  }
+
+  return [
+    {
+      userId: context.userId ?? -1,
+      nickname: context.nickname || '나',
+      profileImage: context.profileImage,
+      leader: Boolean(room.leader),
+    },
+    ...sortedMembers,
+  ];
+};
+
 const buildFallbackProfiles = (room: MeetingRoomSummary): MeetingMemberProfile[] =>
   room.membersPreview.map((member, index) => ({
     userId: member.userId,
@@ -512,6 +539,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     marginLeft: 2,
+  },
+  tooltipDismissLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 9,
   },
   walletTooltip: {
     position: 'absolute',
@@ -916,6 +951,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  dropdownMenusRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  dropdownMenuSlot: {
+    flex: 1,
+  },
   dropdownButton: {
     flex: 1,
     height: 48,
@@ -938,12 +981,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   dropdownMenuInline: {
-    marginTop: 8,
     borderWidth: 1.2,
     borderColor: '#AEB4BE',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    maxHeight: 172,
+    maxHeight: 210,
+    overflow: 'hidden',
   },
   dropdownMenuItem: {
     paddingHorizontal: 16,
@@ -1509,6 +1552,27 @@ const MeetingConditionsModal = ({
     }
   };
 
+  const renderDropdownMenu = (
+    options: readonly string[],
+    onSelect: (option: string) => void,
+  ) => (
+    <ScrollView
+      style={styles.dropdownMenuInline}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    >
+      {options.map(option => (
+        <TouchableOpacity
+          key={option}
+          style={styles.dropdownMenuItem}
+          onPress={() => onSelect(option)}
+        >
+          <Text style={styles.dropdownMenuItemText}>{option}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+
   return (
     <MeetingModal
       visible={visible}
@@ -1565,34 +1629,21 @@ const MeetingConditionsModal = ({
           </TouchableOpacity>
         </View>
 
-        {openMenu === 'sido' && (
-          <View style={styles.dropdownMenuInline}>
-            {REGION_OPTIONS.map(option => (
-              <TouchableOpacity
-                key={option}
-                style={styles.dropdownMenuItem}
-                onPress={() => handleSelectSido(option)}
-              >
-                <Text style={styles.dropdownMenuItemText}>{option}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {openMenu === 'sigungu' && (
-          <View style={styles.dropdownMenuInline}>
-            {districtOptions.map(option => (
-              <TouchableOpacity
-                key={option}
-                style={styles.dropdownMenuItem}
-                onPress={() => {
-                  setSigungu(option);
-                  setOpenMenu(null);
-                }}
-              >
-                <Text style={styles.dropdownMenuItemText}>{option}</Text>
-              </TouchableOpacity>
-            ))}
+        {openMenu && (
+          <View style={styles.dropdownMenusRow}>
+            <View style={styles.dropdownMenuSlot}>
+              {openMenu === 'sido'
+                ? renderDropdownMenu(REGION_OPTIONS, handleSelectSido)
+                : null}
+            </View>
+            <View style={styles.dropdownMenuSlot}>
+              {openMenu === 'sigungu'
+                ? renderDropdownMenu(districtOptions, option => {
+                    setSigungu(option);
+                    setOpenMenu(null);
+                  })
+                : null}
+            </View>
           </View>
         )}
 
@@ -1840,7 +1891,7 @@ const MeetingScreen: React.FC = () => {
       const result = await meetingApiService.searchRooms(nextFilters);
       setRooms(result.meetings);
     } catch (error) {
-      console.warn('Failed to search meeting rooms', error);
+      if (__DEV__) console.warn('Failed to search meeting rooms', error);
       Alert.alert('오류', '미팅 방 목록을 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
     } finally {
       setRoomsLoading(false);
@@ -1872,7 +1923,7 @@ const MeetingScreen: React.FC = () => {
         await loadRooms(filterSettingsRef.current);
       }
     } catch (error) {
-      console.warn('Failed to initialize meeting home', error);
+      if (__DEV__) console.warn('Failed to initialize meeting home', error);
       Alert.alert('오류', '미팅 화면을 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
     } finally {
       setScreenLoading(false);
@@ -1895,8 +1946,8 @@ const MeetingScreen: React.FC = () => {
   }, [filterSettings, rooms]);
 
   const activeRoomMembers = useMemo(
-    () => sortTeamMembers(activeRoom?.teamMembers, userContext),
-    [activeRoom?.teamMembers, userContext],
+    () => buildDisplayTeamMembers(activeRoom, userContext),
+    [activeRoom, userContext],
   );
 
   const waitingNotice = useMemo(
@@ -1928,7 +1979,7 @@ const MeetingScreen: React.FC = () => {
         loading: false,
       });
     } catch (error) {
-      console.warn('Failed to load meeting member profiles', error);
+      if (__DEV__) console.warn('Failed to load meeting member profiles', error);
       setProfileModalState({
         room,
         members: fallbackMembers,
@@ -1976,7 +2027,7 @@ const MeetingScreen: React.FC = () => {
     if (isRoomFullError(error)) {
       setErrorModal({
         title: '입장하기',
-        message: '입원이 다 차 입장할 수 없는 방입니다.',
+        message: '인원이 다 차 입장할 수 없는 방입니다.',
       });
       return;
     }
@@ -2028,7 +2079,7 @@ const MeetingScreen: React.FC = () => {
       setActiveRoom(toMyMeetingStatus(response.meetingChatRoomInfo));
       await refreshWalletAndProfile();
     } catch (error) {
-      console.warn('Failed to join meeting room', error);
+      if (__DEV__) console.warn('Failed to join meeting room', error);
       setJoinContext(null);
       handleJoinError(error, joinContext.mode);
     } finally {
@@ -2088,7 +2139,7 @@ const MeetingScreen: React.FC = () => {
       setActiveRoom(toMyMeetingStatus(response.meetingChatRoomInfo));
       await refreshWalletAndProfile();
     } catch (error) {
-      console.warn('Failed to create meeting room', error);
+      if (__DEV__) console.warn('Failed to create meeting room', error);
       setCreateModalVisible(false);
       handleCreateError(error);
     } finally {
@@ -2209,25 +2260,34 @@ const MeetingScreen: React.FC = () => {
         </View>
 
         {walletTooltipVisible && (
-          <View style={styles.walletTooltip}>
-            <View style={styles.walletTooltipHeader}>
-              <Text style={styles.walletTooltipTitle}>유의해주세요!</Text>
-              <TouchableOpacity onPress={() => setWalletTooltipVisible(false)}>
-                <Text style={styles.walletTooltipClose}>×</Text>
-              </TouchableOpacity>
+          <>
+            <Pressable
+              style={styles.tooltipDismissLayer}
+              onPress={() => setWalletTooltipVisible(false)}
+            />
+            <View style={styles.walletTooltip}>
+              <View style={styles.walletTooltipHeader}>
+                <Text style={styles.walletTooltipTitle}>유의해주세요!</Text>
+                <TouchableOpacity onPress={() => setWalletTooltipVisible(false)}>
+                  <Text style={styles.walletTooltipClose}>×</Text>
+                </TouchableOpacity>
+              </View>
+              {getWalletTooltipLines(userContext.gender).map(line => (
+                <Text key={line} style={styles.walletTooltipLine}>
+                  • {line}
+                </Text>
+              ))}
             </View>
-            {getWalletTooltipLines(userContext.gender).map(line => (
-              <Text key={line} style={styles.walletTooltipLine}>
-                • {line}
-              </Text>
-            ))}
-          </View>
+          </>
         )}
 
         <View style={styles.roomsPanel}>
           <TouchableOpacity
             style={styles.filterButton}
-            onPress={() => setFilterModalVisible(true)}
+            onPress={() => {
+              setWalletTooltipVisible(false);
+              setFilterModalVisible(true);
+            }}
             activeOpacity={0.85}
           >
             <Image source={filterImg} style={styles.filterIcon} />

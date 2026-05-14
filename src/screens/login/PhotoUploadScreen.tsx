@@ -226,7 +226,11 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
       const response = await apiClient.post(
         API_ENDPOINTS_LIST.PROFILE_PHOTOS,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } },
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        },
       );
 
       if (response.data.success) {
@@ -240,9 +244,29 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
           response.data.message || '사진 업로드에 실패했습니다.',
         );
       }
-    } catch (error) {
-      console.error('사진 업로드 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } catch (error: any) {
+      const serverMessage = error.response?.data?.message;
+      const serverDetails = error.response?.data?.details;
+      const status = error.response?.status;
+      const fallbackMessage =
+        status || serverMessage || serverDetails
+          ? `status: ${status ?? 'unknown'}\nmessage: ${
+              serverMessage || '응답 메시지 없음'
+            }${serverDetails ? `\ndetails: ${serverDetails}` : ''}`
+          : '사진 업로드 중 오류가 발생했습니다. 다시 시도해주세요.';
+
+      if (__DEV__) {
+        console.warn('사진 업로드 오류:', {
+          status,
+          message: serverMessage || error.message,
+        });
+      }
+
+      Alert.alert(
+        '오류',
+        serverMessage || fallbackMessage,
+        [{ text: '확인', style: 'cancel' }],
+      );
     } finally {
       setIsLoading(false);
     }
@@ -416,7 +440,9 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
               {isLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.smallButtonTextLight}>완료하기</Text>
+                <Text style={styles.smallButtonTextLight}>
+                  완료하기
+                </Text>
               )}
             </TouchableOpacity>
           </View>
