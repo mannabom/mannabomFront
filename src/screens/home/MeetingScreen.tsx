@@ -287,7 +287,7 @@ const getMatchingStatusLabel = (status?: MeetingStatus) => {
       return '매칭 완료';
     case 'RECRUITING':
     default:
-      return '팀원 모집중';
+      return '매칭중';
   }
 };
 
@@ -785,6 +785,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  noticeStar: {
+    color: '#F6C343',
+  },
   noticeSpacing: {
     marginTop: 12,
   },
@@ -803,9 +806,10 @@ const styles = StyleSheet.create({
   activeCard: {
     borderRadius: 20,
     backgroundColor: '#FFF8FA',
+    minHeight: 310,
     paddingTop: 22,
     paddingHorizontal: 18,
-    paddingBottom: 24,
+    paddingBottom: 56,
   },
   activeStatusText: {
     color: '#111111',
@@ -828,7 +832,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   activeMembersWrap: {
-    marginTop: 26,
+    marginTop: 50,
     gap: 18,
   },
   activeMemberRow: {
@@ -2377,7 +2381,9 @@ const MeetingScreen: React.FC = () => {
 
         <View style={styles.noticeCard}>
           <Text style={styles.noticeTitle}>유의해주세요!</Text>
-          <Text style={styles.noticeBody}>“매너 있는 만남, 함께 만들어요!”</Text>
+          <Text style={styles.noticeBody}>
+            “매너 있는 만남, 함께 만들어요!” <Text style={styles.noticeStar}>★</Text>
+          </Text>
           <Text style={styles.noticeBody}>{waitingNotice.intro}</Text>
           <Text style={[styles.noticeBody, styles.noticeSpacing]}>[입장 안내]</Text>
           <Text style={styles.noticeHighlight}>{waitingNotice.general}</Text>
@@ -2462,7 +2468,9 @@ const MeetingScreen: React.FC = () => {
 
         <View style={styles.noticeCard}>
           <Text style={styles.noticeTitle}>유의해주세요!</Text>
-          <Text style={styles.noticeBody}>“매너 있는 만남, 함께 만들어요!”</Text>
+          <Text style={styles.noticeBody}>
+            “매너 있는 만남, 함께 만들어요!” <Text style={styles.noticeStar}>★</Text>
+          </Text>
           <Text style={styles.noticeBody}>{waitingNotice.intro}</Text>
           <Text style={[styles.noticeBody, styles.noticeSpacing]}>[입장 안내]</Text>
           <Text style={styles.noticeHighlight}>{waitingNotice.general}</Text>

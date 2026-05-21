@@ -62,7 +62,7 @@ export const API_ENDPOINTS_LIST = {
   PROFILE_DETAIL: '/api/profile/detail',
   LOVEVIEW_DETAIL: '/api/loveview/detail',
   PROFILE_DETAIL_EXTRA_PHOTO: '/api/profile/detail/extra_photo',
-  LIKE_SEND: '/api/like/send',
+  LIKE_SEND: '/api/likeRequest/send',
   MESSAGE_SEND: '/api/messageRequest/send',
   SCORE_IS_RECEIVED: '/api/score/isReceived',
   SCORE_RECEIVED: '/api/score/received',
