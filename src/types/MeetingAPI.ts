@@ -118,6 +118,14 @@ export interface MeetingRoomJoinByCodeRequest {
   roomCode: string;
 }
 
+export interface MeetingRoomLeaveRequest {
+  roomId: number;
+}
+
+export interface MeetingRoomLeaveResult {
+  left: boolean;
+}
+
 export interface MeetingEntryResult {
   creationCost?: number;
   pointsUsed?: number;

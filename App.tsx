@@ -22,6 +22,10 @@ import ProfilePreviewScreen from './src/screens/home/ProfilePreviewScreen';
 import LoveCodePreviewScreen from './src/screens/home/LoveCodePreviewScreen';
 import MatchDetailScreen from './src/screens/home/MatchDetailScreen';
 import InterestDetailScreen from './src/screens/interest/InterestDetailScreen';
+import MeetingTeamChatScreen from './src/screens/chat/MeetingTeamChatScreen';
+import MeetingGeneralChatScreen from './src/screens/chat/MeetingGeneralChatScreen';
+import DatingChatRoomScreen from './src/screens/chat/DatingChatRoomScreen';
+import ChatProfileDetailScreen from './src/screens/chat/ChatProfileDetailScreen';
 
 import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
@@ -265,6 +269,11 @@ const App: React.FC = () => {
             <Stack.Screen name="LoveCodePreview" component={LoveCodePreviewScreen} />
             <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
             <Stack.Screen name="InterestDetail" component={InterestDetailScreen} />
+            <Stack.Screen name="MeetingTeamChat" component={MeetingTeamChatScreen} />
+            <Stack.Screen name="MeetingGeneralChat" component={MeetingGeneralChatScreen} />
+            <Stack.Screen name="ProfileChat" component={DatingChatRoomScreen} />
+            <Stack.Screen name="LoveviewChat" component={DatingChatRoomScreen} />
+            <Stack.Screen name="ChatProfileDetail" component={ChatProfileDetailScreen} />
 
             {/* ✅ 스토어 */}
             <Stack.Screen name="Store" component={StoreScreen} />

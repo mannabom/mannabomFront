@@ -71,6 +71,17 @@ export const API_ENDPOINTS_LIST = {
   LIKE_RESPOND: '/api/match/like/respond',
   MESSAGE_RESPOND: '/api/match/message/respond',
 
+  // 채팅 관련
+  CHAT_SYNC_LIST: '/api/chat/sync/list',
+  CHAT_SYNC_MESSAGES: '/api/chat/sync/chat/{roomId}',
+  CHAT_HISTORY_MESSAGES: '/api/chat/history/chat/{roomId}',
+  CHAT_MARK_READ: '/api/chat/rooms/{roomId}/read',
+  CHAT_ROOM_LEAVE: '/api/chat/rooms/{roomId}/leave',
+  CHAT_LOVEVIEW_PROFILE_REQUEST: '/api/chat/loveview/profile/request',
+  CHAT_LOVEVIEW_PROFILE_RESPONSE: '/api/chat/loveview/profile/response',
+  CHAT_LOVEVIEW_PROFILE_STATUS: '/api/chat/loveview/profile/checkStatus',
+  CHAT_MEETING_VERIFY: '/api/chat/meeting/verify',
+
   // 미팅 관련
   MEETING_MY_STATUS: '/api/meeting/my-status',
   MEETING_ROOMS_SEARCH: '/api/meeting/rooms/search',
@@ -78,6 +89,7 @@ export const API_ENDPOINTS_LIST = {
   MEETING_ROOM_CREATE: '/api/meeting/rooms/create',
   MEETING_ROOM_JOIN: '/api/meeting/rooms/join',
   MEETING_ROOM_JOIN_BY_CODE: '/api/meeting/rooms/join-by-code',
+  MEETING_ROOM_LEAVE: '/api/meeting/rooms/leave',
   MEETING_MATCHING_START: '/api/meeting/matching/start',
   MEETING_MATCHING_CANCEL: '/api/meeting/matching/cancel',
   MEETING_MATCHING_CONTINUE: '/api/meeting/matching/continue',
