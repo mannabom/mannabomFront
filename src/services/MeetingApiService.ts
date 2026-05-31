@@ -16,6 +16,8 @@ import {
   MeetingRoomCreateRequest,
   MeetingRoomJoinByCodeRequest,
   MeetingRoomJoinRequest,
+  MeetingRoomLeaveRequest,
+  MeetingRoomLeaveResult,
   MeetingRoomSummary,
   MeetingRoomsSearchRequest,
   MeetingRoomsSearchResult,
@@ -249,6 +251,14 @@ class MeetingApiService {
         data?.meetingChatRoomInfo ?? data?.chatRoomInfo ?? data,
       ),
     };
+  }
+
+  async leaveRoom(payload: MeetingRoomLeaveRequest): Promise<MeetingRoomLeaveResult> {
+    const response = await apiClient.post(
+      API_ENDPOINTS_LIST.MEETING_ROOM_LEAVE,
+      payload,
+    );
+    return this.unwrap<MeetingRoomLeaveResult>(response.data);
   }
 
   async startMatching(

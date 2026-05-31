@@ -7,8 +7,7 @@ import BlindDateScreen from '../screens/home/BlindDateScreen';
 import MeetingScreen from '../screens/home/MeetingScreen';
 import MyPage from '../screens/MyPage/MyPage';
 import InterestScreen from '../screens/interest/InterestScreen';
-
-import { View, Text } from 'react-native';
+import ChatScreen from '../screens/chat/ChatScreen';
 
 export type MainTabParamList = {
   dating: undefined;
@@ -19,12 +18,6 @@ export type MainTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-const Placeholder = ({ label }: { label: string }) => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-    <Text>{label}</Text>
-  </View>
-);
 
 interface MainTabNavigatorProps {
   onLogout: () => void;
@@ -58,7 +51,7 @@ export default function MainTabNavigator({ onLogout }: MainTabNavigatorProps) {
       </Tab.Screen>
 
       <Tab.Screen name="chat">
-        {() => <Placeholder label="채팅" />}
+        {() => <ChatScreen />}
       </Tab.Screen>
 
       <Tab.Screen name="mypage">

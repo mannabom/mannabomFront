@@ -804,12 +804,29 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   activeCard: {
+    position: 'relative',
     borderRadius: 20,
     backgroundColor: '#FFF8FA',
     minHeight: 310,
     paddingTop: 22,
     paddingHorizontal: 18,
     paddingBottom: 56,
+  },
+  activeLeaveButton: {
+    position: 'absolute',
+    top: 22,
+    left: 18,
+    zIndex: 2,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeLeaveButtonText: {
+    color: '#111111',
+    fontSize: 40,
+    lineHeight: 40,
+    fontWeight: '400',
   },
   activeStatusText: {
     color: '#111111',
@@ -1802,6 +1819,7 @@ const MeetingScreen: React.FC = () => {
   const [screenLoading, setScreenLoading] = useState(true);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<'join' | 'create' | null>(null);
+  const [leavingRoom, setLeavingRoom] = useState(false);
 
   const [tingBalance, setTingBalance] = useState(0);
   const [eventTingBalance, setEventTingBalance] = useState(0);
@@ -2193,6 +2211,38 @@ const MeetingScreen: React.FC = () => {
     }
   };
 
+  const leaveActiveRoom = async () => {
+    const roomId = activeRoom?.roomId ?? activeRoom?.meetingId;
+    if (!roomId || leavingRoom) return;
+
+    setLeavingRoom(true);
+
+    try {
+      await meetingApiService.leaveRoom({ roomId });
+      setActiveRoom(null);
+      await refreshWalletAndProfile();
+      await loadRooms(filterSettingsRef.current);
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to leave meeting room', error);
+      Alert.alert('오류', parseApiMessage(error) || '미팅 방 나가기에 실패했어요.');
+    } finally {
+      setLeavingRoom(false);
+    }
+  };
+
+  const handleLeaveActiveRoom = () => {
+    if (leavingRoom) return;
+
+    Alert.alert(
+      '미팅 방 나가기',
+      '현재 미팅 방에서 나가시겠어요?',
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '나가기', style: 'destructive', onPress: leaveActiveRoom },
+      ],
+    );
+  };
+
   const renderRoomCard = (
     room: MeetingRoomSummary & { disabledMatching?: true },
   ) => {
@@ -2417,6 +2467,15 @@ const MeetingScreen: React.FC = () => {
         </View>
 
         <View style={styles.activeCard}>
+          <TouchableOpacity
+            style={styles.activeLeaveButton}
+            onPress={handleLeaveActiveRoom}
+            disabled={leavingRoom}
+            hitSlop={12}
+          >
+            <Text style={styles.activeLeaveButtonText}>←</Text>
+          </TouchableOpacity>
+
           <Text style={styles.activeStatusText}>{statusText}</Text>
           {!!activeRoom?.roomCode && (
             <Text style={styles.activeRoomMeta}>
@@ -2461,7 +2520,12 @@ const MeetingScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.chatButton}
-          onPress={() => navigation.navigate('chat')}
+          onPress={() =>
+            navigation.navigate('MeetingTeamChat', {
+              roomId: String(activeRoom?.roomId ?? activeRoom?.meetingId ?? ''),
+              roomType: 'TEAM',
+            })
+          }
         >
           <Text style={styles.chatButtonText}>채팅방으로</Text>
         </TouchableOpacity>

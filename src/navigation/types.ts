@@ -117,6 +117,41 @@ export type RootStackParamList = {
     receivedScore?: number;
   };
 
+  MeetingTeamChat: {
+    roomId?: string;
+    roomType?: string;
+  };
+
+  MeetingGeneralChat: {
+    roomId?: string;
+    roomType?: string;
+  };
+
+  ProfileChat: {
+    roomId?: string;
+    roomType?: string;
+    targetProfileId?: number;
+    nickname?: string;
+    profileImage?: string;
+    myGender?: string;
+  };
+
+  LoveviewChat: {
+    roomId?: string;
+    roomType?: string;
+    targetProfileId?: number;
+    nickname?: string;
+    profileImage?: string;
+    myGender?: string;
+  };
+
+  ChatProfileDetail: {
+    source: MatchSource;
+    targetProfileId: number;
+    previewName?: string;
+    previewImageUrl?: string;
+  };
+
   // ✅ 스토어 (간단 화면)
   Store: undefined;
 };
