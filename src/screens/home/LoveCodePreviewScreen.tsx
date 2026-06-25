@@ -163,7 +163,6 @@ export default function LoveCodePreviewScreen() {
   }, [index, navDirection, fade, slideX]);
 
   const goPrev = () => {
-    if (!canGoPrev) return;
     cardScrollRef.current?.scrollTo({ y: 0, animated: false });
     setNavDirection(-1);
     setIndex(i => Math.max(0, i - 1));
@@ -249,7 +248,11 @@ export default function LoveCodePreviewScreen() {
         </View>
 
         <View style={styles.contentWrap}>
-          <Pressable style={[styles.sideBtn, !canGoPrev && styles.sideBtnDisabled]} onPress={goPrev}>
+          <Pressable
+            style={[styles.sideBtn, !canGoPrev && styles.sideBtnDisabled]}
+            onPress={goPrev}
+            hitSlop={16}
+          >
             <Text style={[styles.sideArrow, !canGoPrev && styles.sideArrowDisabled]}>{'‹'}</Text>
           </Pressable>
 
@@ -336,7 +339,11 @@ export default function LoveCodePreviewScreen() {
             </ScrollView>
           </Animated.View>
 
-          <Pressable style={[styles.sideBtn, !canGoNext && styles.sideBtnDisabled]} onPress={goNext}>
+          <Pressable
+            style={[styles.sideBtn, !canGoNext && styles.sideBtnDisabled]}
+            onPress={goNext}
+            hitSlop={16}
+          >
             <Text style={[styles.sideArrow, !canGoNext && styles.sideArrowDisabled]}>{'›'}</Text>
           </Pressable>
         </View>

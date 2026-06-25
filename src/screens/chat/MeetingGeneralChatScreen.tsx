@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   SafeAreaView,
@@ -17,6 +18,8 @@ import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
 import { getProfileId } from '../../utils/AuthUtils';
+
+const sendIconImg = require('../../assets/images/Send.png');
 
 type GeneralSystemKind =
   | 'cancelVote'
@@ -449,7 +452,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
             placeholderTextColor="#B8B8B8"
           />
           <TouchableOpacity style={styles.sendButton} onPress={submitMessage} disabled={closed}>
-            <Text style={styles.sendButtonText}>⌁</Text>
+            <Image source={sendIconImg} style={styles.sendButtonImage} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.moreButton} onPress={() => setActionVisible(prev => !prev)}>
             <Text style={styles.moreButtonText}>…</Text>
@@ -494,7 +497,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
       <ConfirmModal
         visible={leaveVisible}
         title="나가기"
-        body="정말 나가시겠어요?\n한번만 더 생각해보세요!"
+        body="정말 나가시겠어요? 한번만 더 생각해보세요!"
         primary="나가기"
         secondary="남아있기"
         onPrimary={leaveRoom}
@@ -1024,7 +1027,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonText: { color: '#FF7A8D', fontSize: 28, transform: [{ rotate: '-30deg' }] },
+  sendButtonImage: { width: 22, height: 22, resizeMode: 'contain' },
   moreButton: {
     width: 36,
     height: 36,

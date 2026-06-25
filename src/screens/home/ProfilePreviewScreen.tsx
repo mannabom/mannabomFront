@@ -16,7 +16,12 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import BottomNavigationBar from '../../components/common/BottomNavigationBar';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_BASE_URL } from '../../config/api';
-import { DrinkingHabit, ProfileMatchConditionRequest, SmokingHabit } from '../../types/DatingAPI';
+import {
+  CheckTingWalletResponse,
+  DrinkingHabit,
+  ProfileMatchConditionRequest,
+  SmokingHabit,
+} from '../../types/DatingAPI';
 import { getProfilePreviewState, setProfilePreviewState } from '../../utils/ProfilePreviewStore';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
@@ -84,7 +89,7 @@ export default function ProfilePreviewScreen() {
     savedState?.lockedRatedProfileIds ?? route.params?.lockedRatedProfileIds ?? [];
   const initialProfiles: ProfileCard[] = (
     savedState?.profiles?.length ? savedState.profiles : route.params?.profiles ?? []
-  ).filter((p: ProfileCard) => !initialLockedRatedProfileIds.includes(p.profileId));
+  );
 
   const [profiles, setProfiles] = useState<ProfileCard[]>(initialProfiles);
   const isVip: boolean = route.params?.isVip ?? false;
@@ -93,9 +98,11 @@ export default function ProfilePreviewScreen() {
   const [eventTingBalance, setEventTingBalance] = useState<number>(
     route.params?.eventTingBalance ?? 0,
   );
-  const [freeProfileNum, setFreeProfileNum] = useState<number>(route.params?.freeProfileNum ?? 5);
+  const [freeProfileNum, setFreeProfileNum] = useState<number>(
+    savedState?.freeProfileNum ?? route.params?.freeProfileNum ?? 0,
+  );
   const [additionalProfileNum, setAdditionalProfileNum] = useState<number>(
-    route.params?.additionalProfileNum ?? 5,
+    savedState?.additionalProfileNum ?? route.params?.additionalProfileNum ?? 0,
   );
   const initialFilterCondition: ProfileMatchConditionRequest = {
     minAge: route.params?.minAge ?? 20,
@@ -111,11 +118,9 @@ export default function ProfilePreviewScreen() {
       DrinkingHabit.FREQUENT_DRINKER,
     ],
   };
-  const noCards: boolean = profiles.length === 0;
-
   const [index, setIndex] = useState<number>(() => {
     const seed = savedState?.index ?? route.params?.startIndex ?? 0;
-    const maxIdx = Math.max(0, (savedState?.profiles?.length ?? route.params?.profiles?.length ?? 1) - 1);
+    const maxIdx = Math.max(0, savedState?.profiles?.length ?? route.params?.profiles?.length ?? 0);
     return Math.max(0, Math.min(seed, maxIdx));
   });
   const [ratedByProfileId, setRatedByProfileId] = useState<Record<number, number>>(
@@ -129,16 +134,19 @@ export default function ProfilePreviewScreen() {
   const [counterInfoVisible, setCounterInfoVisible] = useState(false);
   const [metaAnchor, setMetaAnchor] = useState({ x: 18, y: 120, width: 120, height: 28 });
   const metaRowRef = React.useRef<View>(null);
+  const consumingRef = React.useRef(false);
 
-  const refreshWalletInfo = useCallback(async () => {
+  const refreshWalletInfo = useCallback(async (): Promise<CheckTingWalletResponse | null> => {
     try {
       const wallet = await datingApiService.getTingWalletInfo();
       setTingBalance(wallet.tingNum ?? 0);
       setEventTingBalance(wallet.eventTingNum ?? 0);
       setFreeProfileNum(wallet.freeProfileNum ?? 0);
       setAdditionalProfileNum(wallet.additionalProfileNum ?? 0);
+      return wallet;
     } catch (e) {
       console.warn('Failed to refresh profile wallet info', e);
+      return null;
     }
   }, []);
 
@@ -149,36 +157,106 @@ export default function ProfilePreviewScreen() {
     }, [refreshWalletInfo]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const latest = getProfilePreviewState();
+      if (!latest) return undefined;
+
+      setProfiles(latest.profiles);
+      setIndex(Math.max(0, Math.min(latest.index ?? 0, latest.profiles.length)));
+      setRatedByProfileId(latest.ratedByProfileId ?? {});
+      setLockedRatedProfileIds(latest.lockedRatedProfileIds ?? []);
+
+      if (typeof latest.freeProfileNum === 'number') {
+        setFreeProfileNum(latest.freeProfileNum);
+      }
+      if (typeof latest.additionalProfileNum === 'number') {
+        setAdditionalProfileNum(latest.additionalProfileNum);
+      }
+
+      return undefined;
+    }, []),
+  );
+
   React.useEffect(() => {
-    const safeIndex = Math.max(0, Math.min(index, Math.max(0, profiles.length - 1)));
+    const safeIndex = Math.max(0, Math.min(index, Math.max(0, profiles.length)));
     setProfilePreviewState({
       profiles,
       index: safeIndex,
       ratedByProfileId,
       lockedRatedProfileIds,
+      freeProfileNum,
+      additionalProfileNum,
     });
-  }, [profiles, index, ratedByProfileId, lockedRatedProfileIds]);
+  }, [profiles, index, ratedByProfileId, lockedRatedProfileIds, freeProfileNum, additionalProfileNum]);
 
   const current = useMemo(
-    () => (profiles.length ? profiles[Math.min(index, profiles.length - 1)] : null),
+    () => profiles[index] ?? null,
     [profiles, index],
   );
   const currentRated = current ? ratedByProfileId[current.profileId] ?? 0 : 0;
   const isCurrentRatingLocked = current
     ? lockedRatedProfileIds.includes(current.profileId)
     : false;
+  const availableProfileCount = freeProfileNum + additionalProfileNum;
+  const noCards: boolean = !current;
+  const pageLabel = current
+    ? `${Math.min(index + 1, profiles.length)}/${Math.max(profiles.length, 1)}`
+    : '1/5';
   const displayName = useMemo(() => {
     const raw = current?.name ?? current?.nickname ?? '';
     return raw.trim() && raw.trim() !== '익명' ? raw : '회원';
   }, [current]);
 
   const goPrev = () => setIndex(i => Math.max(0, i - 1));
-  const goNext = () =>
-    setIndex(i => {
-      if (!profiles.length) return i;
-      return (i + 1) % profiles.length;
-    });
-  const loadMoreProfiles = async (): Promise<boolean> => {
+
+  const lockCurrentRating = async (): Promise<boolean> => {
+    if (!current?.profileId) {
+      return false;
+    }
+
+    if (isCurrentRatingLocked) {
+      return true;
+    }
+
+    if (currentRated <= 0) {
+      return false;
+    }
+
+    if (consumingRef.current) {
+      return false;
+    }
+
+    consumingRef.current = true;
+    try {
+      try {
+        await datingApiService.rateProfile({
+          targetProfileId: current.profileId,
+          score: currentRated,
+        });
+      } catch (e: any) {
+        const status = e?.response?.status;
+        const message = String(e?.response?.data?.message ?? '');
+        if (__DEV__) {
+          console.warn('rateProfile failed:', status, message);
+        }
+        // 이미 평가한 상대(400)도 포함해 저장 실패여도 UX를 막지 않는다.
+      }
+
+      setLockedRatedProfileIds(prev =>
+        prev.includes(current.profileId) ? prev : [...prev, current.profileId],
+      );
+      return true;
+    } finally {
+      consumingRef.current = false;
+    }
+  };
+
+  const loadMoreProfiles = async (force = false): Promise<boolean> => {
+    if (!force && availableProfileCount <= 0) {
+      return false;
+    }
+
     try {
       const todayList = await datingApiService.getTodayMatchingProfiles();
       if (Array.isArray(todayList) && todayList.length) {
@@ -230,6 +308,13 @@ export default function ProfilePreviewScreen() {
       };
 
       setProfiles(prev => [...prev, mapped]);
+      const nextWallet = await refreshWalletInfo();
+      if (__DEV__ && nextWallet) {
+        console.log('프로필 추가 제공 후 서버 잔여권:', {
+          freeProfileNum: nextWallet.freeProfileNum,
+          additionalProfileNum: nextWallet.additionalProfileNum,
+        });
+      }
       return true;
     } catch {
       return false;
@@ -237,49 +322,53 @@ export default function ProfilePreviewScreen() {
   };
   const handleNext = async () => {
     if (!profiles.length) return;
-    if (currentRated <= 0) {
-      return;
-    }
     if (!current?.profileId) return;
 
-    const currentProfileId = current.profileId;
-    const alreadyLocked = lockedRatedProfileIds.includes(currentProfileId);
-    if (!alreadyLocked) {
-      try {
-        await datingApiService.rateProfile({
-          targetProfileId: currentProfileId,
-          score: currentRated,
-        });
-      } catch (e: any) {
-        const status = e?.response?.status;
-        const message = String(e?.response?.data?.message ?? '');
-        if (__DEV__) {
-          console.warn('rateProfile failed:', status, message);
-        }
-        // 이미 평가한 상대(400)도 포함해 저장 실패여도 UX를 막지 않는다.
+    const locked = await lockCurrentRating();
+    if (!locked) return;
+
+    const safeIndex = Math.min(index, profiles.length - 1);
+    const nextIndex = safeIndex + 1;
+    if (nextIndex < profiles.length) {
+      const nextProfile = profiles[nextIndex];
+      const nextLocked = nextProfile
+        ? lockedRatedProfileIds.includes(nextProfile.profileId)
+        : false;
+      if (nextLocked || availableProfileCount > 0) {
+        setIndex(nextIndex);
+      } else {
+        setIndex(profiles.length);
       }
-      await refreshWalletInfo();
+      return;
     }
 
-    setLockedRatedProfileIds(prev =>
-      prev.includes(currentProfileId) ? prev : [...prev, currentProfileId],
-    );
-    const nextProfiles = profiles.filter(item => item.profileId !== currentProfileId);
-    setProfiles(nextProfiles);
-
-    if (nextProfiles.length) {
-      const nextIndex = Math.min(index, nextProfiles.length - 1);
-      setIndex(nextIndex);
+    if (availableProfileCount <= 0) {
+      setIndex(profiles.length);
       return;
     }
 
     const loaded = await loadMoreProfiles();
     if (loaded) {
-      await refreshWalletInfo();
-      setIndex(0);
+      setIndex(profiles.length);
       return;
     }
+    setIndex(profiles.length);
     Alert.alert('안내', '다음으로 보여줄 일반 프로필이 아직 없어요.');
+  };
+
+  const handleOpenProfileDetail = async () => {
+    if (!current?.profileId) return;
+
+    const locked = await lockCurrentRating();
+    if (!locked) return;
+
+    navigation.navigate('MatchDetail', {
+      source: 'PROFILE_MATCH',
+      targetProfileId: current.profileId,
+      previewName: displayName,
+      previewMbti: current.mbti,
+      previewImageUrl: current.photoUris?.[0],
+    });
   };
   const openCounterInfo = () => {
     if (metaRowRef.current) {
@@ -302,9 +391,15 @@ export default function ProfilePreviewScreen() {
     try {
       setPurchasing(count);
       await datingApiService.purchaseExtraProfileByTing(count);
-      setTingBalance(prev => Math.max(0, prev - cost));
-      setAdditionalProfileNum(prev => prev + count);
-      navigation.goBack();
+      const nextWallet = await refreshWalletInfo();
+      if (!current) {
+        const canFetchProfile =
+          ((nextWallet?.freeProfileNum ?? 0) + (nextWallet?.additionalProfileNum ?? 0)) > 0;
+        const loaded = canFetchProfile ? await loadMoreProfiles(true) : false;
+        if (loaded) {
+          setIndex(profiles.length);
+        }
+      }
     } catch {
       setShortageVisible(true);
     } finally {
@@ -443,16 +538,7 @@ export default function ProfilePreviewScreen() {
             <TouchableOpacity
               style={[styles.profileBtn, currentRated <= 0 && styles.profileBtnDisabled]}
               activeOpacity={0.9}
-              onPress={() => {
-                if (!current?.profileId) return;
-                navigation.navigate('MatchDetail', {
-                  source: 'PROFILE_MATCH',
-                  targetProfileId: current.profileId,
-                  previewName: displayName,
-                  previewMbti: current.mbti,
-                  previewImageUrl: current.photoUris?.[0],
-                });
-              }}
+              onPress={handleOpenProfileDetail}
               disabled={currentRated <= 0}
             >
               <Text style={styles.profileBtnText}>프로필 보기</Text>
@@ -463,7 +549,7 @@ export default function ProfilePreviewScreen() {
       </ScrollView>
 
       <Text style={styles.pageText}>
-        {profiles.length ? `${index + 1}/${profiles.length}` : '1/5'}
+        {pageLabel}
       </Text>
 
       <Image source={petalImg} style={[styles.petal, styles.petalLeft]} />
