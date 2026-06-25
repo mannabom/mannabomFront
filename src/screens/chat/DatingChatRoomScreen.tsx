@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   SafeAreaView,
@@ -29,6 +30,8 @@ import {
   getSelectedGift,
   SelectedGift,
 } from '../../utils/GiftSelectionStore';
+
+const sendIconImg = require('../../assets/images/Send.png');
 
 type ProfileFlowState =
   | 'idle'
@@ -533,7 +536,7 @@ const DatingChatRoomScreen: React.FC = () => {
             editable={!closed}
           />
           <TouchableOpacity style={styles.sendIconButton} onPress={sendMessage} disabled={closed}>
-            <Text style={styles.sendIconText}>⌁</Text>
+            <Image source={sendIconImg} style={styles.sendIconImage} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.moreButton} onPress={() => setActionVisible(prev => !prev)}>
             <Text style={styles.moreButtonText}>…</Text>
@@ -572,7 +575,7 @@ const DatingChatRoomScreen: React.FC = () => {
       <ConfirmModal
         visible={leaveVisible}
         title="나가기"
-        body="정말 나가시겠어요?\n한번만 더 생각해보세요!"
+        body="정말 나가시겠어요? 한번만 더 생각해보세요!"
         primary="나가기"
         secondary="남아있기"
         onPrimary={leaveRoom}
@@ -1275,10 +1278,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendIconText: {
-    color: '#FF7A8D',
-    fontSize: 28,
-    transform: [{ rotate: '-30deg' }],
+  sendIconImage: {
+    width: 22,
+    height: 22,
+    resizeMode: 'contain',
   },
   moreButton: {
     width: 36,

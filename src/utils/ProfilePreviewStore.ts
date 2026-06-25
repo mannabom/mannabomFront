@@ -12,6 +12,8 @@ export type ProfilePreviewState = {
   index: number;
   ratedByProfileId: Record<number, number>;
   lockedRatedProfileIds: number[];
+  freeProfileNum?: number;
+  additionalProfileNum?: number;
 };
 
 let profilePreviewState: ProfilePreviewState | null = null;

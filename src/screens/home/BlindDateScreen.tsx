@@ -272,14 +272,16 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
   const isVip = tingBalance >= 200;
 
-  const refreshWalletInfo = useCallback(async () => {
+  const refreshWalletInfo = useCallback(async (): Promise<CheckTingWalletResponse | null> => {
     try {
       const wallet = await datingApiService.getTingWalletInfo();
       setWalletInfo(wallet);
       setTingBalance(wallet.tingNum ?? 0);
       setCoinBalance(wallet.eventTingNum ?? 0);
+      return wallet;
     } catch (e) {
       console.warn('Failed to load ting wallet info', e);
+      return null;
     }
   }, []);
 
@@ -523,6 +525,14 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       toPositiveId(profileRes?.profileId, profileRes?.userId, profileRes?.id) ?? 1;
 
     const photoUris = extractPhotoUris(profileRes);
+    const nextWallet = await refreshWalletInfo();
+    if (__DEV__ && nextWallet) {
+      console.log('프로필 간편 제공 후 서버 잔여권:', {
+        freeProfileNum: nextWallet.freeProfileNum,
+        additionalProfileNum: nextWallet.additionalProfileNum,
+      });
+    }
+
     return {
       profileId,
       name: firstNonEmptyString(profileRes?.name),
@@ -645,7 +655,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   const openProfilePreview = async () => {
     try {
       const saved = getProfilePreviewState();
-      const lockedSet = new Set<number>(saved?.lockedRatedProfileIds ?? []);
       let profiles: PreviewModalProfile[] = mapProfilesForModal;
       if (saved?.profiles?.length) {
         profiles = saved.profiles.map(p => {
@@ -660,7 +669,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             drinking: matched?.drinking ?? DrinkingHabit.NON_DRINKER,
             photoUris: p.photoUris?.length ? p.photoUris : [''],
           };
-        }).filter(p => !lockedSet.has(p.profileId));
+        });
       }
       if (!profiles.length && previewProfile) {
         const fallback = [
@@ -677,7 +686,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
               : [previewProfile.mainPhotoUrl],
           },
         ];
-        profiles = fallback.filter(p => !lockedSet.has(p.profileId));
+        profiles = fallback;
       }
       if (!profiles.length) {
         const fresh = await fetchProfilePreview();
@@ -696,28 +705,34 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             photoUris: fresh.photoUris.length ? fresh.photoUris : [fresh.mainPhotoUrl],
           },
         ];
-        profiles = fallback.filter(p => !lockedSet.has(p.profileId));
+        profiles = fallback;
       }
 
-      navigation.navigate('ProfilePreview', {
+      const openParams = {
         profiles,
-        startIndex: saved?.index ?? 0,
+        startIndex: Math.max(0, Math.min(saved?.index ?? 0, profiles.length)),
         ratedByProfileId: saved?.ratedByProfileId ?? {},
         lockedRatedProfileIds: saved?.lockedRatedProfileIds ?? [],
         isVip,
         isSubscribed,
         tingBalance,
         eventTingBalance: coinBalance,
-        freeProfileNum: walletInfo.freeProfileNum,
-        additionalProfileNum: walletInfo.additionalProfileNum,
+        freeProfileNum: saved?.freeProfileNum ?? walletInfo.freeProfileNum,
+        additionalProfileNum: saved?.additionalProfileNum ?? walletInfo.additionalProfileNum,
         minAge: filterSettings.ageRange.min,
         maxAge: filterSettings.ageRange.max,
         smoking: filterSettings.smoking,
         drinking: filterSettings.drinking,
-      });
+      };
+
+      if (typeof navigation.push === 'function') {
+        navigation.push('ProfilePreview', openParams);
+      } else {
+        navigation.navigate('ProfilePreview', openParams);
+      }
     } catch (e: any) {
       if (isNoProfileQuotaError(e)) {
-        navigation.navigate('ProfilePreview', {
+        const noCardParams = {
           profiles: [],
           isVip,
           isSubscribed,
@@ -730,7 +745,13 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           smoking: filterSettings.smoking,
           drinking: filterSettings.drinking,
           noCards: true,
-        });
+        };
+
+        if (typeof navigation.push === 'function') {
+          navigation.push('ProfilePreview', noCardParams);
+        } else {
+          navigation.navigate('ProfilePreview', noCardParams);
+        }
         return;
       }
       Alert.alert('오류', '일반 소개팅 데이터를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');

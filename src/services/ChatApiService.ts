@@ -71,7 +71,14 @@ class ChatApiService {
   async leaveRoom(roomId: string): Promise<boolean> {
     const response = await apiClient.delete(
       getApiUrlWithParams(API_ENDPOINTS_LIST.CHAT_ROOM_LEAVE, { roomId }),
-      { headers: { chatRoomId: roomId } },
+      {
+        headers: {
+          chatRoomId: roomId,
+          ChatRoomId: roomId,
+          'Chat-Room-Id': roomId,
+        },
+        data: { chatRoomId: roomId },
+      },
     );
     return response.status >= 200 && response.status < 300;
   }
