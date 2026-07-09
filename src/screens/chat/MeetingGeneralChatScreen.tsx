@@ -18,8 +18,15 @@ import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
 import { getProfileId } from '../../utils/AuthUtils';
+import { PickedChatPhoto, showChatPhotoPicker } from '../../utils/ChatPhotoPicker';
 
 const sendIconImg = require('../../assets/images/Send.png');
+const photoIconImg = require('../../assets/images/photo.png');
+const reportIconImg = require('../../assets/images/report.png');
+const verificationIconImg = require('../../assets/images/verification.png');
+const cancelIconImg = require('../../assets/images/cancel.png');
+
+const isMockRoomId = (value: string) => value.startsWith('mock-');
 
 type GeneralSystemKind =
   | 'cancelVote'
@@ -41,6 +48,7 @@ type GeneralMessage =
       tone?: 'pink' | 'blue';
       text: string;
       time: string;
+      photoUri?: string;
     }
   | {
       id: string;
@@ -71,12 +79,7 @@ const MEMBERS: MeetingMember[] = [
   { id: 'member-7', name: 'ㅇㅇㅇ' },
 ];
 
-const INITIAL_MESSAGES: GeneralMessage[] = [
-  { id: 'm1', type: 'message', text: 'Message here', time: '2:00pm' },
-  { id: 'm2', type: 'message', text: 'Message here', time: '2:00pm' },
-  { id: 'm3', type: 'message', mine: true, tone: 'pink', text: 'Message here', time: '2:00pm' },
-  { id: 'm4', type: 'message', mine: true, tone: 'blue', text: 'Message here', time: '2:00pm' },
-];
+const INITIAL_MESSAGES: GeneralMessage[] = [];
 
 const REPORT_REASONS = [
   '폭언, 욕설 등 언어폭력',
@@ -136,8 +139,9 @@ const normalizeIncomingMessage = (
     type: 'message',
     mine,
     tone: mine ? 'pink' : undefined,
-    text: messageContent,
+    text: messageType === 'PHOTO' ? '사진을 보냈어요' : messageContent,
     time: formatMessageTime(raw?.timestamp),
+    photoUri: messageType === 'PHOTO' ? messageContent : undefined,
   };
 };
 
@@ -236,6 +240,35 @@ const MeetingGeneralChatScreen: React.FC = () => {
       if (__DEV__) console.warn('Failed to mark meeting general chat read', error);
     });
   }, [messages, roomId]);
+
+  const sendPhoto = (photo: PickedChatPhoto) => {
+    if (closed || !roomId) return;
+    const clientMessageId = `photo-${Date.now()}`;
+    setMessages(prev => [
+      ...prev,
+      {
+        id: clientMessageId,
+        type: 'message',
+        mine: true,
+        tone: 'pink',
+        text: '사진을 보냈어요',
+        time: formatMessageTime(new Date().toISOString()),
+        photoUri: photo.uri,
+      },
+    ]);
+
+    chatSocketService
+      .sendMessage({
+        roomId,
+        messageType: 'PHOTO',
+        content: photo.content,
+        clientMessageId,
+      })
+      .catch(error => {
+        if (__DEV__) console.warn('Failed to send meeting general chat photo', error);
+        Alert.alert('오류', '사진 전송에 실패했어요.');
+      });
+  };
 
   const submitMessage = () => {
     const trimmed = input.trim();
@@ -363,6 +396,12 @@ const MeetingGeneralChatScreen: React.FC = () => {
       return;
     }
 
+    if (isMockRoomId(roomId)) {
+      setLeaveVisible(false);
+      navigation.goBack();
+      return;
+    }
+
     try {
       await chatApiService.leaveRoom(roomId);
       setLeaveVisible(false);
@@ -419,19 +458,19 @@ const MeetingGeneralChatScreen: React.FC = () => {
 
         {actionVisible && (
           <View style={styles.actionSheet}>
-            <ActionSheetItem label="사진" icon="▧" onPress={() => {
+            <ActionSheetItem label="사진" iconSource={photoIconImg} onPress={() => {
               setActionVisible(false);
-              Alert.alert('사진 보내기', '사진 전송은 PHOTO 웹소켓 payload에 연결할 수 있게 준비되어 있어요.');
+              showChatPhotoPicker(sendPhoto);
             }} />
-            <ActionSheetItem label="신고" icon="⚠" onPress={() => {
+            <ActionSheetItem label="신고" iconSource={reportIconImg} onPress={() => {
               setActionVisible(false);
               setReportVisible(true);
             }} />
-            <ActionSheetItem label="만남 인증" icon="☷" onPress={() => {
+            <ActionSheetItem label="만남 인증" iconSource={verificationIconImg} onPress={() => {
               setActionVisible(false);
               setVerifyConfirmVisible(true);
             }} />
-            <ActionSheetItem label="미팅 취소" icon="⊗" onPress={() => {
+            <ActionSheetItem label="미팅 취소" iconSource={cancelIconImg} onPress={() => {
               setActionVisible(false);
               setCancelConfirmVisible(true);
             }} />
@@ -472,7 +511,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
       <ConfirmModal
         visible={cancelConfirmVisible}
         title="미팅 취소하기"
-        body="미팅을 취소 투표로 진행할까요?\n모든 사람이 동의하면 미팅이 취소되고 현재 채팅방은 사라집니다.\n위약금을 제외하고 환불됩니다."
+        body={'미팅을 취소 투표로 진행할까요?\n모든 사람이 동의하면 미팅이 취소되고 현재 채팅방은 사라집니다.\n위약금을 제외하고 환불됩니다.'}
         primary="네"
         secondary="아니요"
         onPrimary={startCancelVote}
@@ -481,7 +520,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
       <ConfirmModal
         visible={verifyConfirmVisible}
         title="만남 인증하기"
-        body="만남 인증을 하면 리워드를 받고 24시간 후에 채팅방이 사라져요.\n만남 인증을 시작할까요?"
+        body={'만남 인증을 하면 리워드를 받고 24시간 후에 채팅방이 사라져요.\n만남 인증을 시작할까요?'}
         primary="네"
         secondary="아니요"
         onPrimary={startVerification}
@@ -588,9 +627,24 @@ const BubbleMessage = ({ message }: { message: Extract<GeneralMessage, { type: '
       message.mine && styles.myBubble,
       message.tone === 'pink' && styles.pinkBubble,
       message.tone === 'blue' && styles.blueBubble,
+      message.photoUri && styles.photoBubble,
     ]}>
-      <Text style={styles.bubbleText}>{message.text}</Text>
-      <Text style={styles.bubbleTime}>{message.time}</Text>
+      {message.photoUri ? (
+        <>
+          <Image source={{ uri: message.photoUri }} style={styles.photoMessageImage} />
+          <View style={styles.mediaBubbleFooter}>
+            <Text style={styles.mediaBubbleText} numberOfLines={1}>
+              {message.text}
+            </Text>
+            <Text style={styles.mediaTimeText}>{message.time}</Text>
+          </View>
+        </>
+      ) : (
+        <>
+          <Text style={styles.bubbleText}>{message.text}</Text>
+          <Text style={styles.bubbleTime}>{message.time}</Text>
+        </>
+      )}
     </View>
   </View>
 );
@@ -688,9 +742,23 @@ const GeneralSystemMessage = ({
   );
 };
 
-const ActionSheetItem = ({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) => (
+const ActionSheetItem = ({
+  label,
+  icon,
+  iconSource,
+  onPress,
+}: {
+  label: string;
+  icon?: string;
+  iconSource?: any;
+  onPress: () => void;
+}) => (
   <TouchableOpacity style={styles.actionSheetItem} onPress={onPress}>
-    <Text style={styles.actionSheetIcon}>{icon}</Text>
+    {iconSource ? (
+      <Image source={iconSource} style={styles.actionSheetIconImage} />
+    ) : (
+      <Text style={styles.actionSheetIcon}>{icon}</Text>
+    )}
     <Text style={styles.actionSheetText}>{label}</Text>
   </TouchableOpacity>
 );
@@ -942,6 +1010,42 @@ const styles = StyleSheet.create({
   myBubble: { borderColor: '#FFCED7' },
   pinkBubble: { backgroundColor: '#FFE2E6' },
   blueBubble: { backgroundColor: '#D8F0FF', borderColor: '#A9D7F2' },
+  photoBubble: {
+    width: 178,
+    minHeight: 160,
+    borderRadius: 12,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    padding: 8,
+    overflow: 'hidden',
+  },
+  photoMessageImage: {
+    width: '100%',
+    height: 118,
+    borderRadius: 9,
+    backgroundColor: '#EAF5FF',
+    resizeMode: 'cover',
+  },
+  mediaBubbleFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 5,
+    marginTop: 7,
+  },
+  mediaBubbleText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#222222',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mediaTimeText: {
+    flexShrink: 0,
+    color: '#7A91A3',
+    fontSize: 9,
+  },
   bubbleText: { color: '#222222', fontSize: 16 },
   bubbleTime: { color: '#7A91A3', fontSize: 11, marginTop: 3 },
   systemCard: {
@@ -997,6 +1101,7 @@ const styles = StyleSheet.create({
   },
   actionSheetItem: { alignItems: 'center', width: 58 },
   actionSheetIcon: { color: '#111111', fontSize: 28, fontWeight: '900', lineHeight: 30 },
+  actionSheetIconImage: { width: 30, height: 30, resizeMode: 'contain' },
   actionSheetText: { color: '#111111', fontSize: 11, marginTop: 5 },
   inputRow: {
     flexDirection: 'row',

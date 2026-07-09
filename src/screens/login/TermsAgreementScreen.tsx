@@ -1,86 +1,134 @@
 // src/screens/login/TermsAgreementScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
-  Alert,
   ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { getProfileId } from '../../utils/AuthUtils';
+
+export type SignupTermType =
+  | 'privacy'
+  | 'operation'
+  | 'payment'
+  | 'location'
+  | 'marketing';
 
 interface TermsAgreementScreenProps {
   onAgreementComplete: () => void;
-  onViewTermsDetail: (termType: 'service' | 'privacy' | 'marketing') => void;
+  onViewTermsDetail: (termType: SignupTermType) => void;
+  onCancel?: () => void;
 }
 
 interface TermsState {
-  serviceTerms: boolean;
-  privacyPolicy: boolean;
+  privacyCollection: boolean;
+  operationPolicy: boolean;
+  paymentService: boolean;
+  locationService: boolean;
   marketingConsent: boolean;
 }
 
-const BORDER = '#E7E7E7';
+const STORAGE_PREFIX = 'signup_terms_state_v2';
 
 const DEFAULT_STATE: TermsState = {
-  serviceTerms: false,
-  privacyPolicy: false,
+  privacyCollection: false,
+  operationPolicy: false,
+  paymentService: false,
+  locationService: false,
   marketingConsent: false,
 };
+
+const TERMS: Array<{
+  key: keyof TermsState;
+  label: string;
+  required: boolean;
+  termType: SignupTermType;
+}> = [
+  {
+    key: 'privacyCollection',
+    label: '개인정보 수집 및 이용',
+    required: true,
+    termType: 'privacy',
+  },
+  {
+    key: 'operationPolicy',
+    label: '운영 정책 및 이용 제한 안내',
+    required: true,
+    termType: 'operation',
+  },
+  {
+    key: 'paymentService',
+    label: '결제 서비스 이용',
+    required: true,
+    termType: 'payment',
+  },
+  {
+    key: 'locationService',
+    label: '위치정보 이용',
+    required: true,
+    termType: 'location',
+  },
+  {
+    key: 'marketingConsent',
+    label: '마케팅 및 광고 정보 수신',
+    required: false,
+    termType: 'marketing',
+  },
+];
+
+const normalizeTermsState = (raw: Partial<TermsState> & Record<string, unknown>): TermsState => ({
+  privacyCollection: Boolean(raw.privacyCollection ?? raw.privacyPolicy),
+  operationPolicy: Boolean(raw.operationPolicy ?? raw.serviceTerms),
+  paymentService: Boolean(raw.paymentService ?? raw.serviceTerms),
+  locationService: Boolean(raw.locationService ?? raw.serviceTerms),
+  marketingConsent: Boolean(raw.marketingConsent),
+});
 
 const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   onAgreementComplete,
   onViewTermsDetail,
+  onCancel,
 }) => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [termsState, setTermsState] = useState<TermsState>(DEFAULT_STATE);
   const [isLoading, setIsLoading] = useState(false);
 
-  const storageKey = useMemo(() => {
-    return profileId ? `signup_terms_state_v1_${profileId}` : null;
-  }, [profileId]);
+  const storageKey = useMemo(
+    () => (profileId ? `${STORAGE_PREFIX}_${profileId}` : STORAGE_PREFIX),
+    [profileId],
+  );
 
   useEffect(() => {
     const init = async () => {
       const id = await getProfileId();
+      const key = id ? `${STORAGE_PREFIX}_${id}` : STORAGE_PREFIX;
       setProfileId(id);
 
-      if (!id) {
-        setTermsState(DEFAULT_STATE);
-        return;
-      }
-
       try {
-        const key = `signup_terms_state_v1_${id}`;
         const raw = await AsyncStorage.getItem(key);
-
         if (!raw) {
           setTermsState(DEFAULT_STATE);
           return;
         }
 
-        const parsed = JSON.parse(raw) as Partial<TermsState>;
-        setTermsState({
-          serviceTerms: !!parsed.serviceTerms,
-          privacyPolicy: !!parsed.privacyPolicy,
-          marketingConsent: !!parsed.marketingConsent,
-        });
+        setTermsState(normalizeTermsState(JSON.parse(raw)));
       } catch (e) {
         console.error('약관 상태 로드 오류:', e);
         setTermsState(DEFAULT_STATE);
       }
     };
+
     init();
   }, []);
 
   const persist = async (next: TermsState) => {
-    if (!storageKey) return;
     try {
       await AsyncStorage.setItem(storageKey, JSON.stringify(next));
     } catch (e) {
@@ -89,8 +137,12 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   };
 
   const isRequiredAgreed = useMemo(
-    () => termsState.serviceTerms && termsState.privacyPolicy,
-    [termsState.serviceTerms, termsState.privacyPolicy],
+    () =>
+      termsState.privacyCollection &&
+      termsState.operationPolicy &&
+      termsState.paymentService &&
+      termsState.locationService,
+    [termsState],
   );
 
   const isAllAgreed = useMemo(
@@ -109,9 +161,11 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   const toggleAll = () => {
     setTermsState(prev => {
       const all = Object.values(prev).every(Boolean);
-      const next = {
-        serviceTerms: !all,
-        privacyPolicy: !all,
+      const next: TermsState = {
+        privacyCollection: !all,
+        operationPolicy: !all,
+        paymentService: !all,
+        locationService: !all,
         marketingConsent: !all,
       };
       persist(next);
@@ -119,7 +173,7 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
     });
   };
 
-  const openDetail = (termType: 'service' | 'privacy' | 'marketing') => {
+  const openDetail = (termType: SignupTermType) => {
     persist(termsState);
     onViewTermsDetail(termType);
   };
@@ -135,8 +189,11 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
       const requestData = {
         profileId,
         termsAgreement: {
-          serviceTerms: termsState.serviceTerms,
-          privacyPolicy: termsState.privacyPolicy,
+          serviceTerms:
+            termsState.operationPolicy &&
+            termsState.paymentService &&
+            termsState.locationService,
+          privacyPolicy: termsState.privacyCollection,
           marketingConsent: termsState.marketingConsent,
         },
       };
@@ -147,14 +204,14 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
       );
 
       if (response.data.success) {
-        // ✅ 성공 팝업 제거: 동의 성공하면 바로 다음
         onAgreementComplete();
-      } else {
-        Alert.alert(
-          '오류',
-          response.data.message || '약관 동의 처리에 실패했습니다.',
-        );
+        return;
       }
+
+      Alert.alert(
+        '오류',
+        response.data.message || '약관 동의 처리에 실패했습니다.',
+      );
     } catch (error) {
       console.error('약관 동의 오류:', error);
       Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
@@ -170,207 +227,218 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   );
 
   const renderTermRow = (
-    key: keyof TermsState,
-    label: string,
-    tag: '(필수)' | '(선택)',
-    tagStyle: any,
-    termType: 'service' | 'privacy' | 'marketing',
-  ) => {
-    return (
-      <View style={styles.termRow}>
-        <TouchableOpacity
-          onPress={() => toggleTerm(key)}
-          activeOpacity={0.75}
-          style={styles.checkboxHit}
-        >
-          {renderCheckbox(termsState[key])}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.termLinkArea}
-          onPress={() => openDetail(termType)}
-          activeOpacity={0.75}
-        >
-          <View style={styles.termTextLine}>
-            <Text style={styles.termText}>{label}</Text>
-            <Text style={tagStyle}> {tag}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+    item: (typeof TERMS)[number],
+  ) => (
+    <View key={item.key} style={styles.termRow}>
+      <TouchableOpacity
+        style={styles.checkboxTap}
+        onPress={() => toggleTerm(item.key)}
+        activeOpacity={0.75}
+      >
+        {renderCheckbox(termsState[item.key])}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.termTextButton}
+        onPress={() => openDetail(item.termType)}
+        activeOpacity={0.75}
+      >
+        <Text style={styles.termText}>
+          {item.label}
+          <Text style={styles.termRequiredText}>
+            {item.required ? '(필수)' : '(선택)'}
+          </Text>
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.card}>
-          <Text style={styles.title}>약관 동의</Text>
-          <Text style={styles.subtitle}>
-            서비스 이용을 위해 다음에 동의해주세요
-          </Text>
+      <View style={styles.card}>
+        <Text style={styles.title}>약관 동의</Text>
+        <Text style={styles.subtitle}>
+          서비스 이용을 위해 아래 항목에 동의해주세요.
+        </Text>
 
+        <View style={styles.termsBox}>
+          {TERMS.map(renderTermRow)}
+        </View>
+
+        <Text style={styles.helpText}>
+          각 항목을 누르면 자세히 볼 수 있어요.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.allAgreeRow}
+          onPress={toggleAll}
+          activeOpacity={0.75}
+        >
+          {renderCheckbox(isAllAgreed)}
+          <Text style={styles.allAgreeText}>전체 동의</Text>
+        </TouchableOpacity>
+
+        <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={styles.allAgreeRow}
-            onPress={toggleAll}
-            activeOpacity={0.75}
+            style={[styles.bottomButton, styles.cancelButton]}
+            onPress={onCancel}
+            activeOpacity={0.85}
           >
-            {renderCheckbox(isAllAgreed)}
-            <Text style={styles.allAgreeText}>전체 동의</Text>
+            <Text style={styles.bottomButtonText}>취소하기</Text>
           </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          {renderTermRow(
-            'serviceTerms',
-            '서비스 이용약관',
-            '(필수)',
-            styles.requiredTag,
-            'service',
-          )}
-          {renderTermRow(
-            'privacyPolicy',
-            '개인정보 처리방침',
-            '(필수)',
-            styles.requiredTag,
-            'privacy',
-          )}
-          {renderTermRow(
-            'marketingConsent',
-            '마케팅 정보 수신',
-            '(선택)',
-            styles.optionalTag,
-            'marketing',
-          )}
-
           <TouchableOpacity
             style={[
-              styles.submitButton,
-              isRequiredAgreed && !isLoading
-                ? styles.submitButtonActive
-                : styles.submitButtonDisabled,
+              styles.bottomButton,
+              styles.continueButton,
+              (!isRequiredAgreed || isLoading) && styles.disabledButton,
             ]}
             onPress={handleSubmit}
             disabled={!isRequiredAgreed || isLoading}
             activeOpacity={0.85}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color="#111111" />
             ) : (
-              <Text
-                style={[
-                  styles.submitButtonText,
-                  isRequiredAgreed
-                    ? styles.submitButtonTextActive
-                    : styles.submitButtonTextDisabled,
-                ]}
-              >
-                동의하고 계속하기
-              </Text>
+              <Text style={styles.bottomButtonText}>계속하기</Text>
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
 
+const BORDER = '#8F8F8F';
+const PINK = '#FFB3C2';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 18,
   },
   card: {
     width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    maxWidth: 342,
     borderWidth: 1,
     borderColor: BORDER,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 18,
+    paddingTop: 26,
+    paddingBottom: 28,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#222222',
+    color: '#111111',
+    fontSize: 27,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 14,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666666',
+    color: '#777777',
+    fontSize: 11,
     textAlign: 'center',
-    marginBottom: 18,
+    marginBottom: 14,
+  },
+  termsBox: {
+    borderWidth: 1,
+    borderColor: '#BEBEBE',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  termRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkboxTap: {
+    paddingRight: 6,
+    paddingVertical: 6,
+  },
+  termTextButton: {
+    flex: 1,
+    minHeight: 30,
+    justifyContent: 'center',
+  },
+  termText: {
+    color: '#111111',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  termRequiredText: {
+    color: '#111111',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#9D9D9D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxChecked: {
+    borderColor: '#777777',
+  },
+  checkmark: {
+    color: '#111111',
+    fontSize: 14,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  helpText: {
+    marginTop: 7,
+    color: '#777777',
+    fontSize: 10,
+    textAlign: 'center',
   },
   allAgreeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    alignSelf: 'flex-start',
+    marginTop: 26,
+    marginLeft: 4,
   },
   allAgreeText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#222',
-    marginLeft: 12,
+    marginLeft: 10,
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '700',
   },
-  divider: { height: 1, backgroundColor: '#EFEFEF', marginVertical: 12 },
-
-  termRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  checkboxHit: { paddingRight: 10, paddingVertical: 6 },
-
-  termLinkArea: {
-    flex: 1,
+  buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingLeft: 6,
+    marginTop: 28,
+    paddingHorizontal: 8,
   },
-  termTextLine: { flexDirection: 'row', alignItems: 'center' },
-  termText: { fontSize: 15, color: '#222', fontWeight: '600' },
-
-  requiredTag: { fontSize: 13, color: '#FF6B6B', fontWeight: '700' },
-  optionalTag: { fontSize: 13, color: '#999', fontWeight: '600' },
-
-  chevron: { fontSize: 22, fontWeight: '700', color: '#999', paddingLeft: 10 },
-
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: '#DADADA',
-    backgroundColor: '#FFFFFF',
+  bottomButton: {
+    width: 112,
+    height: 45,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#222222',
+  cancelButton: {
+    backgroundColor: PINK,
   },
-  checkmark: { color: '#222', fontSize: 14, fontWeight: '900' },
-
-  submitButton: {
-    marginTop: 14,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  continueButton: {
+    backgroundColor: PINK,
   },
-  submitButtonActive: { backgroundColor: '#FFB6C1' },
-  submitButtonDisabled: { backgroundColor: '#E0E0E0' },
-  submitButtonText: { fontSize: 15, fontWeight: '800' },
-  submitButtonTextActive: { color: '#222' },
-  submitButtonTextDisabled: { color: '#999' },
+  disabledButton: {
+    opacity: 0.45,
+  },
+  bottomButtonText: {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 export default TermsAgreementScreen;

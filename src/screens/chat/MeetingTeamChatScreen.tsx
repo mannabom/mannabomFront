@@ -20,6 +20,9 @@ import { ChatMessageDTO, ChatRoomStatus, ChatRoomType } from '../../types/ChatAP
 import { getProfileId } from '../../utils/AuthUtils';
 
 const sendIconImg = require('../../assets/images/Send.png');
+const reportIconImg = require('../../assets/images/report.png');
+
+const isMockRoomId = (value: string) => value.startsWith('mock-');
 
 type MatchState = 'waiting' | 'matching' | 'offer' | 'waitingOpponent' | 'matched';
 type TeamView = 'mine' | 'opponent';
@@ -58,12 +61,7 @@ const OPPONENT_MEMBERS: TeamMember[] = [
   { id: 'opp-4', name: 'ㅇㅇㅇ' },
 ];
 
-const INITIAL_MESSAGES: ChatMessage[] = [
-  { id: 'm1', type: 'message', text: 'Message here', time: '2:00pm' },
-  { id: 'm2', type: 'message', text: 'Message here', time: '2:00pm' },
-  { id: 'm3', type: 'message', mine: true, tone: 'pink', text: 'Message here', time: '2:00pm' },
-  { id: 'm4', type: 'message', mine: true, tone: 'blue', text: 'Message here', time: '2:00pm' },
-];
+const INITIAL_MESSAGES: ChatMessage[] = [];
 
 const SYSTEM_COPY: Record<SystemKind, string> = {
   arrival: '새로운 상대 팀이 자동 매칭되었습니다. 제한 시간 안에 매칭을 수락해주세요.',
@@ -274,6 +272,12 @@ const MeetingTeamChatScreen: React.FC = () => {
       return;
     }
 
+    if (isMockRoomId(roomId)) {
+      setLeaveVisible(false);
+      navigation.goBack();
+      return;
+    }
+
     try {
       await chatApiService.leaveRoom(roomId);
       setLeaveVisible(false);
@@ -365,7 +369,7 @@ const MeetingTeamChatScreen: React.FC = () => {
                 setReportVisible(true);
               }}
             >
-              <Text style={styles.actionSheetIcon}>⚠</Text>
+              <Image source={reportIconImg} style={styles.actionSheetIconImage} />
               <Text style={styles.actionSheetText}>신고</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionSheetItem} onPress={handleLeaveRequest}>
@@ -406,7 +410,7 @@ const MeetingTeamChatScreen: React.FC = () => {
       <ConfirmModal
         visible={rejectVisible}
         title="정말 거절할까요?"
-        body="거절하면 이 팀과는 다시 만날 수 없어요\n재매칭 기회가 2번 남았습니다."
+        body={'거절하면 이 팀과는 다시 만날 수 없어요\n재매칭 기회가 2번 남았습니다.'}
         primary="다시 생각해볼게요"
         secondary="거절할래요"
         onPrimary={() => setRejectVisible(false)}
@@ -440,7 +444,7 @@ const MeetingTeamChatScreen: React.FC = () => {
       />
       <NoticeModal
         visible={leaveDeniedVisible}
-        body="현재 매칭 중인 상태여서 나가 실 수 없습니다.\n매칭 취소 후에 다시 시도해 주세요."
+        body={'현재 매칭 중인 상태여서 나가실 수 없습니다.\n매칭 취소 후에 다시 시도해 주세요.'}
         onClose={() => setLeaveDeniedVisible(false)}
       />
     </SafeAreaView>
@@ -707,22 +711,49 @@ const ReportModal = ({
   onClose: () => void;
 }) => {
   const reasons = ['폭언, 욕설 등 언어폭력', '나체, 성적인 이미지', '과도한 개인정보 요구', '기타'];
+  const [targetOpen, setTargetOpen] = useState(false);
+  const reportTargets = TEAM_MEMBERS.filter(member => !member.self);
+  const selectedTarget = reportTargets.find(member => member.id === target);
+
+  useEffect(() => {
+    if (!visible) {
+      setTargetOpen(false);
+    }
+  }, [visible]);
+
   return (
     <ModalShell visible={visible}>
       <Text style={styles.reportTitle}>신고</Text>
-      <View style={styles.selectBox}>
-        <Text style={styles.selectText}>{TEAM_MEMBERS.find(member => member.id === target)?.name ?? 'ㅇㅇㅇ'}</Text>
+      <TouchableOpacity
+        style={[styles.selectBox, targetOpen && styles.selectBoxOpen]}
+        onPress={() => setTargetOpen(prev => !prev)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.selectText}>{selectedTarget?.name ?? 'ㅇㅇㅇ'}</Text>
         <Text style={styles.selectArrow}>⌄</Text>
-      </View>
-      <View style={styles.targetOptions}>
-        {TEAM_MEMBERS.filter(member => !member.self).map(member => (
-          <TouchableOpacity key={member.id} onPress={() => onChangeTarget(member.id)}>
-            <Text style={[styles.targetOption, target === member.id && styles.targetOptionActive]}>
-              {member.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      </TouchableOpacity>
+      {targetOpen && (
+        <View style={styles.targetDropdown}>
+          {reportTargets.map((member, index) => (
+            <TouchableOpacity
+              key={member.id}
+              style={[
+                styles.targetDropdownItem,
+                index !== reportTargets.length - 1 && styles.targetDropdownDivider,
+              ]}
+              onPress={() => {
+                onChangeTarget(member.id);
+                setTargetOpen(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.targetOption, target === member.id && styles.targetOptionActive]}>
+                {member.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
       {reasons.map(item => (
         <TouchableOpacity key={item} style={styles.radioRow} onPress={() => onChangeReason(item)}>
           <View style={[styles.radioCircle, reason === item && styles.radioCircleOn]} />
@@ -840,8 +871,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   disabledActionButton: { backgroundColor: '#DEDEDE' },
-  actionWithHint: { flex: 1 },
-  cancelHint: { color: '#FF6F7D', fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 2 },
+  actionWithHint: { flex: 1, position: 'relative' },
+  cancelHint: {
+    position: 'absolute',
+    left: -16,
+    right: -16,
+    bottom: 48,
+    color: '#FF6F7D',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   headerActionText: { color: '#111111', fontSize: 16, fontWeight: '800' },
   rejectCountText: { color: '#999999', fontSize: 11, fontWeight: '700', marginTop: 2 },
   singleHeaderAction: {
@@ -916,6 +956,7 @@ const styles = StyleSheet.create({
   },
   actionSheetItem: { alignItems: 'center' },
   actionSheetIcon: { color: '#111111', fontSize: 34, fontWeight: '900' },
+  actionSheetIconImage: { width: 34, height: 34, resizeMode: 'contain' },
   actionSheetText: { color: '#111111', fontSize: 13, marginTop: 4 },
   inputRow: {
     flexDirection: 'row',
@@ -1033,12 +1074,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  selectBoxOpen: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0,
   },
   selectText: { color: '#555555', fontSize: 15, fontWeight: '700' },
   selectArrow: { color: '#222222', fontSize: 22 },
-  targetOptions: { flexDirection: 'row', gap: 10, marginVertical: 8 },
-  targetOption: { color: '#777777', fontSize: 12, fontWeight: '700' },
-  targetOptionActive: { color: '#FF6678' },
+  targetDropdown: {
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: '#AEB3BA',
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  targetDropdownItem: {
+    minHeight: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  targetDropdownDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  targetOption: { color: '#555555', fontSize: 14, fontWeight: '700' },
+  targetOptionActive: { color: '#FF6678', fontWeight: '900' },
   radioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   radioCircle: {
     width: 21,

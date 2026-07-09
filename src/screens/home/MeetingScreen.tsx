@@ -31,6 +31,7 @@ import {
   MeetingChatRoomInfo,
   MeetingFilterSettings,
   MeetingMemberProfile,
+  MeetingMemberPreview,
   MeetingRegion,
   MeetingRoomSummary,
   MeetingStatus,
@@ -54,6 +55,9 @@ const DEFAULT_REGION: MeetingRegion = {
   sigungu: '강남구',
 };
 const SCREEN_H = Dimensions.get('window').height;
+const USE_MEETING_MOCK_DATA = __DEV__;
+const MOCK_MEETING_ID_START = 910000;
+const MOCK_MEETING_ID_END = 920000;
 
 type CreateDraft = {
   region: MeetingRegion;
@@ -99,6 +103,8 @@ type MeetingUserContext = {
   profileImage: string;
   isSubscribed: boolean;
 };
+
+type DisplayMeetingRoom = MeetingRoomSummary & { disabledMatching?: true };
 
 const FALLBACK_MBTI = ['INTP', 'ENFP', 'ISTJ', 'ESFJ'];
 const DUMMY_AVATARS = [
@@ -376,7 +382,7 @@ const buildFallbackProfiles = (room: MeetingRoomSummary): MeetingMemberProfile[]
 
 const buildDummyMatchingRooms = (
   filters: MeetingFilterSettings,
-): Array<MeetingRoomSummary & { disabledMatching: true }> => {
+): Array<DisplayMeetingRoom & { disabledMatching: true }> => {
   const memberCounts = filters.memberCounts.length ? filters.memberCounts : DEFAULT_MEMBER_COUNTS;
 
   return memberCounts.slice(0, 2).map((count, index) => ({
@@ -396,6 +402,102 @@ const buildDummyMatchingRooms = (
     })),
     disabledMatching: true as const,
   }));
+};
+
+const isMockMeetingId = (value?: number) =>
+  typeof value === 'number' && value >= MOCK_MEETING_ID_START && value < MOCK_MEETING_ID_END;
+
+const isMockMeetingRoom = (room: MeetingRoomSummary) =>
+  isMockMeetingId(room.roomId) || isMockMeetingId(room.meetingId);
+
+const mockPreviewMembers = (seed: number, count: number): MeetingMemberPreview[] =>
+  Array.from({ length: count }, (_, index) => ({
+    userId: MOCK_MEETING_ID_START + seed * 10 + index,
+    profileImage: DUMMY_AVATARS[(seed + index) % DUMMY_AVATARS.length],
+  }));
+
+const buildMockMeetingRooms = (filters: MeetingFilterSettings): DisplayMeetingRoom[] => {
+  const region = filters.region;
+
+  return [
+    {
+      roomId: MOCK_MEETING_ID_START + 1,
+      meetingId: MOCK_MEETING_ID_START + 1,
+      meetingStatus: 'RECRUITING',
+      roomName: '퇴근 후 카페 미팅',
+      region,
+      memberInfo: { currentCount: 1, maxCount: 2 },
+      ageRangeDto: { min: 22, max: 27 },
+      membersPreview: mockPreviewMembers(1, 1),
+    },
+    {
+      roomId: MOCK_MEETING_ID_START + 2,
+      meetingId: MOCK_MEETING_ID_START + 2,
+      meetingStatus: 'FASTMATCHING',
+      roomName: '홍대 금요일 4인방',
+      region: { sido: '서울특별시', sigungu: '마포구' },
+      memberInfo: { currentCount: 3, maxCount: 4 },
+      ageRangeDto: { min: 24, max: 29 },
+      membersPreview: mockPreviewMembers(2, 3),
+    },
+    {
+      roomId: MOCK_MEETING_ID_START + 3,
+      meetingId: MOCK_MEETING_ID_START + 3,
+      meetingStatus: 'RECRUITING',
+      roomName: '강남 3인 미팅',
+      region: { sido: '서울특별시', sigungu: '강남구' },
+      memberInfo: { currentCount: 2, maxCount: 3 },
+      ageRangeDto: { min: 20, max: 25 },
+      membersPreview: mockPreviewMembers(3, 2),
+    },
+    {
+      roomId: MOCK_MEETING_ID_START + 4,
+      meetingId: MOCK_MEETING_ID_START + 4,
+      meetingStatus: 'MATCHING',
+      roomName: '매칭 진행중인 방',
+      region: { sido: '서울특별시', sigungu: '성동구' },
+      memberInfo: { currentCount: 4, maxCount: 4 },
+      ageRangeDto: { min: 25, max: 31 },
+      membersPreview: mockPreviewMembers(4, 4),
+      disabledMatching: true as const,
+    },
+  ];
+};
+
+const toMockActiveMeetingStatus = (
+  room: MeetingRoomSummary,
+  context: MeetingUserContext,
+): MyMeetingStatus => {
+  const maxCount = Math.max(room.memberInfo.maxCount, 2);
+  const members: MeetingTeamMember[] = [
+    {
+      userId: context.userId ?? MOCK_MEETING_ID_START,
+      nickname: context.nickname || '나',
+      profileImage: context.profileImage,
+      leader: true,
+    },
+    ...Array.from({ length: maxCount - 1 }, (_, index) => ({
+      userId: MOCK_MEETING_ID_START + 100 + index,
+      nickname: ['민지', '도윤', '서윤'][index] ?? 'ㅇㅇㅇ',
+      profileImage: DUMMY_AVATARS[(index + 1) % DUMMY_AVATARS.length],
+      leader: false,
+    })),
+  ];
+
+  return {
+    hasActiveRoom: true,
+    roomId: room.roomId,
+    meetingId: room.meetingId,
+    matchingStatus: 'RECRUITING',
+    roomName: room.roomName,
+    roomCode: `MOCK${String(room.meetingId).slice(-2)}`,
+    gender: context.gender,
+    region: room.region,
+    memberInfo: room.memberInfo,
+    ageRangeDto: room.ageRangeDto,
+    teamMembers: members,
+    leader: true,
+  };
 };
 
 const parseApiMessage = (error: any) =>
@@ -2002,7 +2104,10 @@ const MeetingScreen: React.FC = () => {
   );
 
   const displayRooms = useMemo(() => {
-    if (!rooms.length) return [];
+    if (!rooms.length) {
+      return USE_MEETING_MOCK_DATA ? buildMockMeetingRooms(filterSettings) : [];
+    }
+
     return [
       ...rooms,
       ...buildDummyMatchingRooms(filterSettings),
@@ -2110,6 +2215,12 @@ const MeetingScreen: React.FC = () => {
   const confirmJoin = async () => {
     if (!joinContext) return;
 
+    if (joinContext.source === 'room' && isMockMeetingRoom(joinContext.room)) {
+      setJoinContext(null);
+      setActiveRoom(toMockActiveMeetingStatus(joinContext.room, userContext));
+      return;
+    }
+
     const missing = calculateMissingTings(
       userContext.gender,
       joinContext.mode,
@@ -2215,6 +2326,20 @@ const MeetingScreen: React.FC = () => {
     const roomId = activeRoom?.roomId ?? activeRoom?.meetingId;
     if (!roomId || leavingRoom) return;
 
+    if (isMockMeetingId(roomId)) {
+      setActiveRoom(null);
+      await loadRooms(filterSettingsRef.current);
+      return;
+    }
+
+    if (activeRoom?.matchingStatus === 'MATCHING' || activeRoom?.matchingStatus === 'MATCHED') {
+      Alert.alert(
+        '안내',
+        '현재 매칭 중인 상태여서 나가실 수 없습니다.\n매칭 취소 후에 다시 시도해 주세요.',
+      );
+      return;
+    }
+
     setLeavingRoom(true);
 
     try {
@@ -2224,7 +2349,18 @@ const MeetingScreen: React.FC = () => {
       await loadRooms(filterSettingsRef.current);
     } catch (error) {
       if (__DEV__) console.warn('Failed to leave meeting room', error);
-      Alert.alert('오류', parseApiMessage(error) || '미팅 방 나가기에 실패했어요.');
+      if (isRoomNotFoundError(error)) {
+        setActiveRoom(null);
+        await refreshWalletAndProfile();
+        await loadRooms(filterSettingsRef.current);
+        Alert.alert('안내', '이미 종료되었거나 찾을 수 없는 미팅 방이라 목록으로 돌아갑니다.');
+        return;
+      }
+
+      Alert.alert(
+        '오류',
+        parseApiMessage(error) || '미팅 방 나가기에 실패했어요.',
+      );
     } finally {
       setLeavingRoom(false);
     }
@@ -2243,9 +2379,7 @@ const MeetingScreen: React.FC = () => {
     );
   };
 
-  const renderRoomCard = (
-    room: MeetingRoomSummary & { disabledMatching?: true },
-  ) => {
+  const renderRoomCard = (room: DisplayMeetingRoom) => {
     const disabled = Boolean(room.disabledMatching);
     const fastJoin = !disabled && isLikelyFastJoinRoom(room);
 
@@ -2314,7 +2448,7 @@ const MeetingScreen: React.FC = () => {
   };
 
   const renderWaitingState = () => {
-    const noRooms = !roomsLoading && rooms.length === 0;
+    const noRooms = !roomsLoading && displayRooms.length === 0;
 
     return (
       <ScrollView

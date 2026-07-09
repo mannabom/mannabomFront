@@ -30,8 +30,14 @@ import {
   getSelectedGift,
   SelectedGift,
 } from '../../utils/GiftSelectionStore';
+import { PickedChatPhoto, showChatPhotoPicker } from '../../utils/ChatPhotoPicker';
 
 const sendIconImg = require('../../assets/images/Send.png');
+const photoIconImg = require('../../assets/images/photo.png');
+const reportIconImg = require('../../assets/images/report.png');
+const giftIconImg = require('../../assets/images/Gift.png');
+
+const isMockRoomId = (value: string) => value.startsWith('mock-');
 
 type ProfileFlowState =
   | 'idle'
@@ -49,6 +55,7 @@ type UiMessage =
       text: string;
       time: string;
       giftTitle?: string;
+      photoUri?: string;
     }
   | {
       id: string;
@@ -57,12 +64,7 @@ type UiMessage =
       body: string;
     };
 
-const SAMPLE_MESSAGES: UiMessage[] = [
-  { id: 'sample-1', type: 'message', mine: false, text: 'Message here', time: '2:00pm' },
-  { id: 'sample-2', type: 'message', mine: false, text: 'Message here', time: '2:00pm' },
-  { id: 'sample-3', type: 'message', mine: true, text: 'Message here', time: '2:00pm' },
-  { id: 'sample-4', type: 'message', mine: true, text: 'Message here', time: '2:00pm' },
-];
+const SAMPLE_MESSAGES: UiMessage[] = [];
 
 const REPORT_REASONS = [
   '폭언, 욕설 등 언어폭력',
@@ -167,8 +169,9 @@ const normalizeMessage = (
     serverId: String(raw?.messageId ?? messageId),
     type: 'message',
     mine: Boolean(currentUserId && String(raw?.senderId) === String(currentUserId)),
-    text: messageContent,
+    text: messageType === 'PHOTO' ? '사진을 보냈어요' : messageContent,
     time: formatMessageTime(raw?.timestamp),
+    photoUri: messageType === 'PHOTO' ? messageContent : undefined,
   };
 };
 
@@ -418,6 +421,34 @@ const DatingChatRoomScreen: React.FC = () => {
     navigation.navigate('Store', { pickGiftMode: true });
   };
 
+  const sendPhoto = (photo: PickedChatPhoto) => {
+    if (!roomId || closed) return;
+    const clientMessageId = `photo-${Date.now()}`;
+    setMessages(prev => [
+      ...prev,
+      {
+        id: clientMessageId,
+        type: 'message',
+        mine: true,
+        text: '사진을 보냈어요',
+        time: formatMessageTime(new Date().toISOString()),
+        photoUri: photo.uri,
+      },
+    ]);
+
+    chatSocketService
+      .sendMessage({
+        roomId,
+        messageType: 'PHOTO',
+        content: photo.content,
+        clientMessageId,
+      })
+      .catch(error => {
+        if (__DEV__) console.warn('Failed to send dating chat photo', error);
+        Alert.alert('오류', '사진 전송에 실패했어요.');
+      });
+  };
+
   const sendGift = () => {
     if (!selectedGift) {
       openGiftPicker();
@@ -441,6 +472,12 @@ const DatingChatRoomScreen: React.FC = () => {
 
   const leaveRoom = async () => {
     if (!roomId) {
+      setLeaveVisible(false);
+      navigation.goBack();
+      return;
+    }
+
+    if (isMockRoomId(roomId)) {
       setLeaveVisible(false);
       navigation.goBack();
       return;
@@ -507,15 +544,15 @@ const DatingChatRoomScreen: React.FC = () => {
 
         {actionVisible && (
           <View style={styles.actionSheet}>
-            <ActionSheetItem label="사진" icon="▧" onPress={() => {
+            <ActionSheetItem label="사진" iconSource={photoIconImg} onPress={() => {
               setActionVisible(false);
-              Alert.alert('사진 보내기', '사진 전송은 PHOTO 웹소켓 payload에 연결할 수 있게 준비되어 있어요.');
+              showChatPhotoPicker(sendPhoto);
             }} />
-            <ActionSheetItem label="신고" icon="⚠" onPress={() => {
+            <ActionSheetItem label="신고" iconSource={reportIconImg} onPress={() => {
               setActionVisible(false);
               setReportVisible(true);
             }} />
-            <ActionSheetItem label="기프티콘" icon="□" onPress={() => {
+            <ActionSheetItem label="기프티콘" iconSource={giftIconImg} onPress={() => {
               setActionVisible(false);
               setGiftVisible(true);
             }} />
@@ -561,7 +598,7 @@ const DatingChatRoomScreen: React.FC = () => {
       <NoticeModal
         visible={profileTooEarlyVisible}
         title="서로를 알아가는 단계예요."
-        body="대화를 조금 더 나눠보세요!\n(10마디 미만)"
+        body={'대화를 조금 더 나눠보세요!\n(10마디 미만)'}
         button="확인"
         onClose={() => setProfileTooEarlyVisible(false)}
       />
@@ -735,13 +772,32 @@ const BubbleMessage = ({
         message.mine && styles.myBubble,
         message.mine && { backgroundColor: myBubbleColor },
         message.giftTitle && styles.giftBubble,
+        message.photoUri && styles.photoBubble,
       ]}
     >
-      {message.giftTitle && (
-        <Text style={styles.giftBubbleTitle}>{message.giftTitle}</Text>
+      {message.photoUri ? (
+        <>
+          <Image source={{ uri: message.photoUri }} style={styles.photoMessageImage} />
+          <View style={styles.mediaBubbleFooter}>
+            <Text style={styles.mediaBubbleText} numberOfLines={1}>
+              {message.text}
+            </Text>
+            <Text style={styles.mediaTimeText}>{message.time}</Text>
+          </View>
+        </>
+      ) : message.giftTitle ? (
+        <View style={styles.giftBubbleFooter}>
+          <Text style={styles.giftBubbleText} numberOfLines={1}>
+            {message.text}
+          </Text>
+          <Text style={styles.giftTimeText}>{message.time}</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.bubbleText}>{message.text}</Text>
+          <Text style={styles.timeText}>{message.time}</Text>
+        </>
       )}
-      <Text style={styles.bubbleText}>{message.text}</Text>
-      <Text style={styles.timeText}>{message.time}</Text>
     </View>
   </View>
 );
@@ -756,14 +812,20 @@ const SystemMessage = ({ message }: { message: Extract<UiMessage, { type: 'syste
 const ActionSheetItem = ({
   label,
   icon,
+  iconSource,
   onPress,
 }: {
   label: string;
-  icon: string;
+  icon?: string;
+  iconSource?: any;
   onPress: () => void;
 }) => (
   <TouchableOpacity style={styles.actionSheetItem} onPress={onPress}>
-    <Text style={styles.actionSheetIcon}>{icon}</Text>
+    {iconSource ? (
+      <Image source={iconSource} style={styles.actionSheetIconImage} />
+    ) : (
+      <Text style={styles.actionSheetIcon}>{icon}</Text>
+    )}
     <Text style={styles.actionSheetText}>{label}</Text>
   </TouchableOpacity>
 );
@@ -1178,18 +1240,69 @@ const styles = StyleSheet.create({
     borderColor: '#FFCED7',
   },
   giftBubble: {
-    width: 164,
-    minHeight: 132,
+    width: 188,
+    height: 128,
     borderRadius: 12,
-    alignItems: 'flex-start',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     justifyContent: 'flex-end',
-    paddingVertical: 16,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
   },
-  giftBubbleTitle: {
-    color: '#111111',
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 8,
+  giftBubbleFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 4,
+    width: '100%',
+  },
+  giftBubbleText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#222222',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  giftTimeText: {
+    flexShrink: 0,
+    color: '#7A91A3',
+    fontSize: 10,
+  },
+  photoBubble: {
+    width: 178,
+    minHeight: 160,
+    borderRadius: 12,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    padding: 8,
+    overflow: 'hidden',
+  },
+  photoMessageImage: {
+    width: '100%',
+    height: 118,
+    borderRadius: 9,
+    backgroundColor: '#EAF5FF',
+    resizeMode: 'cover',
+  },
+  mediaBubbleFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 5,
+    marginTop: 7,
+  },
+  mediaBubbleText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#222222',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mediaTimeText: {
+    flexShrink: 0,
+    color: '#7A91A3',
+    fontSize: 9,
   },
   bubbleText: {
     color: '#222222',
@@ -1243,6 +1356,11 @@ const styles = StyleSheet.create({
     fontSize: 31,
     fontWeight: '900',
     lineHeight: 33,
+  },
+  actionSheetIconImage: {
+    width: 32,
+    height: 32,
+    resizeMode: 'contain',
   },
   actionSheetText: {
     color: '#111111',

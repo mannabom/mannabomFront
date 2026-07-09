@@ -3,6 +3,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { Gender } from '../types/KakaoAPI';
 import { DrinkingHabit, MatchSource, SmokingHabit } from '../types/DatingAPI';
+import type { SignupTermType } from '../screens/login/TermsAgreementScreen';
 
 export type RootStackParamList = {
   SplashScreen: undefined;
@@ -17,7 +18,7 @@ export type RootStackParamList = {
 
   PhotoUpload: undefined;
   TermsAgreement: undefined;
-  TermsDetail: { termType: 'service' | 'privacy' | 'marketing' };
+  TermsDetail: { termType: SignupTermType };
   Congratulations: undefined;
 
   // ✅ 홈 이후
