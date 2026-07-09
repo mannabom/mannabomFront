@@ -20,8 +20,97 @@ const benchImg = require('../../assets/images/bench.png');
 
 type ChatTab = 'meeting' | 'dating';
 
+type ChatRoomWithTitle = ChatRoomDTO & { roomName?: string; title?: string };
 type MeetingChatRoom = ChatRoomDTO & { kind: 'team' | 'mixed' };
 type DatingChatRoom = ChatRoomDTO & { kind: 'profile' | 'loveView' };
+
+const USE_CHAT_LIST_MOCK_DATA = __DEV__;
+
+const minutesAgoIso = (minutes: number) =>
+  new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+const createMockChatRooms = (): ChatRoomWithTitle[] => [
+  {
+    chatRoomId: 'mock-team-room-1',
+    roomName: '서울 광진/23~25/동성팀 방',
+    participants: [
+      { userId: 'mock-team-2', nickname: '민지', profileImage: 'https://i.pravatar.cc/160?img=5' },
+      { userId: 'mock-team-3', nickname: '서윤', profileImage: 'https://i.pravatar.cc/160?img=9' },
+      { userId: 'mock-team-4', nickname: '하린', profileImage: 'https://i.pravatar.cc/160?img=16' },
+    ],
+    unreadMessageCount: 2,
+    lastMessagePreview: '오늘 매칭 시작할까요?',
+    lastMessageAt: minutesAgoIso(8),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'TEAM',
+  },
+  {
+    chatRoomId: 'mock-meeting-room-1',
+    roomName: '홍대 4:4 금요일 미팅',
+    participants: [
+      { userId: 'mock-mixed-1', nickname: '지훈', profileImage: 'https://i.pravatar.cc/160?img=11' },
+      { userId: 'mock-mixed-2', nickname: '도윤', profileImage: 'https://i.pravatar.cc/160?img=12' },
+      { userId: 'mock-mixed-3', nickname: '수아', profileImage: 'https://i.pravatar.cc/160?img=29' },
+      { userId: 'mock-mixed-4', nickname: '예린', profileImage: 'https://i.pravatar.cc/160?img=47' },
+    ],
+    unreadMessageCount: 5,
+    lastMessagePreview: '오늘 장소는 홍대입구역 8번 출구 어때요?',
+    lastMessageAt: minutesAgoIso(17),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'MEETING',
+  },
+  {
+    chatRoomId: 'mock-team-room-2',
+    roomName: '강남 3인 동성팀',
+    participants: [
+      { userId: 'mock-team-5', nickname: '준호', profileImage: 'https://i.pravatar.cc/160?img=18' },
+      { userId: 'mock-team-6', nickname: '민규', profileImage: 'https://i.pravatar.cc/160?img=33' },
+    ],
+    unreadMessageCount: 0,
+    lastMessagePreview: '매칭 취소는 2시간 뒤 가능해요',
+    lastMessageAt: minutesAgoIso(64),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'TEAM',
+  },
+  {
+    chatRoomId: 'mock-profile-room-1',
+    participants: [
+      { userId: '10101', nickname: '나나', profileImage: 'https://i.pravatar.cc/160?img=32' },
+    ],
+    unreadMessageCount: 1,
+    lastMessagePreview: '저도 그 카페 좋아해요',
+    lastMessageAt: minutesAgoIso(24),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'PROFILE',
+  },
+  {
+    chatRoomId: 'mock-profile-room-2',
+    participants: [
+      { userId: '30303', nickname: '도하', profileImage: 'https://i.pravatar.cc/160?img=21' },
+    ],
+    unreadMessageCount: 3,
+    lastMessagePreview: '기프티콘을 보냈어요',
+    lastMessageAt: minutesAgoIso(41),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'DATING',
+  },
+  {
+    chatRoomId: 'mock-loveview-room-1',
+    participants: [
+      { userId: '20202', nickname: 'ㅇㅇㅇ', profileImage: '' },
+    ],
+    unreadMessageCount: 0,
+    lastMessagePreview: '프로필 요청을 보냈어요',
+    lastMessageAt: minutesAgoIso(73),
+    chatRoomStatus: 'ACTIVE',
+    chatRoomType: 'LOVEVIEW',
+  },
+];
+
+const withMockChatRooms = (rooms: ChatRoomDTO[]) => {
+  if (rooms.length > 0 || !USE_CHAT_LIST_MOCK_DATA) return rooms;
+  return createMockChatRooms();
+};
 
 const isMeetingRoom = (room: ChatRoomDTO): room is MeetingChatRoom =>
   room.chatRoomType === 'TEAM' || room.chatRoomType === 'MEETING';
@@ -52,6 +141,9 @@ const formatChatTime = (value?: string) => {
 };
 
 const getRoomTitle = (room: ChatRoomDTO) => {
+  const explicitTitle = String((room as ChatRoomWithTitle).roomName ?? (room as ChatRoomWithTitle).title ?? '').trim();
+  if (explicitTitle) return explicitTitle;
+
   const names = room.participants
     .map(participant => participant.nickname)
     .filter(Boolean);
@@ -81,10 +173,10 @@ const ChatScreen: React.FC = () => {
         lastSyncTimestamp: lastSyncTimestampRef.current,
       });
       lastSyncTimestampRef.current = result.lastSyncTime || lastSyncTimestampRef.current;
-      setChatRooms(result.chatRooms);
+      setChatRooms(withMockChatRooms(result.chatRooms));
     } catch (error) {
       if (__DEV__) console.warn('Failed to sync chat rooms', error);
-      setChatRooms([]);
+      setChatRooms(withMockChatRooms([]));
     } finally {
       setLoading(false);
     }

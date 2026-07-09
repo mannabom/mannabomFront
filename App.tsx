@@ -13,6 +13,7 @@ import DatingQuestionsScreen from './src/screens/login/DatingQuestionsScreen';
 import PersonalityTestScreen from './src/screens/login/PersonalityTestScreen';
 import PhotoUploadScreen from './src/screens/login/PhotoUploadScreen';
 import TermsAgreementScreen from './src/screens/login/TermsAgreementScreen';
+import type { SignupTermType } from './src/screens/login/TermsAgreementScreen';
 import TermsDetailScreen from './src/screens/login/TermsDetailScreen';
 import CongratulationsScreen from './src/screens/login/CongratulationsScreen';
 
@@ -60,13 +61,13 @@ type AppState =
   | 'home';
 
 interface TermsDetailState {
-  termType: 'service' | 'privacy' | 'marketing';
+  termType: SignupTermType;
 }
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('splash');
   const [termsDetailState, setTermsDetailState] = useState<TermsDetailState>({
-    termType: 'service',
+    termType: 'privacy',
   });
 
   // ✅ 앱 켜질 때 1번만: 포그라운드에서도 상태바 알림 뜨게
@@ -118,7 +119,7 @@ const App: React.FC = () => {
     setAppState('login');
   };
 
-  const handleViewTermsDetail = (termType: 'service' | 'privacy' | 'marketing') => {
+  const handleViewTermsDetail = (termType: SignupTermType) => {
     setTermsDetailState({ termType });
     setAppState('termsDetail');
   };
@@ -230,6 +231,7 @@ const App: React.FC = () => {
                 {...props}
                 onAgreementComplete={() => setAppState('congratulations')}
                 onViewTermsDetail={handleViewTermsDetail}
+                onCancel={() => setAppState('photoUpload')}
               />
             )}
           </Stack.Screen>
