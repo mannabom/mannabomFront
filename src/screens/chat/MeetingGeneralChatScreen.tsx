@@ -3,6 +3,8 @@ import {
   Alert,
   Image,
   Modal,
+  PermissionsAndroid,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,6 +16,11 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import {
+  NaverMapMarkerOverlay,
+  NaverMapView,
+  type Camera,
+} from '@mj-studio/react-native-naver-map';
 import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
@@ -66,7 +73,28 @@ type MeetingMember = {
 type LocationState = {
   latitude: number;
   longitude: number;
+  isDevFallback?: boolean;
 } | null;
+
+const DEFAULT_MAP_LOCATION = {
+  latitude: 37.5665,
+  longitude: 126.978,
+};
+
+const DEV_MAP_TEST_LOCATION = {
+  latitude: 37.49795,
+  longitude: 127.02764,
+  isDevFallback: true,
+};
+
+const toMapCamera = (location: LocationState): Camera => ({
+  latitude: location?.latitude ?? DEFAULT_MAP_LOCATION.latitude,
+  longitude: location?.longitude ?? DEFAULT_MAP_LOCATION.longitude,
+  zoom: 16,
+});
+
+const isValidCoordinate = (latitude: number, longitude: number) =>
+  Number.isFinite(latitude) && Number.isFinite(longitude);
 
 const MEMBERS: MeetingMember[] = [
   { id: 'me', name: '나', self: true },
@@ -180,6 +208,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
     try {
       const nextUserId = await getProfileId();
       setCurrentUserId(nextUserId);
+      const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
@@ -189,7 +218,12 @@ const MeetingGeneralChatScreen: React.FC = () => {
       const normalized = result.messages
         .map(message => normalizeIncomingMessage(message, nextUserId))
         .filter((message): message is GeneralMessage => Boolean(message));
-      setMessages(normalized);
+      setMessages(prev => {
+        if (isInitialSync) return normalized;
+        const existingIds = new Set(prev.map(message => message.id));
+        const nextMessages = normalized.filter(message => !existingIds.has(message.id));
+        return nextMessages.length ? [...prev, ...nextMessages] : prev;
+      });
     } catch (error) {
       if (__DEV__) console.warn('Failed to sync meeting general chat', error);
     }
@@ -322,35 +356,56 @@ const MeetingGeneralChatScreen: React.FC = () => {
     );
   };
 
-  const requestCurrentLocation = () => {
+  const requestLocationPermission = async () => {
+    if (Platform.OS !== 'android') return true;
+
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: '위치 권한',
+        message: '만남 인증을 위해 현재 위치 권한이 필요해요.',
+        buttonPositive: '허용',
+        buttonNegative: '거부',
+      },
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  };
+
+  const finishLocationRequest = () => {
+    setLocationLoadingVisible(false);
+    setLocationConfirmVisible(true);
+  };
+
+  const requestCurrentLocation = async () => {
     setVerifyConfirmVisible(false);
     setLocationConfirmVisible(false);
+    setCurrentLocation(__DEV__ ? DEV_MAP_TEST_LOCATION : null);
     setLocationLoadingVisible(true);
+
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      finishLocationRequest();
+      return;
+    }
 
     const geolocation = (globalThis as any).navigator?.geolocation;
     if (!geolocation?.getCurrentPosition) {
-      setTimeout(() => {
-        setCurrentLocation(null);
-        setLocationLoadingVisible(false);
-        setLocationConfirmVisible(true);
-      }, 500);
+      setTimeout(finishLocationRequest, 1200);
       return;
     }
 
     geolocation.getCurrentPosition(
       (position: any) => {
-        setCurrentLocation({
-          latitude: Number(position?.coords?.latitude),
-          longitude: Number(position?.coords?.longitude),
-        });
-        setLocationLoadingVisible(false);
-        setLocationConfirmVisible(true);
+        const latitude = Number(position?.coords?.latitude);
+        const longitude = Number(position?.coords?.longitude);
+        if (isValidCoordinate(latitude, longitude)) {
+          setCurrentLocation({ latitude, longitude });
+        }
+        finishLocationRequest();
       },
       (error: unknown) => {
         if (__DEV__) console.warn('Failed to get current location', error);
-        setCurrentLocation(null);
-        setLocationLoadingVisible(false);
-        setLocationConfirmVisible(true);
+        finishLocationRequest();
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
@@ -375,10 +430,18 @@ const MeetingGeneralChatScreen: React.FC = () => {
       return;
     }
 
+    if (currentLocation.isDevFallback) {
+      Alert.alert('지도 확인용', '현재 좌표는 개발용 더미 위치예요. 실제 인증 전송은 실제 위치를 받은 뒤 진행해주세요.');
+      return;
+    }
+
     try {
       await chatApiService.verifyMeeting({
         chatRoomId: roomId,
-        location: currentLocation,
+        location: {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+        },
         timestamp: new Date().toISOString(),
       });
       setLocationConfirmVisible(false);
@@ -526,7 +589,10 @@ const MeetingGeneralChatScreen: React.FC = () => {
         onPrimary={startVerification}
         onSecondary={() => setVerifyConfirmVisible(false)}
       />
-      <LocationLoadingModal visible={locationLoadingVisible} />
+      <LocationLoadingModal
+        visible={locationLoadingVisible}
+        location={currentLocation}
+      />
       <LocationConfirmModal
         visible={locationConfirmVisible}
         location={currentLocation}
@@ -858,9 +924,15 @@ const ReportModal = ({
   </ModalShell>
 );
 
-const LocationLoadingModal = ({ visible }: { visible: boolean }) => (
+const LocationLoadingModal = ({
+  visible,
+  location,
+}: {
+  visible: boolean;
+  location: LocationState;
+}) => (
   <ModalShell visible={visible}>
-    <MapPreview />
+    <LocationMapPreview location={location} tracking />
     <Text style={styles.locationTitle}>위치를 파악중이에요</Text>
     <Text style={styles.modalBody}>만남인증이 완료되려면 절반이상이 일치해야돼요</Text>
   </ModalShell>
@@ -878,7 +950,7 @@ const LocationConfirmModal = ({
   onComplete: () => void;
 }) => (
   <ModalShell visible={visible}>
-    <MapPreview />
+    <LocationMapPreview location={location} tracking />
     <Text style={styles.locationInfoText}>
       현재 위치 : {location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : '미확정'}{'\n'}
       현재 가장 많이 인증한 위치 : 강남역
@@ -898,16 +970,50 @@ const LocationConfirmModal = ({
   </ModalShell>
 );
 
-const MapPreview = () => (
+const LocationMapPreview = ({
+  location,
+  tracking,
+}: {
+  location: LocationState;
+  tracking?: boolean;
+}) => (
   <View style={styles.mapPreview}>
-    <View style={styles.mapGridHorizontal} />
-    <View style={[styles.mapGridHorizontal, { top: 50 }]} />
-    <View style={[styles.mapGridHorizontal, { top: 78 }]} />
-    <View style={styles.mapGridVertical} />
-    <View style={[styles.mapGridVertical, { left: 96 }]} />
-    <View style={[styles.mapGridVertical, { left: 168 }]} />
-    <Text style={styles.mapLabelLeft}>Sugimami</Text>
-    <Text style={styles.mapLabelRight}>Shinjuku</Text>
+    <NaverMapView
+      style={styles.map}
+      camera={toMapCamera(location)}
+      animationDuration={250}
+      isShowCompass={false}
+      isShowIndoorLevelPicker={false}
+      isShowLocationButton={false}
+      isShowScaleBar={false}
+      isShowZoomControls={false}
+      isScrollGesturesEnabled={false}
+      isZoomGesturesEnabled={false}
+      isTiltGesturesEnabled={false}
+      isRotateGesturesEnabled={false}
+      isStopGesturesEnabled={false}
+      isUseTextureViewAndroid
+      locale="ko"
+      locationOverlay={{
+        isVisible: Boolean(tracking && location),
+        position: location ?? DEFAULT_MAP_LOCATION,
+        circleRadius: 44,
+        circleColor: '#FFAFBF33',
+        circleOutlineWidth: 1,
+        circleOutlineColor: '#FFAFBF',
+      }}
+    >
+      {location && (
+        <NaverMapMarkerOverlay
+          latitude={location.latitude}
+          longitude={location.longitude}
+          image={{ symbol: 'pink' }}
+          width={28}
+          height={36}
+          caption={{ text: '현재 위치', textSize: 11, color: '#001A44', haloColor: '#FFFFFF' }}
+        />
+      )}
+    </NaverMapView>
   </View>
 );
 
@@ -1234,24 +1340,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  mapGridHorizontal: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 24,
-    height: 1,
-    backgroundColor: '#D0D0D0',
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  mapGridVertical: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 42,
-    width: 1,
-    backgroundColor: '#D0D0D0',
-  },
-  mapLabelLeft: { position: 'absolute', left: 70, top: 72, color: '#777777', fontSize: 11, fontWeight: '800' },
-  mapLabelRight: { position: 'absolute', right: 18, top: 28, color: '#777777', fontSize: 11, fontWeight: '800' },
 });
 
 export default MeetingGeneralChatScreen;

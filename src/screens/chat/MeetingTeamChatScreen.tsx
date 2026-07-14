@@ -165,6 +165,7 @@ const MeetingTeamChatScreen: React.FC = () => {
     try {
       const nextUserId = await getProfileId();
       setCurrentUserId(nextUserId);
+      const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
@@ -174,7 +175,12 @@ const MeetingTeamChatScreen: React.FC = () => {
       const normalized = result.messages
         .map(message => normalizeIncomingMessage(message, nextUserId))
         .filter((message): message is ChatMessage => Boolean(message));
-      setMessages(normalized.length ? normalized : []);
+      setMessages(prev => {
+        if (isInitialSync) return normalized;
+        const existingIds = new Set(prev.map(message => message.id));
+        const nextMessages = normalized.filter(message => !existingIds.has(message.id));
+        return nextMessages.length ? [...prev, ...nextMessages] : prev;
+      });
     } catch (error) {
       if (__DEV__) console.warn('Failed to sync chat room messages', error);
     }
@@ -369,11 +375,15 @@ const MeetingTeamChatScreen: React.FC = () => {
                 setReportVisible(true);
               }}
             >
-              <Image source={reportIconImg} style={styles.actionSheetIconImage} />
+              <View style={styles.actionSheetIconBox}>
+                <Image source={reportIconImg} style={styles.actionSheetIconImage} />
+              </View>
               <Text style={styles.actionSheetText}>신고</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionSheetItem} onPress={handleLeaveRequest}>
-              <Text style={styles.actionSheetIcon}>↪</Text>
+              <View style={styles.actionSheetIconBox}>
+                <Text style={styles.actionSheetIcon}>↪</Text>
+              </View>
               <Text style={styles.actionSheetText}>나가기</Text>
             </TouchableOpacity>
           </View>
@@ -954,10 +964,24 @@ const styles = StyleSheet.create({
     gap: 80,
     paddingVertical: 18,
   },
-  actionSheetItem: { alignItems: 'center' },
-  actionSheetIcon: { color: '#111111', fontSize: 34, fontWeight: '900' },
+  actionSheetItem: { alignItems: 'center', justifyContent: 'flex-start', width: 64 },
+  actionSheetIconBox: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionSheetIcon: {
+    color: '#111111',
+    fontSize: 32,
+    fontWeight: '900',
+    lineHeight: 36,
+    includeFontPadding: false,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+  },
   actionSheetIconImage: { width: 34, height: 34, resizeMode: 'contain' },
-  actionSheetText: { color: '#111111', fontSize: 13, marginTop: 4 },
+  actionSheetText: { color: '#111111', fontSize: 13, marginTop: 4, lineHeight: 16 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',

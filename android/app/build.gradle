@@ -29,6 +29,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        manifestPlaceholders = [
+            naverMapNcpKeyId: project.findProperty("NAVER_MAP_NCP_KEY_ID") ?: System.getenv("NAVER_MAP_NCP_KEY_ID") ?: ""
+        ]
     }
     signingConfigs {
         debug {
