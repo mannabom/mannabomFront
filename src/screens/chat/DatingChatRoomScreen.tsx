@@ -264,6 +264,7 @@ const DatingChatRoomScreen: React.FC = () => {
     try {
       const nextUserId = await getProfileId();
       setCurrentUserId(nextUserId);
+      const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
@@ -275,7 +276,12 @@ const DatingChatRoomScreen: React.FC = () => {
       const normalized = result.messages
         .map(message => normalizeMessage(message, nextUserId))
         .filter((message): message is UiMessage => Boolean(message));
-      setMessages(normalized);
+      setMessages(prev => {
+        if (isInitialSync) return normalized;
+        const existingIds = new Set(prev.map(message => message.id));
+        const nextMessages = normalized.filter(message => !existingIds.has(message.id));
+        return nextMessages.length ? [...prev, ...nextMessages] : prev;
+      });
     } catch (error) {
       if (__DEV__) console.warn('Failed to sync dating chat room', error);
     }

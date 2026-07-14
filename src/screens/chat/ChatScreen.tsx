@@ -24,7 +24,7 @@ type ChatRoomWithTitle = ChatRoomDTO & { roomName?: string; title?: string };
 type MeetingChatRoom = ChatRoomDTO & { kind: 'team' | 'mixed' };
 type DatingChatRoom = ChatRoomDTO & { kind: 'profile' | 'loveView' };
 
-const USE_CHAT_LIST_MOCK_DATA = __DEV__;
+const USE_CHAT_LIST_MOCK_DATA = false;
 
 const minutesAgoIso = (minutes: number) =>
   new Date(Date.now() - minutes * 60 * 1000).toISOString();
