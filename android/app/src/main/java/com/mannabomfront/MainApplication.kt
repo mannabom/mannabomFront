@@ -36,7 +36,7 @@ class MainApplication : Application(), ReactApplication {
     super.onCreate()
     
     // 카카오 SDK 초기화
-    KakaoSdk.init(this, "1dcde956df0ac717b794b42d7aa470d6")
+    KakaoSdk.init(this, "89f136700f0dc713ef05fc3aec909a52")
     
     loadReactNative(this)
   }
