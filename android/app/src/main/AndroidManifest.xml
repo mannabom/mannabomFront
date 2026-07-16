@@ -19,7 +19,7 @@
         <!-- 카카오 앱 키 -->
         <meta-data
             android:name="com.kakao.sdk.AppKey"
-            android:value="1dcde956df0ac717b794b42d7aa470d6" />
+            android:value="89f136700f0dc713ef05fc3aec909a52" />
 
         <meta-data
             android:name="com.naver.maps.map.NCP_KEY_ID"
@@ -46,7 +46,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="kakao1dcde956df0ac717b794b42d7aa470d6" />
+                <data android:scheme="kakao89f136700f0dc713ef05fc3aec909a52" />
             </intent-filter>
         </activity>
 
