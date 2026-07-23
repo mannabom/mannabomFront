@@ -120,12 +120,25 @@ export type RootStackParamList = {
 
   MeetingTeamChat: {
     roomId?: string;
+    meetingRoomId?: string;
     roomType?: string;
+    roomTitle?: string;
+    participants?: Array<{
+      userId: string;
+      nickname: string;
+      profileImage: string;
+    }>;
   };
 
   MeetingGeneralChat: {
     roomId?: string;
     roomType?: string;
+    roomTitle?: string;
+    participants?: Array<{
+      userId: string;
+      nickname: string;
+      profileImage: string;
+    }>;
   };
 
   ProfileChat: {

@@ -17,12 +17,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import FilterModal from '../../components/common/FilterModal';
 
 import {
-  DrinkingHabit,
   CheckTingWalletResponse,
   FilterSettings,
   LoveViewMatchConditionRequest,
   ProfileMatchConditionRequest,
-  SmokingHabit,
 } from '../../types/DatingAPI';
 import { defaultFilterSettings } from '../../utils/DatingUtils';
 import { datingApiService } from '../../services/DatingApiService';
@@ -48,8 +46,6 @@ type BlindProfileCard = {
   mbti: string;
   photoUris: string[];
   mainPhotoUrl: string;
-  smoking: SmokingHabit;
-  drinking: DrinkingHabit;
 };
 
 type BlindLoveCodeCard = {
@@ -72,8 +68,6 @@ type PreviewModalProfile = {
   nickname: string;
   age: number;
   mbti: string;
-  smoking: SmokingHabit;
-  drinking: DrinkingHabit;
   photoUris: string[];
 };
 
@@ -299,8 +293,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             nickname: current.nickname,
             age: current.age,
             mbti: current.mbti ?? '',
-            smoking: SmokingHabit.NON_SMOKER,
-            drinking: DrinkingHabit.NON_DRINKER,
             photoUris: current.photoUris?.length ? current.photoUris : [''],
             mainPhotoUrl: current.photoUris?.[0] ?? '',
           });
@@ -357,12 +349,16 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       mounted = false;
     };
   }, []);
-  const parseLoveCodeCard = (raw: any): BlindLoveCodeCard | null => {
+  const parseLoveCodeCard = useCallback((raw: any): BlindLoveCodeCard | null => {
     const loveViewRes: any = firstLoveCandidate(raw);
     if (!loveViewRes) return null;
 
-    const loveProfileId =
-      toPositiveId(loveViewRes?.profileId, loveViewRes?.userId, loveViewRes?.id) ?? 1;
+    const loveProfileId = toPositiveId(
+      loveViewRes?.profileId,
+      loveViewRes?.userId,
+      loveViewRes?.id,
+    );
+    if (!loveProfileId) return null;
 
     const questionAnswers = Array.isArray(loveViewRes?.questionAnswers) ? loveViewRes.questionAnswers : [];
     const qaMap = new Map<string, string>();
@@ -495,9 +491,9 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       openQA,
       choiceQA,
     };
-  };
+  }, []);
 
-  const fetchProfilePreview = async (): Promise<BlindProfileCard | null> => {
+  const fetchProfilePreview = useCallback(async (): Promise<BlindProfileCard | null> => {
     const profileCondition: ProfileMatchConditionRequest = {
       minAge: filterSettings.ageRange.min,
       maxAge: filterSettings.ageRange.max,
@@ -521,8 +517,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       }
     }
     const profileRes: any = firstProfileCandidate(profileRaw);
-    const profileId =
-      toPositiveId(profileRes?.profileId, profileRes?.userId, profileRes?.id) ?? 1;
+    const profileId = toPositiveId(
+      profileRes?.profileId,
+      profileRes?.userId,
+      profileRes?.id,
+    );
+    if (!profileRes || !profileId) return null;
 
     const photoUris = extractPhotoUris(profileRes);
     const nextWallet = await refreshWalletInfo();
@@ -542,13 +542,11 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       age: Number(profileRes?.age ?? 0),
       mbti: String(profileRes?.mbti ?? ''),
       photoUris,
-      smoking: profileRes?.smoking ?? SmokingHabit.NON_SMOKER,
-      drinking: profileRes?.drinking ?? DrinkingHabit.NON_DRINKER,
       mainPhotoUrl: photoUris[0] ?? '',
     };
-  };
+  }, [filterSettings, refreshWalletInfo]);
 
-  const fetchLovePreview = async (): Promise<BlindLoveCodeCard | null> => {
+  const fetchLovePreview = useCallback(async (): Promise<BlindLoveCodeCard | null> => {
     const loveViewCondition: LoveViewMatchConditionRequest = {
       minAge: filterSettings.ageRange.min,
       maxAge: filterSettings.ageRange.max,
@@ -572,7 +570,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       }
     }
     return parseLoveCodeCard(loveRaw);
-  };
+  }, [filterSettings, parseLoveCodeCard]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -628,7 +626,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     return () => {
       mounted = false;
     };
-  }, [filterSettings]);
+  }, [fetchLovePreview, fetchProfilePreview]);
 
   const handleFilterApply = (newFilters: FilterSettings) => {
     setFilterSettings(newFilters);
@@ -643,33 +641,24 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         nickname: p.nickname,
         age: p.age,
         mbti: p.mbti,
-        smoking: p.smoking,
-        drinking: p.drinking,
         photoUris: p.photoUris.length ? p.photoUris : [p.mainPhotoUrl],
       })),
     [profileCards],
   );
-
-  const firstLoveCode = loveCodeCards[0];
 
   const openProfilePreview = async () => {
     try {
       const saved = getProfilePreviewState();
       let profiles: PreviewModalProfile[] = mapProfilesForModal;
       if (saved?.profiles?.length) {
-        profiles = saved.profiles.map(p => {
-          const matched = profileCards.find(card => card.profileId === p.profileId);
-          return {
-            profileId: p.profileId,
-            name: p.name ?? p.nickname,
-            nickname: p.nickname,
-            age: p.age,
-            mbti: p.mbti ?? '',
-            smoking: matched?.smoking ?? SmokingHabit.NON_SMOKER,
-            drinking: matched?.drinking ?? DrinkingHabit.NON_DRINKER,
-            photoUris: p.photoUris?.length ? p.photoUris : [''],
-          };
-        });
+        profiles = saved.profiles.map(p => ({
+          profileId: p.profileId,
+          name: p.name ?? p.nickname,
+          nickname: p.nickname,
+          age: p.age,
+          mbti: p.mbti ?? '',
+          photoUris: p.photoUris?.length ? p.photoUris : [''],
+        }));
       }
       if (!profiles.length && previewProfile) {
         const fallback = [
@@ -679,8 +668,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             name: previewProfile.name ?? previewProfile.nickname,
             age: previewProfile.age,
             mbti: previewProfile.mbti,
-            smoking: previewProfile.smoking,
-            drinking: previewProfile.drinking,
             photoUris: previewProfile.photoUris.length
               ? previewProfile.photoUris
               : [previewProfile.mainPhotoUrl],
@@ -700,8 +687,6 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             nickname: fresh.nickname,
             age: fresh.age,
             mbti: fresh.mbti,
-            smoking: fresh.smoking,
-            drinking: fresh.drinking,
             photoUris: fresh.photoUris.length ? fresh.photoUris : [fresh.mainPhotoUrl],
           },
         ];
@@ -824,7 +809,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
   };
   const blindIntroPreview =
     previewLoveCode?.requiredQA.find(q => q.question === '자기소개')?.answer ??
-    '소개팅 프로필에 작성된 자기소개가 여기에 블러 처리되어 보여요.';
+    '추천 자기소개가 없습니다.';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -880,14 +865,20 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             onPress={openProfilePreview}
             activeOpacity={0.9}
           >
-            <ImageBackground
-              source={{ uri: previewProfile?.mainPhotoUrl ?? 'https://picsum.photos/700/700' }}
-              blurRadius={21}
-              style={styles.cardImage}
-              imageStyle={styles.cardImageStyle}
-            >
-              <View style={styles.blurScrim} />
-            </ImageBackground>
+            {previewProfile?.mainPhotoUrl ? (
+              <ImageBackground
+                source={{ uri: previewProfile.mainPhotoUrl }}
+                blurRadius={21}
+                style={styles.cardImage}
+                imageStyle={styles.cardImageStyle}
+              >
+                <View style={styles.blurScrim} />
+              </ImageBackground>
+            ) : (
+              <View style={[styles.cardImage, styles.emptyProfileCard]}>
+                <Text style={styles.emptyProfileText}>추천 프로필이 없습니다</Text>
+              </View>
+            )}
             <Text style={styles.cardTitle}>일반 소개팅</Text>
           </TouchableOpacity>
 
@@ -1057,6 +1048,17 @@ const styles = StyleSheet.create({
   },
   cardImageStyle: { borderRadius: 12 },
   blurScrim: { flex: 1, backgroundColor: 'rgba(255,255,255,0.26)' },
+  emptyProfileCard: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  emptyProfileText: {
+    color: '#8A8A8A',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
 
   cardTitle: {
     marginTop: 10,

@@ -72,33 +72,10 @@ export default function LoveCodePreviewScreen() {
     route.params?.additionalProfileNum ?? 0,
   );
 
-  const singleFallbackCard: LoveCard = useMemo(
-    () => ({
-      profileId: 0,
-      nickname: route.params?.nickname ?? '닉네임',
-      mbti: route.params?.mbti ?? '',
-      requiredQA: [
-        { question: '자기소개', answer: route.params?.intro ?? '자기소개가 없어요.' },
-        { question: '연인에게 바라는 한 가지는?', answer: route.params?.want ?? '응답이 없어요.' },
-        { question: '나를 설레게 하는 이성의 매력?', answer: route.params?.charm ?? '응답이 없어요.' },
-      ],
-      openQA: Array.isArray(route.params?.openQA)
-        ? route.params.openQA
-        : [
-            { question: '나에게 연애란 어떤 의미인가요?', answer: '아직 작성된 답변이 없어요.' },
-            { question: '나의 소울 푸드?', answer: '아직 작성된 답변이 없어요.' },
-            { question: '나의 하루 그리고 나의 휴일은?', answer: '아직 작성된 답변이 없어요.' },
-            { question: '하고 싶은 데이트는?', answer: '아직 작성된 답변이 없어요.' },
-          ],
-      choiceQA: Array.isArray(route.params?.choiceQA) ? route.params.choiceQA : FALLBACK_CHOICE_QA,
-    }),
-    [route.params],
-  );
-
   const initialCards: LoveCard[] =
     Array.isArray(route.params?.loveCards) && route.params.loveCards.length
       ? route.params.loveCards
-      : [singleFallbackCard];
+      : [];
 
   const [cards] = useState<LoveCard[]>(initialCards);
   const [index, setIndex] = useState<number>(
@@ -132,8 +109,8 @@ export default function LoveCodePreviewScreen() {
   );
 
   const current = useMemo(
-    () => (cards.length ? cards[Math.min(index, cards.length - 1)] : singleFallbackCard),
-    [cards, index, singleFallbackCard],
+    () => (cards.length ? cards[Math.min(index, cards.length - 1)] : null),
+    [cards, index],
   );
 
   const canGoPrev = index > 0;
@@ -188,6 +165,23 @@ export default function LoveCodePreviewScreen() {
     }
     setCounterInfoVisible(true);
   };
+
+  if (!current) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.emptyHeader}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
+            <Text style={styles.back}>{'←'}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>연애코드를 불러올 수 없어요</Text>
+          <Text style={styles.emptyBody}>추천 데이터를 다시 불러와 주세요.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const intro = current.requiredQA.find(item => item.question === '자기소개')?.answer ?? '자기소개가 없어요.';
   const want =
@@ -410,6 +404,10 @@ const BORDER = '#DADADA';
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  emptyHeader: { paddingHorizontal: 12, paddingTop: 24 },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyTitle: { color: '#111', fontSize: 19, fontWeight: '800', marginBottom: 8 },
+  emptyBody: { color: '#777', fontSize: 14, textAlign: 'center' },
   header: {
     paddingHorizontal: 12,
     paddingTop: 24,

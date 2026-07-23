@@ -950,19 +950,25 @@ export default function ProfileDetail() {
         </View>
 
         <View style={styles.heroCard}>
-          <ScrollView
-            ref={photoScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={onPhotoScroll}
-            scrollEventThrottle={16}
-            style={styles.heroScroll}
-          >
-            {(photoUrls.length ? photoUrls : ['https://via.placeholder.com/600']).map((uri, idx) => (
-              <Image key={`${uri}-${idx}`} source={{ uri }} style={styles.heroImage} />
-            ))}
-          </ScrollView>
+          {photoUrls.length ? (
+            <ScrollView
+              ref={photoScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={onPhotoScroll}
+              scrollEventThrottle={16}
+              style={styles.heroScroll}
+            >
+              {photoUrls.map((uri, idx) => (
+                <Image key={`${uri}-${idx}`} source={{ uri }} style={styles.heroImage} />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={[styles.heroScroll, styles.heroEmpty]}>
+              <Text style={styles.heroEmptyText}>등록된 사진이 없습니다</Text>
+            </View>
+          )}
 
           {photoUrls.length > 1 && (
             <View style={styles.dotsRow}>
@@ -1395,6 +1401,8 @@ const styles = StyleSheet.create({
   },
   heroScroll: { flex: 1 },
   heroImage: { width: SCREEN_W - 32, height: 340, resizeMode: 'cover' },
+  heroEmpty: { justifyContent: 'center', alignItems: 'center' },
+  heroEmptyText: { color: '#8A8A8A', fontSize: 14, fontWeight: '600' },
 
   dotsRow: {
     position: 'absolute',

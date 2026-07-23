@@ -37,8 +37,6 @@ const photoIconImg = require('../../assets/images/photo.png');
 const reportIconImg = require('../../assets/images/report.png');
 const giftIconImg = require('../../assets/images/Gift.png');
 
-const isMockRoomId = (value: string) => value.startsWith('mock-');
-
 type ProfileFlowState =
   | 'idle'
   | 'outgoingPending'
@@ -63,8 +61,6 @@ type UiMessage =
       title: string;
       body: string;
     };
-
-const SAMPLE_MESSAGES: UiMessage[] = [];
 
 const REPORT_REASONS = [
   '폭언, 욕설 등 언어폭력',
@@ -211,7 +207,7 @@ const DatingChatRoomScreen: React.FC = () => {
   const isProfileChat = !isLoveview;
 
   const [expanded, setExpanded] = useState(false);
-  const [messages, setMessages] = useState<UiMessage[]>(SAMPLE_MESSAGES);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatRoomStatus, setChatRoomStatus] = useState<ChatRoomStatus>('ACTIVE');
@@ -232,7 +228,7 @@ const DatingChatRoomScreen: React.FC = () => {
   const lastChatSyncTimeRef = useRef<string | null>(null);
 
   const closed = chatRoomStatus !== 'ACTIVE';
-  const opponentNickname = String(route.params?.nickname ?? '닉네임');
+  const opponentNickname = String(route.params?.nickname ?? '').trim() || '상대방';
   const targetProfileId = Number(route.params?.targetProfileId ?? 0);
   const opponentProfileImage = String(route.params?.profileImage ?? '');
   const myTalkCount = messages.filter(message => message.type === 'message' && message.mine).length;
@@ -483,12 +479,6 @@ const DatingChatRoomScreen: React.FC = () => {
       return;
     }
 
-    if (isMockRoomId(roomId)) {
-      setLeaveVisible(false);
-      navigation.goBack();
-      return;
-    }
-
     try {
       await chatApiService.leaveRoom(roomId);
       setLeaveVisible(false);
@@ -691,7 +681,7 @@ const LoveviewHeader = ({
               >
                 <Avatar open={profileOpen} unknown={!profileOpen} />
               </TouchableOpacity>
-              <Text style={styles.profileStatusName}>ㅇㅇㅇ</Text>
+              <Text style={styles.profileStatusName}>{title}</Text>
             </View>
           </View>
 

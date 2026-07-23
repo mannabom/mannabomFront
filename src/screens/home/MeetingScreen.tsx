@@ -31,7 +31,6 @@ import {
   MeetingChatRoomInfo,
   MeetingFilterSettings,
   MeetingMemberProfile,
-  MeetingMemberPreview,
   MeetingRegion,
   MeetingRoomSummary,
   MeetingStatus,
@@ -55,9 +54,6 @@ const DEFAULT_REGION: MeetingRegion = {
   sigungu: '강남구',
 };
 const SCREEN_H = Dimensions.get('window').height;
-const USE_MEETING_MOCK_DATA = __DEV__;
-const MOCK_MEETING_ID_START = 910000;
-const MOCK_MEETING_ID_END = 920000;
 
 type CreateDraft = {
   region: MeetingRegion;
@@ -83,6 +79,7 @@ type ProfileModalState = {
   room: MeetingRoomSummary;
   members: MeetingMemberProfile[];
   loading: boolean;
+  error?: string;
 };
 
 type ErrorModalState = {
@@ -103,16 +100,6 @@ type MeetingUserContext = {
   profileImage: string;
   isSubscribed: boolean;
 };
-
-type DisplayMeetingRoom = MeetingRoomSummary & { disabledMatching?: true };
-
-const FALLBACK_MBTI = ['INTP', 'ENFP', 'ISTJ', 'ESFJ'];
-const DUMMY_AVATARS = [
-  'https://i.pravatar.cc/300?img=12',
-  'https://i.pravatar.cc/300?img=32',
-  'https://i.pravatar.cc/300?img=15',
-  'https://i.pravatar.cc/300?img=47',
-];
 
 const toAbsoluteUri = (value?: string) => {
   const trimmed = String(value ?? '').trim();
@@ -370,136 +357,6 @@ const buildDisplayTeamMembers = (
   ];
 };
 
-const buildFallbackProfiles = (room: MeetingRoomSummary): MeetingMemberProfile[] =>
-  room.membersPreview.map((member, index) => ({
-    userId: member.userId,
-    profileImage: toAbsoluteUri(member.profileImage) || DUMMY_AVATARS[index % DUMMY_AVATARS.length],
-    age: 24 + index,
-    mbti: FALLBACK_MBTI[index % FALLBACK_MBTI.length],
-    smokingHabit: '비흡연',
-    drinkingHabit: '가끔 마셔요',
-  }));
-
-const buildDummyMatchingRooms = (
-  filters: MeetingFilterSettings,
-): Array<DisplayMeetingRoom & { disabledMatching: true }> => {
-  const memberCounts = filters.memberCounts.length ? filters.memberCounts : DEFAULT_MEMBER_COUNTS;
-
-  return memberCounts.slice(0, 2).map((count, index) => ({
-    roomId: 900000 + index,
-    meetingId: 900000 + index,
-    meetingStatus: 'MATCHING',
-    roomName: `매칭중 방 ${index + 1}`,
-    region: filters.region,
-    memberInfo: {
-      currentCount: count,
-      maxCount: count,
-    },
-    ageRangeDto: filters.ageRange,
-    membersPreview: Array.from({ length: count }, (_, previewIndex) => ({
-      userId: 700000 + index * 10 + previewIndex,
-      profileImage: DUMMY_AVATARS[(index + previewIndex) % DUMMY_AVATARS.length],
-    })),
-    disabledMatching: true as const,
-  }));
-};
-
-const isMockMeetingId = (value?: number) =>
-  typeof value === 'number' && value >= MOCK_MEETING_ID_START && value < MOCK_MEETING_ID_END;
-
-const isMockMeetingRoom = (room: MeetingRoomSummary) =>
-  isMockMeetingId(room.roomId) || isMockMeetingId(room.meetingId);
-
-const mockPreviewMembers = (seed: number, count: number): MeetingMemberPreview[] =>
-  Array.from({ length: count }, (_, index) => ({
-    userId: MOCK_MEETING_ID_START + seed * 10 + index,
-    profileImage: DUMMY_AVATARS[(seed + index) % DUMMY_AVATARS.length],
-  }));
-
-const buildMockMeetingRooms = (filters: MeetingFilterSettings): DisplayMeetingRoom[] => {
-  const region = filters.region;
-
-  return [
-    {
-      roomId: MOCK_MEETING_ID_START + 1,
-      meetingId: MOCK_MEETING_ID_START + 1,
-      meetingStatus: 'RECRUITING',
-      roomName: '퇴근 후 카페 미팅',
-      region,
-      memberInfo: { currentCount: 1, maxCount: 2 },
-      ageRangeDto: { min: 22, max: 27 },
-      membersPreview: mockPreviewMembers(1, 1),
-    },
-    {
-      roomId: MOCK_MEETING_ID_START + 2,
-      meetingId: MOCK_MEETING_ID_START + 2,
-      meetingStatus: 'FASTMATCHING',
-      roomName: '홍대 금요일 4인방',
-      region: { sido: '서울특별시', sigungu: '마포구' },
-      memberInfo: { currentCount: 3, maxCount: 4 },
-      ageRangeDto: { min: 24, max: 29 },
-      membersPreview: mockPreviewMembers(2, 3),
-    },
-    {
-      roomId: MOCK_MEETING_ID_START + 3,
-      meetingId: MOCK_MEETING_ID_START + 3,
-      meetingStatus: 'RECRUITING',
-      roomName: '강남 3인 미팅',
-      region: { sido: '서울특별시', sigungu: '강남구' },
-      memberInfo: { currentCount: 2, maxCount: 3 },
-      ageRangeDto: { min: 20, max: 25 },
-      membersPreview: mockPreviewMembers(3, 2),
-    },
-    {
-      roomId: MOCK_MEETING_ID_START + 4,
-      meetingId: MOCK_MEETING_ID_START + 4,
-      meetingStatus: 'MATCHING',
-      roomName: '매칭 진행중인 방',
-      region: { sido: '서울특별시', sigungu: '성동구' },
-      memberInfo: { currentCount: 4, maxCount: 4 },
-      ageRangeDto: { min: 25, max: 31 },
-      membersPreview: mockPreviewMembers(4, 4),
-      disabledMatching: true as const,
-    },
-  ];
-};
-
-const toMockActiveMeetingStatus = (
-  room: MeetingRoomSummary,
-  context: MeetingUserContext,
-): MyMeetingStatus => {
-  const maxCount = Math.max(room.memberInfo.maxCount, 2);
-  const members: MeetingTeamMember[] = [
-    {
-      userId: context.userId ?? MOCK_MEETING_ID_START,
-      nickname: context.nickname || '나',
-      profileImage: context.profileImage,
-      leader: true,
-    },
-    ...Array.from({ length: maxCount - 1 }, (_, index) => ({
-      userId: MOCK_MEETING_ID_START + 100 + index,
-      nickname: ['민지', '도윤', '서윤'][index] ?? 'ㅇㅇㅇ',
-      profileImage: DUMMY_AVATARS[(index + 1) % DUMMY_AVATARS.length],
-      leader: false,
-    })),
-  ];
-
-  return {
-    hasActiveRoom: true,
-    roomId: room.roomId,
-    meetingId: room.meetingId,
-    matchingStatus: 'RECRUITING',
-    roomName: room.roomName,
-    roomCode: `MOCK${String(room.meetingId).slice(-2)}`,
-    gender: context.gender,
-    region: room.region,
-    memberInfo: room.memberInfo,
-    ageRangeDto: room.ageRangeDto,
-    teamMembers: members,
-    leader: true,
-  };
-};
-
 const parseApiMessage = (error: any) =>
   String(
     error?.response?.data?.message ??
@@ -576,6 +433,28 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  initializationErrorWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  initializationErrorTitle: {
+    color: '#111111',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  initializationErrorBody: {
+    color: '#777777',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  initializationRetryButton: {
+    minWidth: 140,
+    paddingHorizontal: 20,
   },
   waitingContent: {
     paddingHorizontal: 24,
@@ -1408,6 +1287,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 12,
   },
+  profileEmptyText: {
+    color: '#8D858A',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
   profileItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1925,13 +1810,8 @@ const MeetingScreen: React.FC = () => {
 
   const [tingBalance, setTingBalance] = useState(0);
   const [eventTingBalance, setEventTingBalance] = useState(0);
-  const [userContext, setUserContext] = useState<MeetingUserContext>({
-    nickname: '나',
-    gender: Gender.MALE,
-    region: DEFAULT_REGION,
-    profileImage: '',
-    isSubscribed: false,
-  });
+  const [userContext, setUserContext] = useState<MeetingUserContext | null>(null);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
   const [filterSettings, setFilterSettings] = useState<MeetingFilterSettings>(
     buildDefaultFilters(DEFAULT_REGION),
@@ -1961,7 +1841,7 @@ const MeetingScreen: React.FC = () => {
     filterSettingsRef.current = filterSettings;
   }, [filterSettings]);
 
-  const refreshWalletAndProfile = useCallback(async () => {
+  const refreshWalletAndProfile = useCallback(async (requireCompleteContext = false) => {
     const [walletResult, profileResult, mainPhotoResult, storedProfileResult] = await Promise.allSettled([
       datingApiService.getTingWalletInfo(),
       apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE),
@@ -1972,6 +1852,8 @@ const MeetingScreen: React.FC = () => {
     if (walletResult.status === 'fulfilled') {
       setTingBalance(toNumber(walletResult.value?.tingNum));
       setEventTingBalance(toNumber(walletResult.value?.eventTingNum));
+    } else if (requireCompleteContext) {
+      throw new Error('지갑 정보를 불러오지 못했습니다.');
     }
 
     const storedProfile =
@@ -1995,25 +1877,32 @@ const MeetingScreen: React.FC = () => {
         raw?.region?.sido ??
         raw?.profile?.region?.sido ??
         raw?.regionSido ??
-        storedProfile?.region?.sido ??
-        DEFAULT_REGION.sido;
+        storedProfile?.region?.sido;
       const rawSigungu =
         raw?.region?.sigungu ??
         raw?.profile?.region?.sigungu ??
         raw?.regionSigungu ??
-        storedProfile?.region?.sigungu ??
-        DEFAULT_REGION.sigungu;
+        storedProfile?.region?.sigungu;
+      const rawGender = String(raw?.gender ?? rawProfile?.gender ?? '').toUpperCase();
 
-      const normalizedSido = normalizeSido(String(rawSido || DEFAULT_REGION.sido));
+      if (!rawSido || !rawSigungu || !Object.values(Gender).includes(rawGender as Gender)) {
+        if (requireCompleteContext) {
+          setUserContext(null);
+          throw new Error('사용자 성별 또는 지역 정보가 없습니다.');
+        }
+        return null;
+      }
+
+      const normalizedSido = normalizeSido(String(rawSido));
       const normalizedSigungu = normalizeSigungu(
         normalizedSido,
-        String(rawSigungu || DEFAULT_REGION.sigungu),
+        String(rawSigungu),
       );
 
       const nextContext: MeetingUserContext = {
         userId: raw?.userId ?? raw?.id ?? rawProfile?.userId ?? rawProfile?.profileId,
-        nickname: String(raw?.nickName ?? raw?.nickname ?? rawProfile?.nickName ?? rawProfile?.nickname ?? '나'),
-        gender: String(raw?.gender ?? rawProfile?.gender ?? Gender.MALE) as Gender,
+        nickname: String(raw?.nickName ?? raw?.nickname ?? rawProfile?.nickName ?? rawProfile?.nickname ?? ''),
+        gender: rawGender as Gender,
         region: {
           sido: normalizedSido,
           sigungu: normalizedSigungu,
@@ -2038,15 +1927,11 @@ const MeetingScreen: React.FC = () => {
       return nextContext;
     }
 
-    const fallbackContext: MeetingUserContext = {
-      nickname: '나',
-      gender: Gender.MALE,
-      region: storedProfile?.region ?? DEFAULT_REGION,
-      profileImage: mainPhotoUrl,
-      isSubscribed: false,
-    };
-    setUserContext(fallbackContext);
-    return fallbackContext;
+    if (requireCompleteContext) {
+      setUserContext(null);
+      throw new Error('사용자 프로필을 불러오지 못했습니다.');
+    }
+    return null;
   }, []);
 
   const loadRooms = useCallback(async (nextFilters: MeetingFilterSettings) => {
@@ -2066,9 +1951,13 @@ const MeetingScreen: React.FC = () => {
 
   const initializeMeetingHome = useCallback(async () => {
     setScreenLoading(true);
+    setInitializationError(null);
 
     try {
-      const context = await refreshWalletAndProfile();
+      const context = await refreshWalletAndProfile(true);
+      if (!context) {
+        throw new Error('사용자 정보를 불러오지 못했습니다.');
+      }
 
       if (!filtersInitializedRef.current) {
         const initialFilters = buildDefaultFilters(context.region);
@@ -2090,7 +1979,10 @@ const MeetingScreen: React.FC = () => {
       }
     } catch (error) {
       if (__DEV__) console.warn('Failed to initialize meeting home', error);
-      Alert.alert('오류', '미팅 화면을 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+      setUserContext(null);
+      setRooms([]);
+      setActiveRoom(null);
+      setInitializationError('사용자 정보 또는 미팅 정보를 불러오지 못했어요.');
     } finally {
       setScreenLoading(false);
     }
@@ -2103,25 +1995,16 @@ const MeetingScreen: React.FC = () => {
     }, [initializeMeetingHome]),
   );
 
-  const displayRooms = useMemo(() => {
-    if (!rooms.length) {
-      return USE_MEETING_MOCK_DATA ? buildMockMeetingRooms(filterSettings) : [];
-    }
-
-    return [
-      ...rooms,
-      ...buildDummyMatchingRooms(filterSettings),
-    ];
-  }, [filterSettings, rooms]);
+  const displayRooms = rooms;
 
   const activeRoomMembers = useMemo(
-    () => buildDisplayTeamMembers(activeRoom, userContext),
+    () => (userContext ? buildDisplayTeamMembers(activeRoom, userContext) : []),
     [activeRoom, userContext],
   );
 
   const waitingNotice = useMemo(
-    () => getWaitingNotice(userContext.gender),
-    [userContext.gender],
+    () => (userContext ? getWaitingNotice(userContext.gender) : null),
+    [userContext],
   );
 
   const handleApplyFilters = async (nextFilters: MeetingFilterSettings) => {
@@ -2131,10 +2014,9 @@ const MeetingScreen: React.FC = () => {
   };
 
   const openProfilesModal = async (room: MeetingRoomSummary) => {
-    const fallbackMembers = buildFallbackProfiles(room);
     setProfileModalState({
       room,
-      members: fallbackMembers,
+      members: [],
       loading: true,
     });
 
@@ -2144,15 +2026,16 @@ const MeetingScreen: React.FC = () => {
 
       setProfileModalState({
         room,
-        members: result.members.length ? result.members : fallbackMembers,
+        members: result.members,
         loading: false,
       });
     } catch (error) {
       if (__DEV__) console.warn('Failed to load meeting member profiles', error);
       setProfileModalState({
         room,
-        members: fallbackMembers,
+        members: [],
         loading: false,
+        error: '프로필 정보를 불러오지 못했어요.',
       });
     }
   };
@@ -2178,6 +2061,8 @@ const MeetingScreen: React.FC = () => {
   };
 
   const handleJoinError = (error: any, mode: JoinMode | 'general') => {
+    if (!userContext) return;
+
     const required = calculateMissingTings(
       userContext.gender,
       mode,
@@ -2213,13 +2098,7 @@ const MeetingScreen: React.FC = () => {
   };
 
   const confirmJoin = async () => {
-    if (!joinContext) return;
-
-    if (joinContext.source === 'room' && isMockMeetingRoom(joinContext.room)) {
-      setJoinContext(null);
-      setActiveRoom(toMockActiveMeetingStatus(joinContext.room, userContext));
-      return;
-    }
+    if (!joinContext || !userContext) return;
 
     const missing = calculateMissingTings(
       userContext.gender,
@@ -2263,6 +2142,8 @@ const MeetingScreen: React.FC = () => {
   };
 
   const handleCreateError = (error: any) => {
+    if (!userContext) return;
+
     const required = calculateMissingTings(
       userContext.gender,
       'create',
@@ -2282,6 +2163,8 @@ const MeetingScreen: React.FC = () => {
   };
 
   const confirmCreateRoom = async (draft: CreateDraft) => {
+    if (!userContext) return;
+
     setCreateDraft(draft);
     const missing = calculateMissingTings(
       userContext.gender,
@@ -2325,12 +2208,6 @@ const MeetingScreen: React.FC = () => {
   const leaveActiveRoom = async () => {
     const roomId = activeRoom?.roomId ?? activeRoom?.meetingId;
     if (!roomId || leavingRoom) return;
-
-    if (isMockMeetingId(roomId)) {
-      setActiveRoom(null);
-      await loadRooms(filterSettingsRef.current);
-      return;
-    }
 
     if (activeRoom?.matchingStatus === 'MATCHING' || activeRoom?.matchingStatus === 'MATCHED') {
       Alert.alert(
@@ -2379,8 +2256,8 @@ const MeetingScreen: React.FC = () => {
     );
   };
 
-  const renderRoomCard = (room: DisplayMeetingRoom) => {
-    const disabled = Boolean(room.disabledMatching);
+  const renderRoomCard = (room: MeetingRoomSummary) => {
+    const disabled = String(room.meetingStatus).toUpperCase() === 'MATCHING';
     const fastJoin = !disabled && isLikelyFastJoinRoom(room);
 
     return (
@@ -2448,6 +2325,8 @@ const MeetingScreen: React.FC = () => {
   };
 
   const renderWaitingState = () => {
+    if (!userContext || !waitingNotice) return null;
+
     const noRooms = !roomsLoading && displayRooms.length === 0;
 
     return (
@@ -2579,6 +2458,8 @@ const MeetingScreen: React.FC = () => {
   };
 
   const renderActiveRoomState = () => {
+    if (!userContext || !waitingNotice) return null;
+
     const memberInfo = activeRoom?.memberInfo ?? { currentCount: 0, maxCount: 2 };
     const maxCount = Math.max(memberInfo.maxCount, 2);
     const members = activeRoomMembers.slice(0, maxCount);
@@ -2657,7 +2538,16 @@ const MeetingScreen: React.FC = () => {
           onPress={() =>
             navigation.navigate('MeetingTeamChat', {
               roomId: String(activeRoom?.roomId ?? activeRoom?.meetingId ?? ''),
+              meetingRoomId: String(
+                activeRoom?.roomId ?? activeRoom?.meetingId ?? '',
+              ),
               roomType: 'TEAM',
+              roomTitle: activeRoom?.roomName,
+              participants: activeRoomMembers.map(member => ({
+                userId: String(member.userId),
+                nickname: member.nickname,
+                profileImage: member.profileImage,
+              })),
             })
           }
         >
@@ -2685,6 +2575,27 @@ const MeetingScreen: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.centerLoadingWrap}>
           <ActivityIndicator size="large" color="#F59BB0" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!userContext) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.initializationErrorWrap}>
+          <Text style={styles.initializationErrorTitle}>미팅을 불러올 수 없어요</Text>
+          <Text style={styles.initializationErrorBody}>
+            {initializationError ?? '사용자 정보를 확인하지 못했어요.'}
+            {'\n'}잠시 후 다시 시도해 주세요.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButtonWide, styles.initializationRetryButton]}
+            onPress={initializeMeetingHome}
+          >
+            <Text style={styles.primaryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -2853,6 +2764,14 @@ const MeetingScreen: React.FC = () => {
           )}
 
           <View style={styles.profileListWrap}>
+            {!profileModalState?.loading && profileModalState?.error && (
+              <Text style={styles.profileEmptyText}>{profileModalState.error}</Text>
+            )}
+            {!profileModalState?.loading &&
+              !profileModalState?.error &&
+              profileModalState?.members.length === 0 && (
+                <Text style={styles.profileEmptyText}>표시할 프로필 정보가 없어요.</Text>
+              )}
             {profileModalState?.members.map(member => (
               <View
                 key={member.userId}
@@ -2864,7 +2783,7 @@ const MeetingScreen: React.FC = () => {
                 <AvatarCircle
                   uri={member.profileImage}
                   size={60}
-                  fallbackLabel={String(member.userId).slice(-1)}
+                  placeholder={!toAbsoluteUri(member.profileImage)}
                 />
                 <View
                   style={[
@@ -2878,7 +2797,7 @@ const MeetingScreen: React.FC = () => {
                       userContext.gender === Gender.FEMALE && styles.profileItemNameFemale,
                     ]}
                   >
-                    닉네임{member.userId % 10}({member.age})
+                    {member.age > 0 ? `${member.age}세` : '나이 미입력'}
                   </Text>
                   <Text
                     style={[

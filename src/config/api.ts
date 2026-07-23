@@ -21,7 +21,7 @@ export const API_BASE_URL = API_ENDPOINTS[getCurrentEnvironment()];
 export const API_ENDPOINTS_LIST = {
   // 인증 관련
   KAKAO_LOGIN: '/api/auth/login/kakao',
-  TOKEN_REFRESH: '/auth/refresh',
+  TOKEN_REFRESH: '/api/auth/refresh',
   LOGOUT: '/api/auth/logout',
   LEAVE: '/api/auth/leave',
   // 회원가입 관련 (API 문서에 맞게 수정)

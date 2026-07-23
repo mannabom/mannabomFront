@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -33,8 +33,6 @@ const reportIconImg = require('../../assets/images/report.png');
 const verificationIconImg = require('../../assets/images/verification.png');
 const cancelIconImg = require('../../assets/images/cancel.png');
 
-const isMockRoomId = (value: string) => value.startsWith('mock-');
-
 type GeneralSystemKind =
   | 'cancelVote'
   | 'cancelVoteDone'
@@ -61,6 +59,7 @@ type GeneralMessage =
       id: string;
       type: 'system';
       kind: GeneralSystemKind;
+      body?: string;
       voteChoice?: VoteChoice;
     };
 
@@ -73,18 +72,11 @@ type MeetingMember = {
 type LocationState = {
   latitude: number;
   longitude: number;
-  isDevFallback?: boolean;
 } | null;
 
 const DEFAULT_MAP_LOCATION = {
   latitude: 37.5665,
   longitude: 126.978,
-};
-
-const DEV_MAP_TEST_LOCATION = {
-  latitude: 37.49795,
-  longitude: 127.02764,
-  isDevFallback: true,
 };
 
 const toMapCamera = (location: LocationState): Camera => ({
@@ -95,17 +87,6 @@ const toMapCamera = (location: LocationState): Camera => ({
 
 const isValidCoordinate = (latitude: number, longitude: number) =>
   Number.isFinite(latitude) && Number.isFinite(longitude);
-
-const MEMBERS: MeetingMember[] = [
-  { id: 'me', name: '나', self: true },
-  { id: 'member-1', name: 'ㅇㅇㅇ' },
-  { id: 'member-2', name: 'ㅇㅇㅇ' },
-  { id: 'member-3', name: 'ㅇㅇㅇ' },
-  { id: 'member-4', name: 'ㅇㅇㅇ' },
-  { id: 'member-5', name: 'ㅇㅇㅇ' },
-  { id: 'member-6', name: 'ㅇㅇㅇ' },
-  { id: 'member-7', name: 'ㅇㅇㅇ' },
-];
 
 const INITIAL_MESSAGES: GeneralMessage[] = [];
 
@@ -153,6 +134,7 @@ const normalizeIncomingMessage = (
       id: String(raw?.messageId ?? raw?.id ?? `system-${Date.now()}`),
       type: 'system',
       kind,
+      body: String(raw?.messageContent ?? raw?.content ?? '').trim() || undefined,
     };
   }
 
@@ -177,7 +159,8 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const roomId = String(route.params?.roomId ?? '');
-  const roomTitle = String(route.params?.roomTitle ?? '임시 방제목');
+  const roomTitle = String(route.params?.roomTitle ?? '').trim() || '미팅 채팅방';
+  const routeParticipants = route.params?.participants;
 
   const [expanded, setExpanded] = useState(false);
   const [memberPage, setMemberPage] = useState(0);
@@ -200,7 +183,20 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const lastChatSyncTimeRef = useRef<string | null>(null);
 
   const closed = chatRoomStatus !== 'ACTIVE';
-  const visibleMembers = MEMBERS.slice(memberPage * 4, memberPage * 4 + 4);
+  const members = useMemo<MeetingMember[]>(
+    () => {
+      const participants = Array.isArray(routeParticipants) ? routeParticipants : [];
+      return participants.map((participant: any) => ({
+        id: String(participant.userId),
+        name: String(participant.nickname ?? '').trim() || '이름 없음',
+        self: Boolean(
+          currentUserId && String(participant.userId) === String(currentUserId),
+        ),
+      }));
+    },
+    [currentUserId, routeParticipants],
+  );
+  const visibleMembers = members.slice(memberPage * 4, memberPage * 4 + 4);
 
   const syncMessages = useCallback(async () => {
     if (!roomId) return;
@@ -379,7 +375,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const requestCurrentLocation = async () => {
     setVerifyConfirmVisible(false);
     setLocationConfirmVisible(false);
-    setCurrentLocation(__DEV__ ? DEV_MAP_TEST_LOCATION : null);
+    setCurrentLocation(null);
     setLocationLoadingVisible(true);
 
     const hasPermission = await requestLocationPermission();
@@ -430,11 +426,6 @@ const MeetingGeneralChatScreen: React.FC = () => {
       return;
     }
 
-    if (currentLocation.isDevFallback) {
-      Alert.alert('지도 확인용', '현재 좌표는 개발용 더미 위치예요. 실제 인증 전송은 실제 위치를 받은 뒤 진행해주세요.');
-      return;
-    }
-
     try {
       await chatApiService.verifyMeeting({
         chatRoomId: roomId,
@@ -454,12 +445,6 @@ const MeetingGeneralChatScreen: React.FC = () => {
 
   const leaveRoom = async () => {
     if (!roomId) {
-      setLeaveVisible(false);
-      navigation.goBack();
-      return;
-    }
-
-    if (isMockRoomId(roomId)) {
       setLeaveVisible(false);
       navigation.goBack();
       return;
@@ -485,10 +470,10 @@ const MeetingGeneralChatScreen: React.FC = () => {
             title={roomTitle}
             cancelVoteActive={cancelVoteActive}
             members={visibleMembers}
-            hasNextMembers={(memberPage + 1) * 4 < MEMBERS.length}
+            hasNextMembers={(memberPage + 1) * 4 < members.length}
             onToggle={() => setExpanded(prev => !prev)}
             onInfo={() => setInfoVisible(true)}
-            onNextMembers={() => setMemberPage(prev => ((prev + 1) * 4 >= MEMBERS.length ? 0 : prev + 1))}
+            onNextMembers={() => setMemberPage(prev => ((prev + 1) * 4 >= members.length ? 0 : prev + 1))}
             onVote={choice => {
               setCancelVoteActive(false);
               setMessages(prev => [
@@ -729,9 +714,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표</Text>
         <Text style={styles.systemBody}>
-          []님이 미팅 취소 투표를 시작하셨어요!{'\n'}
-          모든 인원이 취소에 동의하면 채팅방이 사라지고 채팅방에서 사용된 팅은 위약금을 제외하고 환불해드려요!{'\n'}
-          투표 남은시간 hh시간 : mm분
+          {message.body || '미팅 취소 투표가 시작됐어요.'}
         </Text>
         {message.kind === 'cancelVoteDone' ? (
           <Text style={styles.voteDoneText}>﹛{message.voteChoice ?? '동의'}﹜하셨습니다</Text>
@@ -753,7 +736,9 @@ const GeneralSystemMessage = ({
     return (
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표 결과</Text>
-        <Text style={styles.systemBody}>모두가 동의하여 채팅방이 사라져요{'\n'}사라지기까지 남은시간 mm분</Text>
+        <Text style={styles.systemBody}>
+          {message.body || '미팅 취소 투표가 완료됐어요.'}
+        </Text>
       </View>
     );
   }
@@ -762,7 +747,9 @@ const GeneralSystemMessage = ({
     return (
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표 결과</Text>
-        <Text style={styles.systemBody}>모두가 동의하지 않아 취소되지 않았어요</Text>
+        <Text style={styles.systemBody}>
+          {message.body || '미팅 취소가 확정되지 않았어요.'}
+        </Text>
       </View>
     );
   }
@@ -772,10 +759,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>만남인증 성공</Text>
         <Text style={styles.systemBody}>
-          []님이 시작한 만남인증이 완료되었어요{'\n'}
-          참여인원 : N명{'\n\n'}
-          채팅방이 사라지기까지{'\n'}
-          남은시간 : hh시간 mm분
+          {message.body || '만남 인증이 완료됐어요.'}
         </Text>
       </View>
     );
@@ -786,8 +770,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>만남인증 실패</Text>
         <Text style={styles.systemBody}>
-          []님이 시작한 만남인증이 완료되지 않았어요{'\n'}
-          참여인원 : N명
+          {message.body || '만남 인증이 완료되지 않았어요.'}
         </Text>
       </View>
     );
@@ -797,9 +780,7 @@ const GeneralSystemMessage = ({
     <View style={styles.systemCard}>
       <Text style={styles.systemTitle}>만남인증</Text>
       <Text style={styles.systemBody}>
-        []님이 만남인증을 시작하셨어요{'\n'}
-        만남인증이 완료되면 참여하신 분들에게 리워드가 지급되고 이 채팅방은 24시간 뒤에 사라져요{'\n'}
-        남은시간 mm분 :ss초
+        {message.body || '만남 인증이 시작됐어요.'}
       </Text>
       <TouchableOpacity style={styles.systemWideButton} onPress={onJoinVerification}>
         <Text style={styles.systemButtonText}>참여하기</Text>
@@ -952,8 +933,7 @@ const LocationConfirmModal = ({
   <ModalShell visible={visible}>
     <LocationMapPreview location={location} tracking />
     <Text style={styles.locationInfoText}>
-      현재 위치 : {location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : '미확정'}{'\n'}
-      현재 가장 많이 인증한 위치 : 강남역
+      현재 위치 : {location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : '미확정'}
     </Text>
     <Text style={styles.modalBody}>
       만남인증이 완료되려면 절반이상이 일치해야돼요{'\n\n'}

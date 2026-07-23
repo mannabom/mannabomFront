@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
 import { getAuthTokens, saveAuthTokens, clearAllAuth } from './AuthUtils';
 
 // 로그인 정보 타입
@@ -161,47 +161,35 @@ export class AuthManager {
     accessToken: string;
     refreshToken: string;
   } | null> {
-    // ✅ 백에서 준 스펙: POST /api/auth/refresh  { refreshToken }
-    const candidates = [
-      `${API_BASE_URL}/api/auth/refresh`,
-      `${API_BASE_URL}/auth/refresh`, // 혹시 기존 서버가 이 경로면 fallback
-    ];
+    const url = `${API_BASE_URL}${API_ENDPOINTS_LIST.TOKEN_REFRESH}`;
 
-    for (const url of candidates) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-        });
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-        // 404/405면 다음 후보로
-        if (res.status === 404 || res.status === 405) continue;
-
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          if (__DEV__) console.warn('⚠️ [Auth] refresh 실패:', res.status, url);
-          return null;
-        }
-
-        const json: any = await res.json().catch(() => ({}));
-        // 응답 형태가 {data:{...}} 일 수도, 최상단일 수도 있어서 둘 다 대응
-        const nextAccess = json?.data?.accessToken ?? json?.accessToken;
-        const nextRefresh = json?.data?.refreshToken ?? json?.refreshToken;
-
-        if (typeof nextAccess === 'string' && typeof nextRefresh === 'string') {
-          return { accessToken: nextAccess, refreshToken: nextRefresh };
-        }
-
-        if (__DEV__) console.warn('⚠️ [Auth] refresh 응답 파싱 실패');
+      if (!res.ok) {
+        if (__DEV__) console.warn('⚠️ [Auth] refresh 실패:', res.status, url);
         return null;
-      } catch (e) {
-        if (__DEV__) console.warn('⚠️ [Auth] refresh 네트워크 오류:', url, e);
-        // 다음 후보로
       }
-    }
 
-    return null;
+      const json: any = await res.json().catch(() => ({}));
+      // 응답 형태가 {data:{...}} 일 수도, 최상단일 수도 있어서 둘 다 대응
+      const nextAccess = json?.data?.accessToken ?? json?.accessToken;
+      const nextRefresh = json?.data?.refreshToken ?? json?.refreshToken;
+
+      if (typeof nextAccess === 'string' && typeof nextRefresh === 'string') {
+        return { accessToken: nextAccess, refreshToken: nextRefresh };
+      }
+
+      if (__DEV__) console.warn('⚠️ [Auth] refresh 응답 파싱 실패');
+      return null;
+    } catch (e) {
+      if (__DEV__) console.warn('⚠️ [Auth] refresh 네트워크 오류:', url, e);
+      return null;
+    }
   }
 
   // 사용자 정보 저장 (필요하면 계속 사용)
