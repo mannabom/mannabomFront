@@ -17,11 +17,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Slider from '@react-native-community/slider';
 import { useNavigation } from '@react-navigation/native';
 
 import apiClient from '../../services/apiClient';
+import { profilePhotoApiService } from '../../services/ProfilePhotoApiService';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import {
+  toSafeProfilePhotoId,
+  type UserProfilePhotoDTO,
+} from '../../types/ProfilePhotoAPI';
 
 // ✅ 지역/시군구는 여기서 import로만 사용
 import {
@@ -74,10 +80,6 @@ type ChoiceItem = {
   options: [string, string];
 };
 
-type UserMainPhotoResponseDTO = {
-  photoURL?: string;
-};
-
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const PINK = '#FF6F8E';
@@ -87,6 +89,17 @@ const BORDER = '#E6E6E6';
 const REQUIRED_INTRO_MIN = 100;
 const REQUIRED_SHORT_MIN = 30;
 const OPTIONAL_MIN = 30;
+const PHOTO_WIDTH = SCREEN_W - 32;
+
+type PhotoAction = 'add' | 'delete';
+
+const getPhotoErrorMessage = (error: any, fallback: string) =>
+  String(
+    error?.response?.data?.message ??
+      error?.response?.data?.error ??
+      error?.message ??
+      fallback,
+  );
 
 const BODY_TYPE_OPTIONS = [
   { label: '마름', value: 'SLIM' },
@@ -485,9 +498,15 @@ export default function ProfileDetail() {
   const photoScrollRef = useRef<ScrollView>(null);
   const formScrollRef = useRef<ScrollView>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
+  const photoActionRef = useRef<PhotoAction | null>(null);
 
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [profilePhotos, setProfilePhotos] = useState<UserProfilePhotoDTO[]>([]);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [photoAction, setPhotoAction] = useState<PhotoAction | null>(null);
+  const photoUrls = useMemo(
+    () => profilePhotos.map(photo => photo.url),
+    [profilePhotos],
+  );
 
   const [form, setForm] = useState<ProfileForm>({
     nickName: '',
@@ -557,24 +576,6 @@ export default function ProfileDetail() {
     });
   };
 
-  const loadMainPhoto = async (): Promise<string | undefined> => {
-    try {
-      const res = await apiClient.get('/api/user/main_photo');
-      const raw = res?.data;
-
-      const photoURL: string | undefined =
-        (raw as UserMainPhotoResponseDTO)?.photoURL ??
-        (raw?.data as UserMainPhotoResponseDTO)?.photoURL ??
-        raw?.result?.photoURL;
-
-      if (photoURL && typeof photoURL === 'string') return photoURL;
-      return undefined;
-    } catch (e: any) {
-      console.warn('⚠️ [ProfileDetail] main photo load failed:', e?.response?.data || e?.message || e);
-      return undefined;
-    }
-  };
-
   const findQuestionTitleByKey = (keyword: string, fallback: string) => {
     const targetId = resolveQuestionId(keyword);
     const found = questionAnswers.find(q =>
@@ -624,13 +625,26 @@ export default function ProfileDetail() {
     try {
       setLoading(true);
 
-      const [profileRes, mainPhotoURL] = await Promise.all([
+      const [profileRes, photoResult] = await Promise.all([
         apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE),
-        loadMainPhoto(),
+        profilePhotoApiService
+          .getAllPhotos()
+          .then(response => ({ response, error: null }))
+          .catch(error => ({ response: null, error })),
       ]);
 
       const data: any = profileRes.data?.data ?? profileRes.data;
       const profileData: any = data?.profile ?? data;
+      const photoResponse = photoResult.response;
+
+      if (photoResult.error && __DEV__) {
+        console.warn(
+          '⚠️ [ProfileDetail] all photos load failed:',
+          photoResult.error?.response?.data ||
+            photoResult.error?.message ||
+            photoResult.error,
+        );
+      }
 
       // ✅ 서버값 정규화
       const rawSido: string | undefined =
@@ -652,7 +666,7 @@ export default function ProfileDetail() {
         regionSigungu: sigunguN ?? rawSigungu,
         university: profileData?.university,
         profileImageUrl:
-          mainPhotoURL ??
+          photoResponse?.photos[0]?.url ??
           profileData?.profileImageUrl ??
           profileData?.profileImage ??
           data?.profileImageUrl,
@@ -682,8 +696,12 @@ export default function ProfileDetail() {
         alcohol: nextProfile.alcohol ?? '',
       });
 
-      const url = nextProfile.profileImageUrl;
-      setPhotoUrls(url ? [url] : []);
+      setProfilePhotos(
+        photoResponse?.photos ??
+          (nextProfile.profileImageUrl
+            ? [{ id: 0, index: 0, url: nextProfile.profileImageUrl }]
+            : []),
+      );
       setActivePhotoIndex(0);
     } catch (e: any) {
       if (__DEV__) console.warn('❌ [ProfileDetail] load error:', e?.response?.data || e?.message || e);
@@ -698,6 +716,8 @@ export default function ProfileDetail() {
 
   useEffect(() => {
     loadProfile();
+    // 이 화면은 최초 진입 시 한 번만 서버 프로필을 불러옵니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const birthYear = useMemo(() => {
@@ -856,12 +876,160 @@ export default function ProfileDetail() {
 
   const onPhotoScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
-    const idx = Math.round(x / SCREEN_W);
+    const idx = Math.round(x / PHOTO_WIDTH);
     if (idx !== activePhotoIndex) setActivePhotoIndex(idx);
   };
 
-  const handleDeletePhoto = () => Alert.alert('TODO', '사진 삭제 API/요청 스펙 주면 바로 붙여줄게요.');
-  const handleAddPhoto = () => Alert.alert('TODO', '사진 추가(앨범 선택) 라이브러리 + 업로드 API 스펙 주면 바로 붙여줄게요.');
+  const applyPhotoList = (
+    nextPhotos: UserProfilePhotoDTO[],
+    requestedIndex: number,
+  ) => {
+    const sortedPhotos = [...nextPhotos].sort(
+      (left, right) => left.index - right.index,
+    );
+    const nextIndex = sortedPhotos.length
+      ? Math.max(0, Math.min(requestedIndex, sortedPhotos.length - 1))
+      : 0;
+
+    setProfilePhotos(sortedPhotos);
+    setActivePhotoIndex(nextIndex);
+    requestAnimationFrame(() => {
+      photoScrollRef.current?.scrollTo({
+        x: nextIndex * PHOTO_WIDTH,
+        animated: true,
+      });
+    });
+  };
+
+  const beginPhotoAction = (action: PhotoAction) => {
+    if (photoActionRef.current) return false;
+    photoActionRef.current = action;
+    setPhotoAction(action);
+    return true;
+  };
+
+  const finishPhotoAction = () => {
+    photoActionRef.current = null;
+    setPhotoAction(null);
+  };
+
+  const handleAddPhoto = async () => {
+    if (!beginPhotoAction('add')) return;
+
+    try {
+      const pickerResponse = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+      });
+
+      if (pickerResponse.didCancel) return;
+      if (pickerResponse.errorCode) {
+        throw new Error(
+          pickerResponse.errorMessage || '사진을 선택하지 못했어요.',
+        );
+      }
+
+      const asset = pickerResponse.assets?.[0];
+      if (!asset?.uri) {
+        throw new Error('선택한 사진 파일을 확인하지 못했어요.');
+      }
+
+      const previousPhotoIds = new Set(
+        profilePhotos
+          .map(photo => toSafeProfilePhotoId(photo.id))
+          .filter((photoId): photoId is number => photoId !== null),
+      );
+      const response = await profilePhotoApiService.addPhoto({
+        uri: asset.uri,
+        type: asset.type || 'image/jpeg',
+        name: asset.fileName || `profile_photo_${Date.now()}.jpg`,
+      });
+      const addedIndex = response.photos.findIndex(photo => {
+        const photoId = toSafeProfilePhotoId(photo.id);
+        return photoId !== null && !previousPhotoIds.has(photoId);
+      });
+
+      applyPhotoList(
+        response.photos,
+        addedIndex >= 0 ? addedIndex : Math.max(0, response.photos.length - 1),
+      );
+      Alert.alert('사진 추가 완료', '프로필 사진이 추가됐어요.');
+    } catch (error: any) {
+      if (__DEV__) {
+        console.warn(
+          'Failed to add profile photo',
+          error?.response?.data || error?.message || error,
+        );
+      }
+      Alert.alert(
+        '사진 추가 실패',
+        getPhotoErrorMessage(
+          error,
+          '사진을 추가하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        ),
+      );
+    } finally {
+      finishPhotoAction();
+    }
+  };
+
+  const deletePhoto = async (photoId: number, selectedIndex: number) => {
+    if (!beginPhotoAction('delete')) return;
+
+    try {
+      const response = await profilePhotoApiService.deletePhoto(photoId);
+      applyPhotoList(response.photos, selectedIndex);
+      Alert.alert('사진 삭제 완료', '프로필 사진이 삭제됐어요.');
+    } catch (error: any) {
+      if (__DEV__) {
+        console.warn(
+          'Failed to delete profile photo',
+          error?.response?.data || error?.message || error,
+        );
+      }
+      Alert.alert(
+        '사진 삭제 실패',
+        getPhotoErrorMessage(
+          error,
+          '사진을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        ),
+      );
+    } finally {
+      finishPhotoAction();
+    }
+  };
+
+  const handleDeletePhoto = () => {
+    const selectedPhoto = profilePhotos[activePhotoIndex];
+    if (!selectedPhoto) {
+      Alert.alert('사진 삭제', '삭제할 사진이 없어요.');
+      return;
+    }
+
+    const photoId = toSafeProfilePhotoId(selectedPhoto.id);
+    if (!photoId) {
+      Alert.alert(
+        '사진 삭제 불가',
+        '선택한 사진의 서버 ID를 확인할 수 없어 삭제하지 않았어요.',
+      );
+      return;
+    }
+
+    Alert.alert(
+      '사진 삭제',
+      '현재 선택한 사진을 삭제할까요?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => deletePhoto(photoId, activePhotoIndex),
+        },
+      ],
+      { cancelable: true },
+    );
+  };
 
   const renderDropdown = (
     visible: boolean,
@@ -979,11 +1147,33 @@ export default function ProfileDetail() {
           )}
 
           <View style={styles.photoActions}>
-            <Pressable style={[styles.iconBtn]} onPress={handleDeletePhoto}>
-              <Text style={styles.iconBtnText}>🗑</Text>
+            <Pressable
+              style={[
+                styles.iconBtn,
+                photoAction !== null && styles.iconBtnDisabled,
+              ]}
+              onPress={handleDeletePhoto}
+              disabled={photoAction !== null}
+            >
+              {photoAction === 'delete' ? (
+                <ActivityIndicator size="small" color={PINK} />
+              ) : (
+                <Text style={styles.iconBtnText}>🗑</Text>
+              )}
             </Pressable>
-            <Pressable style={[styles.iconBtn]} onPress={handleAddPhoto}>
-              <Text style={styles.iconBtnText}>＋</Text>
+            <Pressable
+              style={[
+                styles.iconBtn,
+                photoAction !== null && styles.iconBtnDisabled,
+              ]}
+              onPress={handleAddPhoto}
+              disabled={photoAction !== null}
+            >
+              {photoAction === 'add' ? (
+                <ActivityIndicator size="small" color={PINK} />
+              ) : (
+                <Text style={styles.iconBtnText}>＋</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -1436,6 +1626,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconBtnDisabled: { opacity: 0.6 },
   iconBtnText: { fontSize: 18 },
 
   profileBlock: { paddingVertical: 8, paddingHorizontal: 0, marginBottom: 6 },

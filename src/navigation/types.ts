@@ -144,6 +144,7 @@ export type RootStackParamList = {
   ProfileChat: {
     roomId?: string;
     roomType?: string;
+    targetUserId?: string;
     targetProfileId?: number;
     nickname?: string;
     profileImage?: string;
@@ -153,6 +154,7 @@ export type RootStackParamList = {
   LoveviewChat: {
     roomId?: string;
     roomType?: string;
+    targetUserId?: string;
     targetProfileId?: number;
     nickname?: string;
     profileImage?: string;

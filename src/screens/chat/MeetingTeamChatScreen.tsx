@@ -24,9 +24,11 @@ import {
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
+import { REPORT_REASON_OPTIONS } from '../../constants/reportReasons';
 import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { meetingApiService } from '../../services/MeetingApiService';
+import { reportApiService } from '../../services/ReportApiService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
 import {
   AcceptMatchResult,
@@ -35,6 +37,7 @@ import {
   MeetingStreamEvent,
   MyMeetingStatus,
 } from '../../types/MeetingAPI';
+import { ReportReason, toReportId } from '../../types/ReportAPI';
 import { getProfileId } from '../../utils/AuthUtils';
 
 const sendIconImg = require('../../assets/images/Send.png');
@@ -186,7 +189,12 @@ const MeetingTeamChatScreen: React.FC = () => {
   const [leaveVisible, setLeaveVisible] = useState(false);
   const [leaveDeniedVisible, setLeaveDeniedVisible] = useState(false);
   const [reportTarget, setReportTarget] = useState('');
-  const [reportReason, setReportReason] = useState('폭언, 욕설 등 언어폭력');
+  const [reportReason, setReportReason] = useState(
+    ReportReason.ABUSIVE_LANGUAGE,
+  );
+  const [reportDetail, setReportDetail] = useState('');
+  const [reportContextId, setReportContextId] = useState<number | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const meetingRoomIdValue = meetingRoom?.roomId || meetingRoom?.meetingId;
   const meetingRoomId = meetingRoomIdValue ? String(meetingRoomIdValue) : '';
@@ -278,6 +286,15 @@ const MeetingTeamChatScreen: React.FC = () => {
       })),
     [opponentTeam],
   );
+  const reportableMembers = useMemo(() => {
+    const uniqueMembers = new Map<string, TeamMember>();
+    [...ownTeamMembers, ...opponentTeamMembers].forEach(member => {
+      if (!member.self && member.id) {
+        uniqueMembers.set(member.id, member);
+      }
+    });
+    return Array.from(uniqueMembers.values());
+  }, [opponentTeamMembers, ownTeamMembers]);
 
   const visibleMembers =
     teamView === 'opponent' ? opponentTeamMembers : ownTeamMembers;
@@ -411,16 +428,15 @@ const MeetingTeamChatScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!ownTeamMembers.length) {
+    if (!reportableMembers.length) {
       setReportTarget('');
       return;
     }
 
-    const reportTargets = ownTeamMembers.filter(member => !member.self);
-    if (!reportTargets.some(member => member.id === reportTarget)) {
-      setReportTarget(reportTargets[0]?.id ?? '');
+    if (!reportableMembers.some(member => member.id === reportTarget)) {
+      setReportTarget(reportableMembers[0]?.id ?? '');
     }
-  }, [ownTeamMembers, reportTarget]);
+  }, [reportableMembers, reportTarget]);
 
   const syncMessages = useCallback(async () => {
     if (!roomId) return;
@@ -433,6 +449,7 @@ const MeetingTeamChatScreen: React.FC = () => {
         roomId,
         lastChatSyncTimeRef.current,
       );
+      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current =
         result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
@@ -936,6 +953,36 @@ const MeetingTeamChatScreen: React.FC = () => {
     }
   };
 
+  const submitReport = async () => {
+    const targetId = toReportId(reportTarget);
+    if (!reportContextId || !targetId || reportSubmitting) {
+      Alert.alert(
+        '신고할 수 없어요',
+        '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
+      );
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      await reportApiService.reportChat({
+        contextId: reportContextId,
+        targetId,
+        reason: reportReason,
+        additionalDetail: reportDetail.trim(),
+      });
+      setReportVisible(false);
+      setReportDetail('');
+      setReportReason(ReportReason.ABUSIVE_LANGUAGE);
+      Alert.alert('신고 완료', '신고가 접수됐어요.');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to report meeting team chat', error);
+      Alert.alert('오류', '신고 접수에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   const submitMessage = () => {
     const trimmed = input.trim();
     if (!trimmed || matched || !roomId) return;
@@ -1113,11 +1160,18 @@ const MeetingTeamChatScreen: React.FC = () => {
       />
       <ReportModal
         visible={reportVisible}
-        members={ownTeamMembers}
+        members={reportableMembers}
         target={reportTarget}
         reason={reportReason}
+        detail={reportDetail}
         onChangeTarget={setReportTarget}
         onChangeReason={setReportReason}
+        onChangeDetail={setReportDetail}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+        submitDisabled={
+          !reportContextId || !toReportId(reportTarget)
+        }
         onClose={() => setReportVisible(false)}
       />
       <ConfirmModal
@@ -1461,24 +1515,28 @@ const ReportModal = ({
   members,
   target,
   reason,
+  detail,
   onChangeTarget,
   onChangeReason,
+  onChangeDetail,
+  onSubmit,
+  submitting,
+  submitDisabled,
   onClose,
 }: {
   visible: boolean;
   members: TeamMember[];
   target: string;
-  reason: string;
+  reason: ReportReason;
+  detail: string;
   onChangeTarget: (value: string) => void;
-  onChangeReason: (value: string) => void;
+  onChangeReason: (value: ReportReason) => void;
+  onChangeDetail: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  submitDisabled: boolean;
   onClose: () => void;
 }) => {
-  const reasons = [
-    '폭언, 욕설 등 언어폭력',
-    '나체, 성적인 이미지',
-    '과도한 개인정보 요구',
-    '기타',
-  ];
   const [targetOpen, setTargetOpen] = useState(false);
   const reportTargets = members.filter(member => !member.self);
   const selectedTarget = reportTargets.find(member => member.id === target);
@@ -1491,75 +1549,92 @@ const ReportModal = ({
 
   return (
     <ModalShell visible={visible}>
-      <Text style={styles.reportTitle}>신고</Text>
-      <TouchableOpacity
-        style={[styles.selectBox, targetOpen && styles.selectBoxOpen]}
-        onPress={() => setTargetOpen(prev => !prev)}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.selectText}>
-          {selectedTarget?.name ?? '신고 대상 선택'}
-        </Text>
-        <Text style={styles.selectArrow}>⌄</Text>
-      </TouchableOpacity>
-      {targetOpen && (
-        <View style={styles.targetDropdown}>
-          {reportTargets.map((member, index) => (
-            <TouchableOpacity
-              key={member.id}
-              style={[
-                styles.targetDropdownItem,
-                index !== reportTargets.length - 1 &&
-                  styles.targetDropdownDivider,
-              ]}
-              onPress={() => {
-                onChangeTarget(member.id);
-                setTargetOpen(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.targetOption,
-                  target === member.id && styles.targetOptionActive,
-                ]}
-              >
-                {member.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-      {reasons.map(item => (
+      <ScrollView style={styles.reportScroll} showsVerticalScrollIndicator>
+        <Text style={styles.reportTitle}>신고</Text>
         <TouchableOpacity
-          key={item}
-          style={styles.radioRow}
-          onPress={() => onChangeReason(item)}
+          style={[styles.selectBox, targetOpen && styles.selectBoxOpen]}
+          onPress={() => setTargetOpen(prev => !prev)}
+          activeOpacity={0.8}
         >
-          <View
+          <Text style={styles.selectText}>
+            {selectedTarget?.name ?? '신고 대상 선택'}
+          </Text>
+          <Text style={styles.selectArrow}>⌄</Text>
+        </TouchableOpacity>
+        {targetOpen && (
+          <View style={styles.targetDropdown}>
+            {reportTargets.map((member, index) => (
+              <TouchableOpacity
+                key={member.id}
+                style={[
+                  styles.targetDropdownItem,
+                  index !== reportTargets.length - 1 &&
+                    styles.targetDropdownDivider,
+                ]}
+                onPress={() => {
+                  onChangeTarget(member.id);
+                  setTargetOpen(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.targetOption,
+                    target === member.id && styles.targetOptionActive,
+                  ]}
+                >
+                  {member.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {REPORT_REASON_OPTIONS.map(option => (
+          <TouchableOpacity
+            key={option.value}
+            style={styles.radioRow}
+            onPress={() => onChangeReason(option.value)}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                reason === option.value && styles.radioCircleOn,
+              ]}
+            />
+            <Text style={styles.radioText}>{option.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TextInput
+          style={styles.reportInput}
+          value={detail}
+          onChangeText={onChangeDetail}
+          placeholder="상세 내용"
+          placeholderTextColor="#B8B8B8"
+          multiline
+        />
+        <Text style={styles.reportHelp}>
+          {submitDisabled
+            ? '채팅방 또는 신고 대상 정보를 확인할 수 없어 제출할 수 없어요.'
+            : '신고 대상과 사유를 확인해 주세요.'}
+        </Text>
+        <View style={styles.modalButtonRow}>
+          <TouchableOpacity
             style={[
-              styles.radioCircle,
-              reason === item && styles.radioCircleOn,
+              styles.modalPrimary,
+              (submitDisabled || submitting) && styles.reportSubmitDisabled,
             ]}
-          />
-          <Text style={styles.radioText}>{item}</Text>
-        </TouchableOpacity>
-      ))}
-      <TextInput
-        style={styles.reportInput}
-        placeholder="상세 내용"
-        placeholderTextColor="#B8B8B8"
-        multiline
-      />
-      <Text style={styles.reportHelp}>신고 대상과 사유를 선택해주세요!</Text>
-      <View style={styles.modalButtonRow}>
-        <TouchableOpacity style={styles.modalPrimary} onPress={onClose}>
-          <Text style={styles.modalButtonText}>신고하기</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
-          <Text style={styles.modalButtonText}>취소하기</Text>
-        </TouchableOpacity>
-      </View>
+            onPress={onSubmit}
+            disabled={submitDisabled || submitting}
+          >
+            <Text style={styles.modalButtonText}>
+              {submitting ? '신고 중...' : '신고하기'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
+            <Text style={styles.modalButtonText}>취소하기</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </ModalShell>
   );
 };
@@ -1851,6 +1926,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 360,
+    maxHeight: '90%',
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
     padding: 22,
@@ -1888,6 +1964,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginBottom: 8,
   },
+  reportScroll: { flexShrink: 1 },
   modalBody: {
     color: '#46506A',
     fontSize: 15,
@@ -1910,6 +1987,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reportSubmitDisabled: { opacity: 0.5 },
   modalPrimaryWide: {
     height: 44,
     borderRadius: 6,

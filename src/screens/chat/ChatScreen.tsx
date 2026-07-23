@@ -150,6 +150,7 @@ const ChatScreen: React.FC = () => {
     navigation.navigate(room.kind === 'profile' ? 'ProfileChat' : 'LoveviewChat', {
       roomId: room.chatRoomId,
       roomType: room.chatRoomType,
+      targetUserId: opponent?.userId,
       targetProfileId: Number(opponent?.userId) || undefined,
       nickname: opponent?.nickname,
       profileImage: opponent?.profileImage,

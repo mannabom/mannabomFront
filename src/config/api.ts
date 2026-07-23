@@ -47,6 +47,8 @@ export const API_ENDPOINTS_LIST = {
   USER_PROFILE: '/api/user/info',
   USER_UPDATE: '/api/user/update',
   USER_MAIN_PHOTO: '/api/user/main_photo',
+  USER_ALL_PHOTOS: '/api/user/all_photos',
+  USER_PHOTO: '/api/user/photo',
   USER_MEMBERSHIP: '/api/user/membership',
 
   // 데이팅 관련
@@ -82,6 +84,10 @@ export const API_ENDPOINTS_LIST = {
   CHAT_LOVEVIEW_PROFILE_STATUS: '/api/chat/loveview/profile/checkStatus',
   CHAT_MEETING_VERIFY: '/api/chat/meeting/verify',
 
+  // 신고 관련
+  REPORT_CHAT: '/api/report/chat',
+  REPORT_PROFILE: '/api/report/profile',
+
   // 미팅 관련
   MEETING_MY_STATUS: '/api/meeting/my-status',
   MEETING_ROOMS_SEARCH: '/api/meeting/rooms/search',
@@ -98,6 +104,29 @@ export const API_ENDPOINTS_LIST = {
   MEETING_MATCHING_REJECT: '/api/meeting/matching/reject',
   MEETING_EVENTS_STREAM: '/api/meeting/events/stream',
 
+} as const;
+
+/**
+ * 백엔드 구현 전 사전 등록한 회원가입 API 계약입니다.
+ *
+ * 현재 약관 동의·가입 완료 화면은 동일한 기존 경로를 직접 호출하고 있지만,
+ * 아직 이 prepared 상수와 `signupApiService`로 전환하지는 않습니다.
+ */
+export const PREPARED_SIGNUP_API_ENDPOINTS = {
+  TERMS_CONTENT: '/api/signup/terms/{termType}',
+  TERMS_AGREEMENT: '/api/signup/terms-agreement',
+  SIGNUP_COMPLETE: '/api/signup/complete',
+} as const;
+
+/**
+ * 백엔드 구현 전 사전 등록한 관리자 전용 신고 API 경로입니다.
+ *
+ * 일반 사용자 앱에서는 호출하지 않습니다. 특히 신고 처리 API는 응답 계약이
+ * 아직 없으므로 서비스 메서드도 만들지 않습니다.
+ */
+export const PREPARED_ADMIN_REPORT_API_ENDPOINTS = {
+  LIST: '/admin/report/list',
+  ACTION: '/admin/report/action',
 } as const;
 
 // API 호출 헬퍼

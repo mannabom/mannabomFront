@@ -21,14 +21,10 @@ import {
 import apiClient from '../../services/apiClient';
 import { getProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import type { ProfilePhotosResponseDto } from '../../types/ProfilePhotoAPI';
 
 interface PhotoUploadScreenProps {
   onUploadComplete: () => void;
-}
-
-interface UploadedPhoto {
-  photoId: string;
-  url: string;
 }
 
 interface PhotoItem {
@@ -60,7 +56,6 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
 
   const listRef = useRef<any>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -233,15 +228,14 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
         },
       );
 
-      if (response.data.success) {
-        setUploadedPhotos(response.data.data.uploadedPhotos);
-
+      const responseData = response.data as ProfilePhotosResponseDto;
+      if (responseData.success) {
         // ✅ 성공 팝업 제거: 업로드 성공하면 바로 다음
         onUploadComplete();
       } else {
         Alert.alert(
           '오류',
-          response.data.message || '사진 업로드에 실패했습니다.',
+          responseData.message || '사진 업로드에 실패했습니다.',
         );
       }
     } catch (error: any) {

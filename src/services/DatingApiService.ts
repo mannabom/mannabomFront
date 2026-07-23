@@ -21,6 +21,7 @@ import {
   RespondLikeRequestDTO,
   RespondMessageRequestDTO,
 } from '../types/DatingAPI';
+import type { UnlockTargetPhotoRequestDto } from '../types/ProfilePhotoAPI';
 
 class DatingApiService {
   private unwrap<T>(raw: any): T {
@@ -145,10 +146,14 @@ class DatingApiService {
 
   // 추가 사진 열람
   async unlockExtraPhoto(targetProfileId: number, photoId: number): Promise<ExtraPhotoUnlockResponse> {
-    const response = await apiClient.post(API_ENDPOINTS_LIST.PROFILE_DETAIL_EXTRA_PHOTO, {
+    const request: UnlockTargetPhotoRequestDto = {
       targetProfileId,
       photoId,
-    });
+    };
+    const response = await apiClient.post(
+      API_ENDPOINTS_LIST.PROFILE_DETAIL_EXTRA_PHOTO,
+      request,
+    );
     return this.unwrap<ExtraPhotoUnlockResponse>(response.data);
   }
 
