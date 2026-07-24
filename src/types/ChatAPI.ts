@@ -12,6 +12,11 @@ export interface ChatParticipantDTO {
 
 export interface ChatRoomDTO {
   chatRoomId: string;
+  /**
+   * TEAM 채팅방이 연결된 미팅 모집방 ID.
+   * 채팅방 ID와 미팅방 ID는 서로 다른 도메인 ID이므로 백엔드가 명시적으로 내려줘야 한다.
+   */
+  meetingRoomId?: string;
   participants: ChatParticipantDTO[];
   unreadMessageCount: number;
   lastMessagePreview: string;

@@ -266,15 +266,14 @@ export default function MyPage({ onLogout }: MyPageProps) {
       {/* 프로필 + 닉네임 */}
       <View style={styles.profileRow}>
         <View style={styles.avatar}>
-          <Image
-            style={styles.avatarImage}
-            source={{
-              uri:
-                mainPhotoUrl ||
-                profile?.profileImageUrl ||
-                'https://via.placeholder.com/150',
-            }}
-          />
+          {mainPhotoUrl || profile?.profileImageUrl ? (
+            <Image
+              style={styles.avatarImage}
+              source={{ uri: mainPhotoUrl || profile?.profileImageUrl }}
+            />
+          ) : (
+            <Text style={styles.avatarEmptyText}>사진 없음</Text>
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.nickname}>{profile?.nickName ?? '닉네임 없음'}</Text>
@@ -423,6 +422,11 @@ export const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 75,
+  },
+  avatarEmptyText: {
+    color: '#8A8A8A',
+    fontSize: 13,
+    fontWeight: '600',
   },
   nickname: {
     fontSize: 30,

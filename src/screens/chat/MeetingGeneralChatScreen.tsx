@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -21,9 +21,12 @@ import {
   NaverMapView,
   type Camera,
 } from '@mj-studio/react-native-naver-map';
+import { REPORT_REASON_OPTIONS } from '../../constants/reportReasons';
 import { chatApiService } from '../../services/ChatApiService';
+import { reportApiService } from '../../services/ReportApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
+import { ReportReason, toReportId } from '../../types/ReportAPI';
 import { getProfileId } from '../../utils/AuthUtils';
 import { PickedChatPhoto, showChatPhotoPicker } from '../../utils/ChatPhotoPicker';
 
@@ -32,8 +35,6 @@ const photoIconImg = require('../../assets/images/photo.png');
 const reportIconImg = require('../../assets/images/report.png');
 const verificationIconImg = require('../../assets/images/verification.png');
 const cancelIconImg = require('../../assets/images/cancel.png');
-
-const isMockRoomId = (value: string) => value.startsWith('mock-');
 
 type GeneralSystemKind =
   | 'cancelVote'
@@ -61,6 +62,7 @@ type GeneralMessage =
       id: string;
       type: 'system';
       kind: GeneralSystemKind;
+      body?: string;
       voteChoice?: VoteChoice;
     };
 
@@ -73,18 +75,11 @@ type MeetingMember = {
 type LocationState = {
   latitude: number;
   longitude: number;
-  isDevFallback?: boolean;
 } | null;
 
 const DEFAULT_MAP_LOCATION = {
   latitude: 37.5665,
   longitude: 126.978,
-};
-
-const DEV_MAP_TEST_LOCATION = {
-  latitude: 37.49795,
-  longitude: 127.02764,
-  isDevFallback: true,
 };
 
 const toMapCamera = (location: LocationState): Camera => ({
@@ -96,25 +91,7 @@ const toMapCamera = (location: LocationState): Camera => ({
 const isValidCoordinate = (latitude: number, longitude: number) =>
   Number.isFinite(latitude) && Number.isFinite(longitude);
 
-const MEMBERS: MeetingMember[] = [
-  { id: 'me', name: '나', self: true },
-  { id: 'member-1', name: 'ㅇㅇㅇ' },
-  { id: 'member-2', name: 'ㅇㅇㅇ' },
-  { id: 'member-3', name: 'ㅇㅇㅇ' },
-  { id: 'member-4', name: 'ㅇㅇㅇ' },
-  { id: 'member-5', name: 'ㅇㅇㅇ' },
-  { id: 'member-6', name: 'ㅇㅇㅇ' },
-  { id: 'member-7', name: 'ㅇㅇㅇ' },
-];
-
 const INITIAL_MESSAGES: GeneralMessage[] = [];
-
-const REPORT_REASONS = [
-  '폭언, 욕설 등 언어폭력',
-  '나체, 성적인 이미지',
-  '과도한 개인정보 요구',
-  '기타',
-];
 
 const formatMessageTime = (value?: string) => {
   if (!value) return '';
@@ -153,6 +130,7 @@ const normalizeIncomingMessage = (
       id: String(raw?.messageId ?? raw?.id ?? `system-${Date.now()}`),
       type: 'system',
       kind,
+      body: String(raw?.messageContent ?? raw?.content ?? '').trim() || undefined,
     };
   }
 
@@ -177,7 +155,8 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const roomId = String(route.params?.roomId ?? '');
-  const roomTitle = String(route.params?.roomTitle ?? '임시 방제목');
+  const roomTitle = String(route.params?.roomTitle ?? '').trim() || '미팅 채팅방';
+  const routeParticipants = route.params?.participants;
 
   const [expanded, setExpanded] = useState(false);
   const [memberPage, setMemberPage] = useState(0);
@@ -194,13 +173,41 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const [locationLoadingVisible, setLocationLoadingVisible] = useState(false);
   const [locationConfirmVisible, setLocationConfirmVisible] = useState(false);
   const [leaveVisible, setLeaveVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
+  const [reportTarget, setReportTarget] = useState('');
+  const [selectedReason, setSelectedReason] = useState(
+    ReportReason.ABUSIVE_LANGUAGE,
+  );
   const [reportDetail, setReportDetail] = useState('');
+  const [reportContextId, setReportContextId] = useState<number | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LocationState>(null);
   const lastChatSyncTimeRef = useRef<string | null>(null);
 
   const closed = chatRoomStatus !== 'ACTIVE';
-  const visibleMembers = MEMBERS.slice(memberPage * 4, memberPage * 4 + 4);
+  const members = useMemo<MeetingMember[]>(
+    () => {
+      const participants = Array.isArray(routeParticipants) ? routeParticipants : [];
+      return participants.map((participant: any) => ({
+        id: String(participant.userId),
+        name: String(participant.nickname ?? '').trim() || '이름 없음',
+        self: Boolean(
+          currentUserId && String(participant.userId) === String(currentUserId),
+        ),
+      }));
+    },
+    [currentUserId, routeParticipants],
+  );
+  const visibleMembers = members.slice(memberPage * 4, memberPage * 4 + 4);
+  const reportTargets = useMemo(
+    () => members.filter(member => !member.self),
+    [members],
+  );
+
+  useEffect(() => {
+    if (!reportTargets.some(member => member.id === reportTarget)) {
+      setReportTarget(reportTargets[0]?.id ?? '');
+    }
+  }, [reportTarget, reportTargets]);
 
   const syncMessages = useCallback(async () => {
     if (!roomId) return;
@@ -213,6 +220,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
         roomId,
         lastChatSyncTimeRef.current,
       );
+      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current = result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
       const normalized = result.messages
@@ -379,7 +387,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const requestCurrentLocation = async () => {
     setVerifyConfirmVisible(false);
     setLocationConfirmVisible(false);
-    setCurrentLocation(__DEV__ ? DEV_MAP_TEST_LOCATION : null);
+    setCurrentLocation(null);
     setLocationLoadingVisible(true);
 
     const hasPermission = await requestLocationPermission();
@@ -430,11 +438,6 @@ const MeetingGeneralChatScreen: React.FC = () => {
       return;
     }
 
-    if (currentLocation.isDevFallback) {
-      Alert.alert('지도 확인용', '현재 좌표는 개발용 더미 위치예요. 실제 인증 전송은 실제 위치를 받은 뒤 진행해주세요.');
-      return;
-    }
-
     try {
       await chatApiService.verifyMeeting({
         chatRoomId: roomId,
@@ -459,12 +462,6 @@ const MeetingGeneralChatScreen: React.FC = () => {
       return;
     }
 
-    if (isMockRoomId(roomId)) {
-      setLeaveVisible(false);
-      navigation.goBack();
-      return;
-    }
-
     try {
       await chatApiService.leaveRoom(roomId);
       setLeaveVisible(false);
@@ -472,6 +469,36 @@ const MeetingGeneralChatScreen: React.FC = () => {
     } catch (error) {
       if (__DEV__) console.warn('Failed to leave meeting general chat', error);
       Alert.alert('오류', '채팅방 나가기에 실패했어요.');
+    }
+  };
+
+  const submitReport = async () => {
+    const targetId = toReportId(reportTarget);
+    if (!reportContextId || !targetId || reportSubmitting) {
+      Alert.alert(
+        '신고할 수 없어요',
+        '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
+      );
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      await reportApiService.reportChat({
+        contextId: reportContextId,
+        targetId,
+        reason: selectedReason,
+        additionalDetail: reportDetail.trim(),
+      });
+      setReportVisible(false);
+      setReportDetail('');
+      setSelectedReason(ReportReason.ABUSIVE_LANGUAGE);
+      Alert.alert('신고 완료', '신고가 접수됐어요.');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to report meeting chat', error);
+      Alert.alert('오류', '신고 접수에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -485,10 +512,10 @@ const MeetingGeneralChatScreen: React.FC = () => {
             title={roomTitle}
             cancelVoteActive={cancelVoteActive}
             members={visibleMembers}
-            hasNextMembers={(memberPage + 1) * 4 < MEMBERS.length}
+            hasNextMembers={(memberPage + 1) * 4 < members.length}
             onToggle={() => setExpanded(prev => !prev)}
             onInfo={() => setInfoVisible(true)}
-            onNextMembers={() => setMemberPage(prev => ((prev + 1) * 4 >= MEMBERS.length ? 0 : prev + 1))}
+            onNextMembers={() => setMemberPage(prev => ((prev + 1) * 4 >= members.length ? 0 : prev + 1))}
             onVote={choice => {
               setCancelVoteActive(false);
               setMessages(prev => [
@@ -565,10 +592,18 @@ const MeetingGeneralChatScreen: React.FC = () => {
       <MeetingInfoModal visible={infoVisible} onClose={() => setInfoVisible(false)} />
       <ReportModal
         visible={reportVisible}
+        members={reportTargets}
+        target={reportTarget}
         selectedReason={selectedReason}
         reportDetail={reportDetail}
+        onChangeTarget={setReportTarget}
         onChangeReason={setSelectedReason}
         onChangeDetail={setReportDetail}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+        submitDisabled={
+          !reportContextId || !toReportId(reportTarget)
+        }
         onClose={() => setReportVisible(false)}
       />
       <ConfirmModal
@@ -729,9 +764,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표</Text>
         <Text style={styles.systemBody}>
-          []님이 미팅 취소 투표를 시작하셨어요!{'\n'}
-          모든 인원이 취소에 동의하면 채팅방이 사라지고 채팅방에서 사용된 팅은 위약금을 제외하고 환불해드려요!{'\n'}
-          투표 남은시간 hh시간 : mm분
+          {message.body || '미팅 취소 투표가 시작됐어요.'}
         </Text>
         {message.kind === 'cancelVoteDone' ? (
           <Text style={styles.voteDoneText}>﹛{message.voteChoice ?? '동의'}﹜하셨습니다</Text>
@@ -753,7 +786,9 @@ const GeneralSystemMessage = ({
     return (
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표 결과</Text>
-        <Text style={styles.systemBody}>모두가 동의하여 채팅방이 사라져요{'\n'}사라지기까지 남은시간 mm분</Text>
+        <Text style={styles.systemBody}>
+          {message.body || '미팅 취소 투표가 완료됐어요.'}
+        </Text>
       </View>
     );
   }
@@ -762,7 +797,9 @@ const GeneralSystemMessage = ({
     return (
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>미팅 취소 투표 결과</Text>
-        <Text style={styles.systemBody}>모두가 동의하지 않아 취소되지 않았어요</Text>
+        <Text style={styles.systemBody}>
+          {message.body || '미팅 취소가 확정되지 않았어요.'}
+        </Text>
       </View>
     );
   }
@@ -772,10 +809,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>만남인증 성공</Text>
         <Text style={styles.systemBody}>
-          []님이 시작한 만남인증이 완료되었어요{'\n'}
-          참여인원 : N명{'\n\n'}
-          채팅방이 사라지기까지{'\n'}
-          남은시간 : hh시간 mm분
+          {message.body || '만남 인증이 완료됐어요.'}
         </Text>
       </View>
     );
@@ -786,8 +820,7 @@ const GeneralSystemMessage = ({
       <View style={styles.systemCard}>
         <Text style={styles.systemTitle}>만남인증 실패</Text>
         <Text style={styles.systemBody}>
-          []님이 시작한 만남인증이 완료되지 않았어요{'\n'}
-          참여인원 : N명
+          {message.body || '만남 인증이 완료되지 않았어요.'}
         </Text>
       </View>
     );
@@ -797,9 +830,7 @@ const GeneralSystemMessage = ({
     <View style={styles.systemCard}>
       <Text style={styles.systemTitle}>만남인증</Text>
       <Text style={styles.systemBody}>
-        []님이 만남인증을 시작하셨어요{'\n'}
-        만남인증이 완료되면 참여하신 분들에게 리워드가 지급되고 이 채팅방은 24시간 뒤에 사라져요{'\n'}
-        남은시간 mm분 :ss초
+        {message.body || '만남 인증이 시작됐어요.'}
       </Text>
       <TouchableOpacity style={styles.systemWideButton} onPress={onJoinVerification}>
         <Text style={styles.systemButtonText}>참여하기</Text>
@@ -883,44 +914,100 @@ const ConfirmModal = ({
 
 const ReportModal = ({
   visible,
+  members,
+  target,
   selectedReason,
   reportDetail,
+  onChangeTarget,
   onChangeReason,
   onChangeDetail,
+  onSubmit,
+  submitting,
+  submitDisabled,
   onClose,
 }: {
   visible: boolean;
-  selectedReason: string;
+  members: MeetingMember[];
+  target: string;
+  selectedReason: ReportReason;
   reportDetail: string;
-  onChangeReason: (reason: string) => void;
+  onChangeTarget: (target: string) => void;
+  onChangeReason: (reason: ReportReason) => void;
   onChangeDetail: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  submitDisabled: boolean;
   onClose: () => void;
 }) => (
   <ModalShell visible={visible}>
-    <Text style={styles.reportTitle}>신고</Text>
-    {REPORT_REASONS.map(reason => (
-      <TouchableOpacity key={reason} style={styles.radioRow} onPress={() => onChangeReason(reason)}>
-        <View style={[styles.radioCircle, selectedReason === reason && styles.radioCircleOn]} />
-        <Text style={styles.radioText}>{reason}</Text>
-      </TouchableOpacity>
-    ))}
-    <TextInput
-      style={styles.reportInput}
-      value={reportDetail}
-      onChangeText={onChangeDetail}
-      placeholder="상세 내용"
-      placeholderTextColor="#B8B8B8"
-      multiline
-    />
-    <Text style={styles.reportHelp}>신고 대상과 사유를 선택해주세요!</Text>
-    <View style={styles.modalButtonRow}>
-      <TouchableOpacity style={styles.modalPrimary} onPress={onClose}>
-        <Text style={styles.modalButtonText}>신고하기</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
-        <Text style={styles.modalButtonText}>취소하기</Text>
-      </TouchableOpacity>
-    </View>
+    <ScrollView
+      style={styles.reportScroll}
+      showsVerticalScrollIndicator
+    >
+      <Text style={styles.reportTitle}>신고</Text>
+      <Text style={styles.reportSectionLabel}>신고 대상</Text>
+      {members.map(member => (
+        <TouchableOpacity
+          key={member.id}
+          style={styles.radioRow}
+          onPress={() => onChangeTarget(member.id)}
+        >
+          <View
+            style={[
+              styles.radioCircle,
+              target === member.id && styles.radioCircleOn,
+            ]}
+          />
+          <Text style={styles.radioText}>{member.name}</Text>
+        </TouchableOpacity>
+      ))}
+      <Text style={styles.reportSectionLabel}>신고 사유</Text>
+      {REPORT_REASON_OPTIONS.map(option => (
+        <TouchableOpacity
+          key={option.value}
+          style={styles.radioRow}
+          onPress={() => onChangeReason(option.value)}
+        >
+          <View
+            style={[
+              styles.radioCircle,
+              selectedReason === option.value && styles.radioCircleOn,
+            ]}
+          />
+          <Text style={styles.radioText}>{option.label}</Text>
+        </TouchableOpacity>
+      ))}
+      <TextInput
+        style={styles.reportInput}
+        value={reportDetail}
+        onChangeText={onChangeDetail}
+        placeholder="상세 내용"
+        placeholderTextColor="#B8B8B8"
+        multiline
+      />
+      <Text style={styles.reportHelp}>
+        {submitDisabled
+          ? '채팅방 또는 신고 대상 정보를 확인할 수 없어 제출할 수 없어요.'
+          : '신고 대상과 사유를 확인해 주세요.'}
+      </Text>
+      <View style={styles.modalButtonRow}>
+        <TouchableOpacity
+          style={[
+            styles.modalPrimary,
+            (submitDisabled || submitting) && styles.reportSubmitDisabled,
+          ]}
+          onPress={onSubmit}
+          disabled={submitDisabled || submitting}
+        >
+          <Text style={styles.modalButtonText}>
+            {submitting ? '신고 중...' : '신고하기'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
+          <Text style={styles.modalButtonText}>취소하기</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   </ModalShell>
 );
 
@@ -952,8 +1039,7 @@ const LocationConfirmModal = ({
   <ModalShell visible={visible}>
     <LocationMapPreview location={location} tracking />
     <Text style={styles.locationInfoText}>
-      현재 위치 : {location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : '미확정'}{'\n'}
-      현재 가장 많이 인증한 위치 : 강남역
+      현재 위치 : {location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : '미확정'}
     </Text>
     <Text style={styles.modalBody}>
       만남인증이 완료되려면 절반이상이 일치해야돼요{'\n\n'}
@@ -1259,6 +1345,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 360,
+    maxHeight: '90%',
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
     padding: 18,
@@ -1280,6 +1367,13 @@ const styles = StyleSheet.create({
   infoIconText: { color: '#111111', fontSize: 17, fontWeight: '900' },
   modalTitle: { color: '#001A44', fontSize: 17, fontWeight: '900', marginBottom: 10 },
   reportTitle: { color: '#001A44', fontSize: 22, fontWeight: '900', marginBottom: 12 },
+  reportScroll: { flexShrink: 1 },
+  reportSectionLabel: {
+    color: '#46506A',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
   modalBody: { color: '#46506A', fontSize: 14, lineHeight: 21, marginBottom: 18 },
   modalButtonRow: { flexDirection: 'row', gap: 10 },
   modalPrimary: {
@@ -1290,6 +1384,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reportSubmitDisabled: { opacity: 0.5 },
   modalSecondary: {
     flex: 1,
     height: 46,

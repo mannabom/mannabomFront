@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Alert,
   Image,
@@ -13,24 +19,49 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
+import { REPORT_REASON_OPTIONS } from '../../constants/reportReasons';
 import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
-import { ChatMessageDTO, ChatRoomStatus, ChatRoomType } from '../../types/ChatAPI';
+import { meetingApiService } from '../../services/MeetingApiService';
+import { reportApiService } from '../../services/ReportApiService';
+import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
+import {
+  AcceptMatchResult,
+  MatchingResultData,
+  MeetingStatus,
+  MeetingStreamEvent,
+  MyMeetingStatus,
+} from '../../types/MeetingAPI';
+import { ReportReason, toReportId } from '../../types/ReportAPI';
 import { getProfileId } from '../../utils/AuthUtils';
 
 const sendIconImg = require('../../assets/images/Send.png');
 const reportIconImg = require('../../assets/images/report.png');
 
-const isMockRoomId = (value: string) => value.startsWith('mock-');
-
-type MatchState = 'waiting' | 'matching' | 'offer' | 'waitingOpponent' | 'matched';
+type MatchState =
+  | 'waiting'
+  | 'matching'
+  | 'offer'
+  | 'waitingOpponent'
+  | 'matched';
 type TeamView = 'mine' | 'opponent';
-type SystemKind = 'arrival' | 'rejected' | 'matched' | 'started' | 'cancelled';
+type SystemKind =
+  | 'arrival'
+  | 'rejected'
+  | 'rejectedByMe'
+  | 'matched'
+  | 'started'
+  | 'cancelled';
 
 type TeamMember = {
   id: string;
   name: string;
+  profileImage?: string;
   leader?: boolean;
   self?: boolean;
 };
@@ -45,41 +76,53 @@ type ChatMessage =
       text: string;
       time: string;
     }
-  | { id: string; type: 'system'; kind: SystemKind; text: string };
-
-const TEAM_MEMBERS: TeamMember[] = [
-  { id: 'me', name: '나', self: true },
-  { id: 'leader', name: 'ㅇㅇㅇ', leader: true },
-  { id: 'mate-1', name: 'ㅇㅇㅇ' },
-  { id: 'mate-2', name: 'ㅇㅇㅇ' },
-];
-
-const OPPONENT_MEMBERS: TeamMember[] = [
-  { id: 'opp-1', name: 'ㅇㅇㅇ' },
-  { id: 'opp-2', name: 'ㅇㅇㅇ' },
-  { id: 'opp-3', name: 'ㅇㅇㅇ' },
-  { id: 'opp-4', name: 'ㅇㅇㅇ' },
-];
+  | {
+      id: string;
+      type: 'system';
+      kind: SystemKind;
+      text: string;
+      semanticKey?: string;
+    };
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
 const SYSTEM_COPY: Record<SystemKind, string> = {
-  arrival: '새로운 상대 팀이 자동 매칭되었습니다. 제한 시간 안에 매칭을 수락해주세요.',
+  arrival:
+    '새로운 상대 팀이 자동 매칭되었습니다. 제한 시간 안에 매칭을 수락해주세요.',
   rejected: '상대팀이 먼저 거절하여 이번 매칭은 성사되지 않았습니다.',
+  rejectedByMe: '우리 팀이 거절하여 이번 매칭은 성사되지 않았습니다.',
   matched: '양쪽 팀이 모두 수락하여 미팅이 성사되었습니다.',
   started: '팀장이 매칭을 시작했습니다.',
   cancelled: '팀장이 매칭을 취소했습니다.',
 };
 
+const parseApiMessage = (error: any, fallback: string) =>
+  String(
+    error?.response?.data?.message ??
+      error?.response?.data?.error ??
+      error?.message ??
+      fallback,
+  );
+
+const toMatchState = (status?: MeetingStatus): MatchState => {
+  if (status === 'MATCHED') return 'matched';
+  if (status === 'MATCHING') return 'matching';
+  return 'waiting';
+};
+
+type MatchedChatRoom = NonNullable<AcceptMatchResult['data']['chatRoom']>;
+
 const formatMessageTime = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).toLowerCase();
+  return date
+    .toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+    .toLowerCase();
 };
 
 const normalizeIncomingMessage = (
@@ -90,7 +133,9 @@ const normalizeIncomingMessage = (
   const messageContent = raw?.messageContent ?? raw?.content;
   if (!messageId || typeof messageContent !== 'string') return null;
 
-  const mine = Boolean(currentUserId && String(raw?.senderId) === String(currentUserId));
+  const mine = Boolean(
+    currentUserId && String(raw?.senderId) === String(currentUserId),
+  );
   return {
     id: String(messageId),
     serverId: String(raw?.messageId ?? messageId),
@@ -106,58 +151,292 @@ const MeetingTeamChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const roomId = String(route.params?.roomId ?? '');
-  const roomType = String(route.params?.roomType ?? 'TEAM') as ChatRoomType;
+  const requestedMeetingRoomId = String(route.params?.meetingRoomId ?? roomId);
   const [expanded, setExpanded] = useState(false);
   const [matchState, setMatchState] = useState<MatchState>('waiting');
+  const [meetingRoom, setMeetingRoom] = useState<MyMeetingStatus | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [opponentTeam, setOpponentTeam] = useState<
+    MatchingResultData['opponentTeam'] | null
+  >(null);
+  const [matchedChatRoom, setMatchedChatRoom] =
+    useState<MatchedChatRoom | null>(null);
+  const [decisionDeadline, setDecisionDeadline] = useState<string | null>(null);
+  const [remainingRematches, setRemainingRematches] = useState<number | null>(
+    null,
+  );
+  const [matchingAction, setMatchingAction] = useState<
+    'start' | 'cancel' | 'continue' | 'accept' | 'reject' | null
+  >(null);
   const [teamView, setTeamView] = useState<TeamView>('mine');
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState('');
-  const [chatRoomStatus, setChatRoomStatus] = useState<ChatRoomStatus>('ACTIVE');
+  const [chatRoomStatus, setChatRoomStatus] =
+    useState<ChatRoomStatus>('ACTIVE');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const lastChatSyncTimeRef = useRef<string | null>(null);
+  const matchStateRef = useRef<MatchState>('waiting');
+  const rejectedByMeMatchIdsRef = useRef<Set<string>>(new Set());
 
   const [infoVisible, setInfoVisible] = useState(false);
   const [cancelVisible, setCancelVisible] = useState(false);
   const [rejectVisible, setRejectVisible] = useState(false);
-  const [rejectDoneVisible, setRejectDoneVisible] = useState(false);
+  const [rematchPrompt, setRematchPrompt] = useState<
+    'rejected' | 'timeout' | null
+  >(null);
   const [actionVisible, setActionVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [leaveVisible, setLeaveVisible] = useState(false);
   const [leaveDeniedVisible, setLeaveDeniedVisible] = useState(false);
-  const [reportTarget, setReportTarget] = useState(TEAM_MEMBERS[1].id);
-  const [reportReason, setReportReason] = useState('폭언, 욕설 등 언어폭력');
+  const [reportTarget, setReportTarget] = useState('');
+  const [reportReason, setReportReason] = useState(
+    ReportReason.ABUSIVE_LANGUAGE,
+  );
+  const [reportDetail, setReportDetail] = useState('');
+  const [reportContextId, setReportContextId] = useState<number | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
-  const isLeader = true;
-  const roomTitle = roomType === 'MEETING' ? '임시 방제목 아무거나(미팅)' : '임시 방제목 아무거나';
-  const roomCode = '□□□□';
+  const meetingRoomIdValue = meetingRoom?.roomId || meetingRoom?.meetingId;
+  const meetingRoomId = meetingRoomIdValue ? String(meetingRoomIdValue) : '';
+  const isLeader = Boolean(meetingRoom?.leader);
+  const roomTitle = String(
+    meetingRoom?.roomName ?? route.params?.roomTitle ?? '미팅 방',
+  );
+  const roomCode = meetingRoom?.roomCode || '';
   const statusText =
     matchState === 'matched'
       ? '매칭 완료'
-      : matchState === 'matching' || matchState === 'offer' || matchState === 'waitingOpponent'
-        ? '매칭 중'
-        : '대기중';
+      : matchState === 'matching' ||
+        matchState === 'offer' ||
+        matchState === 'waitingOpponent'
+      ? '매칭 중'
+      : '대기중';
   const matched = matchState === 'matched' || chatRoomStatus !== 'ACTIVE';
-  const canCancel = false;
-  const visibleMembers = teamView === 'opponent' ? OPPONENT_MEMBERS : TEAM_MEMBERS;
+  const canCancel = isLeader && matchState === 'matching';
+  const matchingActionPending = matchingAction !== null;
+  const matchingStreamActive =
+    matchState === 'matching' ||
+    matchState === 'offer' ||
+    matchState === 'waitingOpponent';
+
+  const updateMatchState = useCallback((nextState: MatchState) => {
+    matchStateRef.current = nextState;
+    setMatchState(nextState);
+  }, []);
+
+  const applyServerMatchStatus = useCallback(
+    (status?: MeetingStatus) => {
+      const nextState = toMatchState(status);
+      const currentState = matchStateRef.current;
+
+      if (
+        nextState === 'matching' &&
+        (currentState === 'offer' ||
+          currentState === 'waitingOpponent' ||
+          currentState === 'matched')
+      ) {
+        return;
+      }
+
+      updateMatchState(nextState);
+    },
+    [updateMatchState],
+  );
+
+  const ownTeamMembers = useMemo<TeamMember[]>(() => {
+    const serverMembers = meetingRoom?.teamMembers ?? [];
+    if (serverMembers.length) {
+      const hasCurrentUser = serverMembers.some(
+        member => String(member.userId) === String(currentUserId),
+      );
+
+      return serverMembers.map(member => ({
+        id: String(member.userId),
+        name: member.nickname,
+        profileImage: member.profileImage,
+        leader: member.leader,
+        self:
+          String(member.userId) === String(currentUserId) ||
+          (!hasCurrentUser && isLeader && member.leader),
+      }));
+    }
+
+    const routeParticipants = Array.isArray(route.params?.participants)
+      ? route.params.participants
+      : [];
+    return routeParticipants.map((member: any) => ({
+      id: String(member.userId),
+      name: String(member.nickname || '이름 없음'),
+      profileImage: String(member.profileImage || ''),
+      self: String(member.userId) === String(currentUserId),
+    }));
+  }, [
+    currentUserId,
+    isLeader,
+    meetingRoom?.teamMembers,
+    route.params?.participants,
+  ]);
+
+  const opponentTeamMembers = useMemo<TeamMember[]>(
+    () =>
+      (opponentTeam?.members ?? []).map(member => ({
+        id: String(member.userId),
+        name: member.nickname,
+        profileImage: member.profileImage,
+      })),
+    [opponentTeam],
+  );
+  const reportableMembers = useMemo(() => {
+    const uniqueMembers = new Map<string, TeamMember>();
+    [...ownTeamMembers, ...opponentTeamMembers].forEach(member => {
+      if (!member.self && member.id) {
+        uniqueMembers.set(member.id, member);
+      }
+    });
+    return Array.from(uniqueMembers.values());
+  }, [opponentTeamMembers, ownTeamMembers]);
+
+  const visibleMembers =
+    teamView === 'opponent' ? opponentTeamMembers : ownTeamMembers;
 
   const actionLabel = useMemo(() => {
     if (matchState === 'matched') return '채팅방으로';
     if (matchState === 'waitingOpponent') return '응답 대기 중';
     if (matchState === 'offer') return '매칭 수락';
+    if (matchState === 'matching') return '매칭 중';
     return '매칭 신청';
   }, [matchState]);
 
-  const pushSystem = (kind: SystemKind) => {
-    setMessages(prev => [
-      ...prev,
-      {
-        id: `system-${Date.now()}-${kind}`,
-        type: 'system',
-        kind,
-        text: SYSTEM_COPY[kind],
-      },
+  const acceptDeadlineText = useMemo(() => {
+    if (!decisionDeadline) return '매칭 수락 응답을 기다리고 있어요.';
+    const deadline = new Date(decisionDeadline);
+    if (Number.isNaN(deadline.getTime())) {
+      return `매칭 수락 마감 ${decisionDeadline}`;
+    }
+    return `매칭 수락 마감 ${deadline.toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  }, [decisionDeadline]);
+
+  const pushSystem = useCallback(
+    (kind: SystemKind, semanticKey?: string) => {
+      setMessages(prev => {
+        if (
+          semanticKey &&
+          prev.some(
+            message =>
+              message.type === 'system' &&
+              message.semanticKey === semanticKey,
+          )
+        ) {
+          return prev;
+        }
+
+        return [
+          ...prev,
+          {
+            id: semanticKey
+              ? `system-${semanticKey}`
+              : `system-${Date.now()}-${kind}`,
+            type: 'system',
+            kind,
+            text: SYSTEM_COPY[kind],
+            semanticKey,
+          },
+        ];
+      });
+    },
+    [],
+  );
+
+  const applyMatchingResult = useCallback(
+    (result: MatchingResultData) => {
+      if (!result?.matchId || !result?.opponentTeam) return false;
+
+      setMatchId(result.matchId);
+      setOpponentTeam(result.opponentTeam);
+      setDecisionDeadline(result.decisionDeadline || null);
+      updateMatchState('offer');
+      pushSystem('arrival', `match:${result.matchId}:arrival`);
+      return true;
+    },
+    [pushSystem, updateMatchState],
+  );
+
+  const refreshMeetingStatus = useCallback(async () => {
+    const [status, profileId] = await Promise.all([
+      meetingApiService.getMyStatus(),
+      getProfileId(),
     ]);
-  };
+    setCurrentUserId(profileId);
+
+    if (!status.hasActiveRoom) {
+      setMeetingRoom(null);
+      updateMatchState('waiting');
+      throw new Error('현재 참여 중인 미팅 방을 찾을 수 없습니다.');
+    }
+
+    const activeRoomId = status.roomId || status.meetingId;
+    if (
+      !activeRoomId ||
+      !requestedMeetingRoomId ||
+      String(activeRoomId) !== requestedMeetingRoomId
+    ) {
+      setMeetingRoom(null);
+      updateMatchState('waiting');
+      throw new Error(
+        '현재 채팅방과 활성 미팅 방을 확인할 수 없습니다. 채팅방 응답에 meetingRoomId가 필요합니다.',
+      );
+    }
+
+    setMeetingRoom(status);
+    applyServerMatchStatus(status.matchingStatus);
+    return status;
+  }, [applyServerMatchStatus, requestedMeetingRoomId, updateMatchState]);
+
+  const loadMeetingState = useCallback(async () => {
+    try {
+      const status = await refreshMeetingStatus();
+      const activeRoomId = status.roomId || status.meetingId;
+      if (status.matchingStatus === 'MATCHING' && activeRoomId) {
+        try {
+          const result = await meetingApiService.getMatchingResult(
+            String(activeRoomId),
+          );
+          applyMatchingResult(result);
+        } catch (error) {
+          if (__DEV__) {
+            console.warn('No pending meeting matching result', error);
+          }
+        }
+      }
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to load meeting room state', error);
+      Alert.alert(
+        '오류',
+        parseApiMessage(error, '미팅 방 정보를 불러오지 못했어요.'),
+      );
+    }
+  }, [applyMatchingResult, refreshMeetingStatus]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMeetingState();
+      return undefined;
+    }, [loadMeetingState]),
+  );
+
+  useEffect(() => {
+    if (!reportableMembers.length) {
+      setReportTarget('');
+      return;
+    }
+
+    if (!reportableMembers.some(member => member.id === reportTarget)) {
+      setReportTarget(reportableMembers[0]?.id ?? '');
+    }
+  }, [reportableMembers, reportTarget]);
 
   const syncMessages = useCallback(async () => {
     if (!roomId) return;
@@ -170,15 +449,24 @@ const MeetingTeamChatScreen: React.FC = () => {
         roomId,
         lastChatSyncTimeRef.current,
       );
-      lastChatSyncTimeRef.current = result.lastSyncTime || lastChatSyncTimeRef.current;
+      setReportContextId(toReportId(result.chatRoomId));
+      lastChatSyncTimeRef.current =
+        result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
       const normalized = result.messages
         .map(message => normalizeIncomingMessage(message, nextUserId))
         .filter((message): message is ChatMessage => Boolean(message));
       setMessages(prev => {
-        if (isInitialSync) return normalized;
+        if (isInitialSync) {
+          const localSystemMessages = prev.filter(
+            message => message.type === 'system',
+          );
+          return [...normalized, ...localSystemMessages];
+        }
         const existingIds = new Set(prev.map(message => message.id));
-        const nextMessages = normalized.filter(message => !existingIds.has(message.id));
+        const nextMessages = normalized.filter(
+          message => !existingIds.has(message.id),
+        );
         return nextMessages.length ? [...prev, ...nextMessages] : prev;
       });
     } catch (error) {
@@ -197,7 +485,8 @@ const MeetingTeamChatScreen: React.FC = () => {
             const normalized = normalizeIncomingMessage(raw, currentUserId);
             if (!normalized) return;
             setMessages(prev => {
-              if (prev.some(message => message.id === normalized.id)) return prev;
+              if (prev.some(message => message.id === normalized.id))
+                return prev;
               return [...prev, normalized];
             });
           })
@@ -216,50 +505,407 @@ const MeetingTeamChatScreen: React.FC = () => {
     }, [currentUserId, roomId, syncMessages]),
   );
 
+  const handleMatchingEvent = useCallback(
+    (event: MeetingStreamEvent) => {
+      if (event.type === 'MATCHING_STATUS') {
+        applyServerMatchStatus(event.data.status);
+        return;
+      }
+
+      if (event.type === 'MATCH_FOUND') {
+        applyMatchingResult({
+          matchId: event.data.matchId,
+          opponentTeam: event.data.opponentTeam,
+          decisionDeadline: event.data.decisionDeadline,
+        });
+        return;
+      }
+
+      if (event.type === 'MATCHING_TIMEOUT') {
+        setRemainingRematches(event.data.remainingAttempts ?? null);
+        setMatchId(null);
+        setOpponentTeam(null);
+        setDecisionDeadline(null);
+        updateMatchState('waiting');
+        if (event.data.canContinue && isLeader) {
+          setRematchPrompt('timeout');
+        } else if (!event.data.canContinue) {
+          Alert.alert('매칭 종료', '매칭 대기 시간이 종료되었습니다.');
+        }
+        return;
+      }
+
+      if (event.type === 'DECISION_RESULT') {
+        if (event.data.chatRoom) {
+          setMatchedChatRoom(event.data.chatRoom);
+          updateMatchState('matched');
+          setDecisionDeadline(null);
+          pushSystem('matched', `room:${meetingRoomId}:matched`);
+          return;
+        }
+
+        setRemainingRematches(event.data.remainingRematches ?? null);
+        setMatchId(null);
+        setOpponentTeam(null);
+        setDecisionDeadline(null);
+        updateMatchState('waiting');
+        pushSystem(
+          rejectedByMeMatchIdsRef.current.has(event.data.matchId)
+            ? 'rejectedByMe'
+            : 'rejected',
+          `match:${event.data.matchId}:rejected`,
+        );
+        if (isLeader) setRematchPrompt('rejected');
+        refreshMeetingStatus().catch(error => {
+          if (__DEV__) {
+            console.warn('Failed to refresh state after match decision', error);
+          }
+        });
+      }
+    },
+    [
+      applyMatchingResult,
+      applyServerMatchStatus,
+      isLeader,
+      meetingRoomId,
+      pushSystem,
+      refreshMeetingStatus,
+      updateMatchState,
+    ],
+  );
+
+  useEffect(() => {
+    if (!meetingRoomId || !matchingStreamActive) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    meetingApiService
+      .subscribeToMatchingEvents(meetingRoomId, {
+        onEvent: handleMatchingEvent,
+        onError: error => {
+          if (__DEV__) console.warn('Meeting matching stream failed', error);
+        },
+      })
+      .then(nextUnsubscribe => {
+        if (disposed) {
+          nextUnsubscribe();
+          return;
+        }
+        unsubscribe = nextUnsubscribe;
+      })
+      .catch(error => {
+        if (__DEV__) {
+          console.warn('Failed to subscribe to meeting matching events', error);
+        }
+      });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [handleMatchingEvent, matchingStreamActive, meetingRoomId]);
+
+  useEffect(() => {
+    if (
+      !meetingRoomId ||
+      !['matching', 'offer', 'waitingOpponent'].includes(matchState)
+    ) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let polling = false;
+
+    const pollMatchingState = async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const status = await meetingApiService.getMyStatus();
+        const activeRoomId = status.roomId || status.meetingId;
+        if (
+          disposed ||
+          !status.hasActiveRoom ||
+          !activeRoomId ||
+          String(activeRoomId) !== meetingRoomId
+        ) {
+          return;
+        }
+
+        setMeetingRoom(status);
+        if (status.matchingStatus === 'MATCHED') {
+          updateMatchState('matched');
+          setDecisionDeadline(null);
+          pushSystem('matched', `room:${meetingRoomId}:matched`);
+          return;
+        }
+
+        if (status.matchingStatus !== 'MATCHING') {
+          updateMatchState(toMatchState(status.matchingStatus));
+          setMatchId(null);
+          setOpponentTeam(null);
+          setDecisionDeadline(null);
+          return;
+        }
+
+        try {
+          const result = await meetingApiService.getMatchingResult(
+            meetingRoomId,
+          );
+          if (
+            !disposed &&
+            (matchState === 'matching' || result.matchId !== matchId)
+          ) {
+            applyMatchingResult(result);
+          }
+        } catch (error) {
+          if (__DEV__) {
+            console.warn('No meeting matching result during polling', error);
+          }
+        }
+      } catch (error) {
+        if (__DEV__) console.warn('Failed to poll meeting state', error);
+      } finally {
+        polling = false;
+      }
+    };
+
+    const interval = setInterval(pollMatchingState, 5000);
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+    };
+  }, [
+    applyMatchingResult,
+    matchId,
+    matchState,
+    meetingRoomId,
+    pushSystem,
+    updateMatchState,
+  ]);
+
   useEffect(() => {
     const lastReadMessage = [...messages]
       .reverse()
       .find(message => message.type === 'message' && message.serverId);
 
-    if (!roomId || !lastReadMessage || lastReadMessage.type !== 'message' || !lastReadMessage.serverId) {
+    if (
+      !roomId ||
+      !lastReadMessage ||
+      lastReadMessage.type !== 'message' ||
+      !lastReadMessage.serverId
+    ) {
       return;
     }
 
-    chatApiService.markRoomRead({
-      chatRoomId: roomId,
-      lastReadMessageId: lastReadMessage.serverId,
-    }).catch(error => {
-      if (__DEV__) console.warn('Failed to mark chat room read', error);
-    });
+    chatApiService
+      .markRoomRead({
+        chatRoomId: roomId,
+        lastReadMessageId: lastReadMessage.serverId,
+      })
+      .catch(error => {
+        if (__DEV__) console.warn('Failed to mark chat room read', error);
+      });
   }, [messages, roomId]);
 
-  const startMatching = () => {
-    if (!isLeader || matchState !== 'waiting') return;
-    setMatchState('matching');
-    pushSystem('started');
+  const startMatching = async () => {
+    if (!isLeader || matchState !== 'waiting' || matchingActionPending) {
+      return;
+    }
+
+    if (
+      !meetingRoomId ||
+      !meetingRoom?.gender ||
+      !meetingRoom.region ||
+      !meetingRoom.ageRangeDto ||
+      !meetingRoom.memberInfo?.currentCount
+    ) {
+      Alert.alert(
+        '매칭 시작 불가',
+        '미팅 방의 성별, 지역, 나이 또는 인원 정보가 부족합니다.',
+      );
+      return;
+    }
+
+    setMatchingAction('start');
+    try {
+      const result = await meetingApiService.startMatching({
+        roomId: meetingRoomId,
+        gender: meetingRoom.gender,
+        region: meetingRoom.region,
+        ageRange: meetingRoom.ageRangeDto,
+        memberCount: meetingRoom.memberInfo.currentCount,
+      });
+
+      if (!result.matchingStarted) {
+        Alert.alert('매칭 시작 실패', '서버에서 매칭을 시작하지 못했습니다.');
+        return;
+      }
+
+      updateMatchState('matching');
+      pushSystem('started');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to start meeting matching', error);
+      Alert.alert('오류', parseApiMessage(error, '매칭을 시작하지 못했어요.'));
+    } finally {
+      setMatchingAction(null);
+    }
   };
 
-  const acceptMatch = () => {
-    if (matchState !== 'offer') return;
-    setMatchState('waitingOpponent');
+  const acceptMatch = async () => {
+    if (
+      !isLeader ||
+      matchState !== 'offer' ||
+      !matchId ||
+      matchingActionPending
+    ) {
+      return;
+    }
+
+    setMatchingAction('accept');
+    try {
+      const result = await meetingApiService.acceptMatch({ matchId });
+      if (result.currentStatus === 'COMPLETED' && result.data?.chatRoom) {
+        setMatchedChatRoom(result.data.chatRoom);
+        updateMatchState('matched');
+        setDecisionDeadline(null);
+        pushSystem('matched', `room:${meetingRoomId}:matched`);
+      } else if (result.currentStatus === 'WAITING') {
+        updateMatchState('waitingOpponent');
+      } else {
+        try {
+          await refreshMeetingStatus();
+        } catch (refreshError) {
+          if (__DEV__) {
+            console.warn(
+              'Failed to refresh state after accepting match',
+              refreshError,
+            );
+          }
+        }
+        Alert.alert(
+          '매칭 상태 확인 필요',
+          '수락은 처리됐지만 최종 채팅방 정보를 받지 못했습니다.',
+        );
+      }
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to accept meeting match', error);
+      Alert.alert('오류', parseApiMessage(error, '매칭을 수락하지 못했어요.'));
+    } finally {
+      setMatchingAction(null);
+    }
   };
 
-  const confirmReject = () => {
-    setRejectVisible(false);
-    setMatchState('matching');
-    pushSystem('rejected');
-    setRejectDoneVisible(true);
+  const confirmReject = async () => {
+    if (!isLeader || !matchId || matchingActionPending) return;
+
+    const rejectedMatchId = matchId;
+    rejectedByMeMatchIdsRef.current.add(rejectedMatchId);
+    setMatchingAction('reject');
+    try {
+      const result = await meetingApiService.rejectMatch({ matchId });
+      if (!result.data) {
+        throw new Error('매칭 거절 응답에 재매칭 정보가 없습니다.');
+      }
+      setRejectVisible(false);
+      updateMatchState('waiting');
+      setMatchId(null);
+      setOpponentTeam(null);
+      setDecisionDeadline(null);
+      setRemainingRematches(result.data.remainingRematches);
+      pushSystem(
+        'rejectedByMe',
+        `match:${rejectedMatchId}:rejected`,
+      );
+
+      if (result.data.canRematch) {
+        setRematchPrompt('rejected');
+      } else {
+        Alert.alert('매칭 종료', '사용 가능한 재매칭 기회가 없습니다.');
+      }
+    } catch (error) {
+      rejectedByMeMatchIdsRef.current.delete(rejectedMatchId);
+      if (__DEV__) console.warn('Failed to reject meeting match', error);
+      Alert.alert('오류', parseApiMessage(error, '매칭을 거절하지 못했어요.'));
+    } finally {
+      setMatchingAction(null);
+    }
   };
 
-  const continueMatching = () => {
-    setRejectDoneVisible(false);
-    setMatchState('matching');
+  const continueMatching = async () => {
+    if (!isLeader || !meetingRoomId || matchingActionPending) return;
+
+    setMatchingAction('continue');
+    try {
+      const result = await meetingApiService.continueMatching({
+        roomId: meetingRoomId,
+      });
+      if (!result.continued) {
+        Alert.alert('재매칭 실패', '서버에서 재매칭을 시작하지 못했습니다.');
+        return;
+      }
+
+      setRematchPrompt(null);
+      updateMatchState('matching');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to continue meeting matching', error);
+      Alert.alert(
+        '오류',
+        parseApiMessage(error, '재매칭을 시작하지 못했어요.'),
+      );
+    } finally {
+      setMatchingAction(null);
+    }
   };
 
-  const confirmCancel = () => {
-    setCancelVisible(false);
-    setMatchState('waiting');
-    pushSystem('cancelled');
+  const confirmCancel = async () => {
+    if (!meetingRoomId || !canCancel || matchingActionPending) return;
+
+    setMatchingAction('cancel');
+    try {
+      const result = await meetingApiService.cancelMatching({
+        roomId: meetingRoomId,
+      });
+      if (!result.cancelled) {
+        Alert.alert('매칭 취소 실패', '서버에서 매칭을 취소하지 못했습니다.');
+        return;
+      }
+
+      setCancelVisible(false);
+      updateMatchState('waiting');
+      setMatchId(null);
+      setOpponentTeam(null);
+      setDecisionDeadline(null);
+      pushSystem('cancelled');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to cancel meeting matching', error);
+      Alert.alert('오류', parseApiMessage(error, '매칭을 취소하지 못했어요.'));
+    } finally {
+      setMatchingAction(null);
+    }
+  };
+
+  const goToGeneralChat = () => {
+    if (!matchedChatRoom?.roomId) {
+      Alert.alert(
+        '채팅방 정보 확인 필요',
+        '매칭은 완료됐지만 생성된 미팅 채팅방 정보를 아직 받지 못했습니다.',
+      );
+      return;
+    }
+
+    navigation.navigate('MeetingGeneralChat', {
+      roomId: matchedChatRoom.roomId,
+      roomType: 'MEETING',
+      roomTitle: matchedChatRoom.roomName,
+      participants: matchedChatRoom.participants.map(participant => ({
+        userId: String(participant.userId),
+        nickname: participant.nickname,
+        profileImage: participant.profileImage,
+      })),
+    });
   };
 
   const handleLeaveRequest = () => {
@@ -272,25 +918,68 @@ const MeetingTeamChatScreen: React.FC = () => {
   };
 
   const confirmLeaveRoom = async () => {
-    if (!roomId) {
-      setLeaveVisible(false);
-      navigation.goBack();
-      return;
-    }
-
-    if (isMockRoomId(roomId)) {
-      setLeaveVisible(false);
-      navigation.goBack();
+    const numericMeetingRoomId = Number(meetingRoomId);
+    if (
+      !meetingRoomId ||
+      !Number.isSafeInteger(numericMeetingRoomId) ||
+      numericMeetingRoomId <= 0
+    ) {
+      Alert.alert(
+        '나가기 실패',
+        '미팅 방 식별자를 확인할 수 없어 방에서 나갈 수 없습니다.',
+      );
       return;
     }
 
     try {
-      await chatApiService.leaveRoom(roomId);
+      const result = await meetingApiService.leaveRoom({
+        roomId: numericMeetingRoomId,
+      });
+      if (!result.left) {
+        Alert.alert(
+          '나가기 실패',
+          '서버에서 미팅 방 나가기를 완료하지 못했습니다.',
+        );
+        return;
+      }
       setLeaveVisible(false);
       navigation.goBack();
     } catch (error) {
-      if (__DEV__) console.warn('Failed to leave chat room', error);
-      Alert.alert('오류', '채팅방 나가기에 실패했어요.');
+      if (__DEV__) console.warn('Failed to leave meeting room', error);
+      Alert.alert(
+        '오류',
+        parseApiMessage(error, '미팅 방 나가기에 실패했어요.'),
+      );
+    }
+  };
+
+  const submitReport = async () => {
+    const targetId = toReportId(reportTarget);
+    if (!reportContextId || !targetId || reportSubmitting) {
+      Alert.alert(
+        '신고할 수 없어요',
+        '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
+      );
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      await reportApiService.reportChat({
+        contextId: reportContextId,
+        targetId,
+        reason: reportReason,
+        additionalDetail: reportDetail.trim(),
+      });
+      setReportVisible(false);
+      setReportDetail('');
+      setReportReason(ReportReason.ABUSIVE_LANGUAGE);
+      Alert.alert('신고 완료', '신고가 접수됐어요.');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to report meeting team chat', error);
+      Alert.alert('오류', '신고 접수에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -326,7 +1015,10 @@ const MeetingTeamChatScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <Pressable style={styles.screen} onPress={() => expanded && setExpanded(false)}>
+      <Pressable
+        style={styles.screen}
+        onPress={() => expanded && setExpanded(false)}
+      >
         <Pressable>
           <RoomHeader
             expanded={expanded}
@@ -339,21 +1031,31 @@ const MeetingTeamChatScreen: React.FC = () => {
             teamView={teamView}
             actionLabel={actionLabel}
             canCancel={canCancel}
+            actionPending={matchingActionPending}
             onToggle={() => setExpanded(prev => !prev)}
             onInfo={() => setInfoVisible(true)}
             onStart={startMatching}
             onAccept={acceptMatch}
             onCancel={() => canCancel && setCancelVisible(true)}
             onReject={() => setRejectVisible(true)}
-            onToggleTeamView={() => setTeamView(prev => (prev === 'mine' ? 'opponent' : 'mine'))}
-            onGoGeneralChat={() => navigation.goBack()}
+            onToggleTeamView={() =>
+              setTeamView(prev => (prev === 'mine' ? 'opponent' : 'mine'))
+            }
+            onGoGeneralChat={goToGeneralChat}
           />
         </Pressable>
 
-        <ScrollView style={styles.messagesScroll} contentContainerStyle={styles.messagesContent}>
+        <ScrollView
+          style={styles.messagesScroll}
+          contentContainerStyle={styles.messagesContent}
+        >
           {messages.map(message =>
             message.type === 'system' ? (
-              <SystemMessage key={message.id} message={message} />
+              <SystemMessage
+                key={message.id}
+                message={message}
+                onMatchedPress={goToGeneralChat}
+              />
             ) : (
               <BubbleMessage key={message.id} message={message} />
             ),
@@ -362,7 +1064,7 @@ const MeetingTeamChatScreen: React.FC = () => {
 
         {matchState === 'offer' && (
           <View style={styles.acceptTimer}>
-            <Text style={styles.acceptTimerText}>매칭 수락 가능 시간 09:59</Text>
+            <Text style={styles.acceptTimerText}>{acceptDeadlineText}</Text>
           </View>
         )}
 
@@ -376,11 +1078,17 @@ const MeetingTeamChatScreen: React.FC = () => {
               }}
             >
               <View style={styles.actionSheetIconBox}>
-                <Image source={reportIconImg} style={styles.actionSheetIconImage} />
+                <Image
+                  source={reportIconImg}
+                  style={styles.actionSheetIconImage}
+                />
               </View>
               <Text style={styles.actionSheetText}>신고</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionSheetItem} onPress={handleLeaveRequest}>
+            <TouchableOpacity
+              style={styles.actionSheetItem}
+              onPress={handleLeaveRequest}
+            >
               <View style={styles.actionSheetIconBox}>
                 <Text style={styles.actionSheetIcon}>↪</Text>
               </View>
@@ -398,10 +1106,17 @@ const MeetingTeamChatScreen: React.FC = () => {
             editable={!matched}
             placeholderTextColor="#B8B8B8"
           />
-          <TouchableOpacity style={styles.sendButton} onPress={submitMessage} disabled={matched}>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={submitMessage}
+            disabled={matched}
+          >
             <Image source={sendIconImg} style={styles.sendButtonImage} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.moreButton} onPress={() => setActionVisible(prev => !prev)}>
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={() => setActionVisible(prev => !prev)}
+          >
             <Text style={styles.moreButtonText}>…</Text>
           </TouchableOpacity>
         </View>
@@ -413,34 +1128,50 @@ const MeetingTeamChatScreen: React.FC = () => {
         title="정말 취소할까요?"
         body="매칭 취소하면 우선순위에서 밀려서 다음 매칭 때 더 오래걸릴 수 있어요 !"
         primary="다시 생각해볼게요"
-        secondary="취소할래요"
+        secondary={matchingAction === 'cancel' ? '취소 중...' : '취소할래요'}
         onPrimary={() => setCancelVisible(false)}
         onSecondary={confirmCancel}
       />
       <ConfirmModal
         visible={rejectVisible}
         title="정말 거절할까요?"
-        body={'거절하면 이 팀과는 다시 만날 수 없어요\n재매칭 기회가 2번 남았습니다.'}
+        body="거절하면 이 팀과는 다시 만날 수 없어요."
         primary="다시 생각해볼게요"
-        secondary="거절할래요"
+        secondary={matchingAction === 'reject' ? '거절 중...' : '거절할래요'}
         onPrimary={() => setRejectVisible(false)}
         onSecondary={confirmReject}
       />
       <ConfirmModal
-        visible={rejectDoneVisible}
-        title="이번 매칭상대를 거절하셨습니다."
-        body="다시 매칭을 진행할까요?"
-        primary="네"
+        visible={rematchPrompt !== null}
+        title={
+          rematchPrompt === 'timeout'
+            ? '매칭 대기 시간이 종료되었습니다.'
+            : '이번 매칭상대와 매칭되지 않았습니다.'
+        }
+        body={
+          remainingRematches === null
+            ? '다시 매칭을 진행할까요?'
+            : `남은 재매칭 기회는 ${remainingRematches}번입니다.\n다시 매칭을 진행할까요?`
+        }
+        primary={matchingAction === 'continue' ? '진행 중...' : '네'}
         secondary="아니요"
         onPrimary={continueMatching}
-        onSecondary={() => setRejectDoneVisible(false)}
+        onSecondary={() => setRematchPrompt(null)}
       />
       <ReportModal
         visible={reportVisible}
+        members={reportableMembers}
         target={reportTarget}
         reason={reportReason}
+        detail={reportDetail}
         onChangeTarget={setReportTarget}
         onChangeReason={setReportReason}
+        onChangeDetail={setReportDetail}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+        submitDisabled={
+          !reportContextId || !toReportId(reportTarget)
+        }
         onClose={() => setReportVisible(false)}
       />
       <ConfirmModal
@@ -454,7 +1185,9 @@ const MeetingTeamChatScreen: React.FC = () => {
       />
       <NoticeModal
         visible={leaveDeniedVisible}
-        body={'현재 매칭 중인 상태여서 나가실 수 없습니다.\n매칭 취소 후에 다시 시도해 주세요.'}
+        body={
+          '현재 매칭 중인 상태여서 나가실 수 없습니다.\n매칭 취소 후에 다시 시도해 주세요.'
+        }
         onClose={() => setLeaveDeniedVisible(false)}
       />
     </SafeAreaView>
@@ -472,6 +1205,7 @@ type HeaderProps = {
   teamView: TeamView;
   actionLabel: string;
   canCancel: boolean;
+  actionPending: boolean;
   onToggle: () => void;
   onInfo: () => void;
   onStart: () => void;
@@ -493,6 +1227,7 @@ const RoomHeader = ({
   teamView,
   actionLabel,
   canCancel,
+  actionPending,
   onToggle,
   onInfo,
   onStart,
@@ -502,10 +1237,15 @@ const RoomHeader = ({
   onToggleTeamView,
   onGoGeneralChat,
 }: HeaderProps) => {
-  const showLeaderActions = expanded && isLeader && ['waiting', 'matching', 'offer'].includes(matchState);
-  const showOfferActions = expanded && matchState === 'offer';
-  const showSingleAction = expanded && ['waitingOpponent', 'matched'].includes(matchState);
-  const cancelEnabled = canCancel && matchState === 'matching';
+  const showLeaderActions =
+    expanded &&
+    isLeader &&
+    ['waiting', 'matching', 'offer'].includes(matchState);
+  const showOfferActions = expanded && isLeader && matchState === 'offer';
+  const showSingleAction =
+    expanded && ['waitingOpponent', 'matched'].includes(matchState);
+  const cancelEnabled =
+    canCancel && matchState === 'matching' && !actionPending;
 
   const handlePrimaryAction = () => {
     if (matchState === 'waiting') onStart();
@@ -521,7 +1261,11 @@ const RoomHeader = ({
             <Text style={styles.headerTitle} numberOfLines={1}>
               {roomTitle}
             </Text>
-            {expanded && <Text style={styles.roomCode}>방코드번호&nbsp;&nbsp;{roomCode}</Text>}
+            {expanded && Boolean(roomCode) && (
+              <Text style={styles.roomCode}>
+                방코드번호&nbsp;&nbsp;{roomCode}
+              </Text>
+            )}
           </View>
           <Text style={styles.headerStatus}>{statusText}</Text>
           <TouchableOpacity style={styles.infoButton} onPress={onInfo}>
@@ -533,17 +1277,23 @@ const RoomHeader = ({
       {expanded && (
         <>
           {['offer', 'waitingOpponent', 'matched'].includes(matchState) && (
-            <TouchableOpacity style={teamView === 'mine' ? styles.pinkPill : styles.bluePill} onPress={onToggleTeamView}>
-              <Text style={styles.teamToggleText}>{teamView === 'mine' ? '상대팀 보기' : '내 팀 보기'}</Text>
+            <TouchableOpacity
+              style={teamView === 'mine' ? styles.pinkPill : styles.bluePill}
+              onPress={onToggleTeamView}
+            >
+              <Text style={styles.teamToggleText}>
+                {teamView === 'mine' ? '상대팀 보기' : '내 팀 보기'}
+              </Text>
             </TouchableOpacity>
           )}
 
           <View style={styles.memberRow}>
             {members.map(member => (
               <View key={member.id} style={styles.memberItem}>
-                <Avatar />
+                <Avatar uri={member.profileImage} />
                 <Text style={styles.memberName} numberOfLines={1}>
-                  {member.leader ? '🎩 ' : ''}{member.name}
+                  {member.leader ? '🎩 ' : ''}
+                  {member.name}
                 </Text>
               </View>
             ))}
@@ -552,18 +1302,22 @@ const RoomHeader = ({
           {showLeaderActions && !showOfferActions && (
             <View style={styles.headerActions}>
               <TouchableOpacity
-                style={[styles.headerActionButton, matchState !== 'waiting' && styles.disabledActionButton]}
+                style={[
+                  styles.headerActionButton,
+                  (matchState !== 'waiting' || actionPending) &&
+                    styles.disabledActionButton,
+                ]}
                 onPress={handlePrimaryAction}
-                disabled={matchState !== 'waiting'}
+                disabled={matchState !== 'waiting' || actionPending}
               >
                 <Text style={styles.headerActionText}>{actionLabel}</Text>
               </TouchableOpacity>
               <View style={styles.actionWithHint}>
-                {matchState === 'matching' && !cancelEnabled && (
-                  <Text style={styles.cancelHint}>2시간 이후부터 취소 가능해요 !</Text>
-                )}
                 <TouchableOpacity
-                  style={[styles.headerActionButton, !cancelEnabled && styles.disabledActionButton]}
+                  style={[
+                    styles.headerActionButton,
+                    !cancelEnabled && styles.disabledActionButton,
+                  ]}
                   onPress={onCancel}
                   disabled={!cancelEnabled}
                 >
@@ -575,19 +1329,35 @@ const RoomHeader = ({
 
           {showOfferActions && (
             <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.headerActionButton} onPress={onAccept}>
+              <TouchableOpacity
+                style={[
+                  styles.headerActionButton,
+                  actionPending && styles.disabledActionButton,
+                ]}
+                onPress={onAccept}
+                disabled={actionPending}
+              >
                 <Text style={styles.headerActionText}>매칭 수락</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.headerActionButton, styles.disabledActionButton]} onPress={onReject}>
+              <TouchableOpacity
+                style={[
+                  styles.headerActionButton,
+                  actionPending && styles.disabledActionButton,
+                ]}
+                onPress={onReject}
+                disabled={actionPending}
+              >
                 <Text style={styles.headerActionText}>매칭 거절</Text>
-                <Text style={styles.rejectCountText}>거절 가능 횟수:1</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {showSingleAction && (
             <TouchableOpacity
-              style={[styles.singleHeaderAction, matchState === 'waitingOpponent' && styles.disabledActionButton]}
+              style={[
+                styles.singleHeaderAction,
+                matchState === 'waitingOpponent' && styles.disabledActionButton,
+              ]}
               onPress={matchState === 'matched' ? onGoGeneralChat : undefined}
               disabled={matchState === 'waitingOpponent'}
             >
@@ -606,14 +1376,21 @@ const RoomHeader = ({
   );
 };
 
-const Avatar = () => (
-  <View style={styles.avatar}>
-    <View style={styles.avatarHead} />
-    <View style={styles.avatarBody} />
-  </View>
-);
+const Avatar = ({ uri }: { uri?: string }) =>
+  uri ? (
+    <Image source={{ uri }} style={styles.avatarImage} />
+  ) : (
+    <View style={styles.avatar}>
+      <View style={styles.avatarHead} />
+      <View style={styles.avatarBody} />
+    </View>
+  );
 
-const BubbleMessage = ({ message }: { message: Extract<ChatMessage, { type: 'message' }> }) => (
+const BubbleMessage = ({
+  message,
+}: {
+  message: Extract<ChatMessage, { type: 'message' }>;
+}) => (
   <View style={[styles.messageRow, message.mine && styles.myMessageRow]}>
     {!message.mine && <Avatar />}
     <View
@@ -630,18 +1407,30 @@ const BubbleMessage = ({ message }: { message: Extract<ChatMessage, { type: 'mes
   </View>
 );
 
-const SystemMessage = ({ message }: { message: Extract<ChatMessage, { type: 'system' }> }) => (
+const SystemMessage = ({
+  message,
+  onMatchedPress,
+}: {
+  message: Extract<ChatMessage, { type: 'system' }>;
+  onMatchedPress: () => void;
+}) => (
   <View style={styles.systemMessage}>
     <Text style={styles.systemText}>{message.text}</Text>
     {message.kind === 'matched' && (
-      <TouchableOpacity style={styles.systemButton}>
+      <TouchableOpacity style={styles.systemButton} onPress={onMatchedPress}>
         <Text style={styles.systemButtonText}>대화하기</Text>
       </TouchableOpacity>
     )}
   </View>
 );
 
-const ModalShell = ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (
+const ModalShell = ({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: React.ReactNode;
+}) => (
   <Modal visible={visible} transparent animationType="fade">
     <View style={styles.modalBackdrop}>
       <View style={styles.modalCard}>{children}</View>
@@ -649,9 +1438,17 @@ const ModalShell = ({ visible, children }: { visible: boolean; children: React.R
   </Modal>
 );
 
-const InfoModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => (
+const InfoModal = ({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) => (
   <ModalShell visible={visible}>
-    <View style={styles.infoIcon}><Text style={styles.infoIconText}>!</Text></View>
+    <View style={styles.infoIcon}>
+      <Text style={styles.infoIconText}>!</Text>
+    </View>
     <Text style={styles.modalSmallTitle}>매칭 상태</Text>
     <Text style={styles.modalBody}>
       대기 중 : 아직 방장이 매칭 시작하지 않았어요.{'\n'}
@@ -696,7 +1493,15 @@ const ConfirmModal = ({
   </ModalShell>
 );
 
-const NoticeModal = ({ visible, body, onClose }: { visible: boolean; body: string; onClose: () => void }) => (
+const NoticeModal = ({
+  visible,
+  body,
+  onClose,
+}: {
+  visible: boolean;
+  body: string;
+  onClose: () => void;
+}) => (
   <ModalShell visible={visible}>
     <Text style={styles.modalBodyStrong}>{body}</Text>
     <TouchableOpacity style={styles.modalPrimaryCentered} onPress={onClose}>
@@ -707,22 +1512,33 @@ const NoticeModal = ({ visible, body, onClose }: { visible: boolean; body: strin
 
 const ReportModal = ({
   visible,
+  members,
   target,
   reason,
+  detail,
   onChangeTarget,
   onChangeReason,
+  onChangeDetail,
+  onSubmit,
+  submitting,
+  submitDisabled,
   onClose,
 }: {
   visible: boolean;
+  members: TeamMember[];
   target: string;
-  reason: string;
+  reason: ReportReason;
+  detail: string;
   onChangeTarget: (value: string) => void;
-  onChangeReason: (value: string) => void;
+  onChangeReason: (value: ReportReason) => void;
+  onChangeDetail: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  submitDisabled: boolean;
   onClose: () => void;
 }) => {
-  const reasons = ['폭언, 욕설 등 언어폭력', '나체, 성적인 이미지', '과도한 개인정보 요구', '기타'];
   const [targetOpen, setTargetOpen] = useState(false);
-  const reportTargets = TEAM_MEMBERS.filter(member => !member.self);
+  const reportTargets = members.filter(member => !member.self);
   const selectedTarget = reportTargets.find(member => member.id === target);
 
   useEffect(() => {
@@ -733,58 +1549,92 @@ const ReportModal = ({
 
   return (
     <ModalShell visible={visible}>
-      <Text style={styles.reportTitle}>신고</Text>
-      <TouchableOpacity
-        style={[styles.selectBox, targetOpen && styles.selectBoxOpen]}
-        onPress={() => setTargetOpen(prev => !prev)}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.selectText}>{selectedTarget?.name ?? 'ㅇㅇㅇ'}</Text>
-        <Text style={styles.selectArrow}>⌄</Text>
-      </TouchableOpacity>
-      {targetOpen && (
-        <View style={styles.targetDropdown}>
-          {reportTargets.map((member, index) => (
-            <TouchableOpacity
-              key={member.id}
+      <ScrollView style={styles.reportScroll} showsVerticalScrollIndicator>
+        <Text style={styles.reportTitle}>신고</Text>
+        <TouchableOpacity
+          style={[styles.selectBox, targetOpen && styles.selectBoxOpen]}
+          onPress={() => setTargetOpen(prev => !prev)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.selectText}>
+            {selectedTarget?.name ?? '신고 대상 선택'}
+          </Text>
+          <Text style={styles.selectArrow}>⌄</Text>
+        </TouchableOpacity>
+        {targetOpen && (
+          <View style={styles.targetDropdown}>
+            {reportTargets.map((member, index) => (
+              <TouchableOpacity
+                key={member.id}
+                style={[
+                  styles.targetDropdownItem,
+                  index !== reportTargets.length - 1 &&
+                    styles.targetDropdownDivider,
+                ]}
+                onPress={() => {
+                  onChangeTarget(member.id);
+                  setTargetOpen(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.targetOption,
+                    target === member.id && styles.targetOptionActive,
+                  ]}
+                >
+                  {member.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {REPORT_REASON_OPTIONS.map(option => (
+          <TouchableOpacity
+            key={option.value}
+            style={styles.radioRow}
+            onPress={() => onChangeReason(option.value)}
+          >
+            <View
               style={[
-                styles.targetDropdownItem,
-                index !== reportTargets.length - 1 && styles.targetDropdownDivider,
+                styles.radioCircle,
+                reason === option.value && styles.radioCircleOn,
               ]}
-              onPress={() => {
-                onChangeTarget(member.id);
-                setTargetOpen(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.targetOption, target === member.id && styles.targetOptionActive]}>
-                {member.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+            />
+            <Text style={styles.radioText}>{option.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TextInput
+          style={styles.reportInput}
+          value={detail}
+          onChangeText={onChangeDetail}
+          placeholder="상세 내용"
+          placeholderTextColor="#B8B8B8"
+          multiline
+        />
+        <Text style={styles.reportHelp}>
+          {submitDisabled
+            ? '채팅방 또는 신고 대상 정보를 확인할 수 없어 제출할 수 없어요.'
+            : '신고 대상과 사유를 확인해 주세요.'}
+        </Text>
+        <View style={styles.modalButtonRow}>
+          <TouchableOpacity
+            style={[
+              styles.modalPrimary,
+              (submitDisabled || submitting) && styles.reportSubmitDisabled,
+            ]}
+            onPress={onSubmit}
+            disabled={submitDisabled || submitting}
+          >
+            <Text style={styles.modalButtonText}>
+              {submitting ? '신고 중...' : '신고하기'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
+            <Text style={styles.modalButtonText}>취소하기</Text>
+          </TouchableOpacity>
         </View>
-      )}
-      {reasons.map(item => (
-        <TouchableOpacity key={item} style={styles.radioRow} onPress={() => onChangeReason(item)}>
-          <View style={[styles.radioCircle, reason === item && styles.radioCircleOn]} />
-          <Text style={styles.radioText}>{item}</Text>
-        </TouchableOpacity>
-      ))}
-      <TextInput
-        style={styles.reportInput}
-        placeholder="상세 내용"
-        placeholderTextColor="#B8B8B8"
-        multiline
-      />
-      <Text style={styles.reportHelp}>신고 대상과 사유를 선택해주세요!</Text>
-      <View style={styles.modalButtonRow}>
-        <TouchableOpacity style={styles.modalPrimary} onPress={onClose}>
-          <Text style={styles.modalButtonText}>신고하기</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
-          <Text style={styles.modalButtonText}>취소하기</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </ModalShell>
   );
 };
@@ -806,9 +1656,20 @@ const styles = StyleSheet.create({
   headerCardExpanded: { paddingBottom: 26 },
   headerTopRow: { flexDirection: 'row', alignItems: 'flex-start' },
   headerTitleWrap: { flex: 1, minWidth: 0 },
-  headerTitle: { color: '#111111', fontSize: 24, fontWeight: '900', lineHeight: 32 },
+  headerTitle: {
+    color: '#111111',
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 32,
+  },
   roomCode: { color: '#111111', fontSize: 13, fontWeight: '600', marginTop: 4 },
-  headerStatus: { color: '#111111', fontSize: 15, fontWeight: '700', marginTop: 8, marginHorizontal: 14 },
+  headerStatus: {
+    color: '#111111',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 8,
+    marginHorizontal: 14,
+  },
   infoButton: {
     width: 28,
     height: 28,
@@ -820,7 +1681,11 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   infoButtonText: { color: '#111111', fontSize: 18, fontWeight: '900' },
-  memberRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18 },
+  memberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
   memberItem: { width: 64, alignItems: 'center' },
   avatar: {
     width: 46,
@@ -831,6 +1696,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
+  },
+  avatarImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#F2F2F2',
   },
   avatarHead: {
     width: 15,
@@ -849,7 +1720,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#B7BBC1',
   },
-  memberName: { color: '#111111', fontSize: 16, fontWeight: '800', marginTop: 5 },
+  memberName: {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 5,
+  },
   chevronWrap: { position: 'absolute', bottom: -14, alignSelf: 'center' },
   chevron: { color: '#B9B9B9', fontSize: 28, lineHeight: 28 },
   pinkPill: {
@@ -882,18 +1758,7 @@ const styles = StyleSheet.create({
   },
   disabledActionButton: { backgroundColor: '#DEDEDE' },
   actionWithHint: { flex: 1, position: 'relative' },
-  cancelHint: {
-    position: 'absolute',
-    left: -16,
-    right: -16,
-    bottom: 48,
-    color: '#FF6F7D',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   headerActionText: { color: '#111111', fontSize: 16, fontWeight: '800' },
-  rejectCountText: { color: '#999999', fontSize: 11, fontWeight: '700', marginTop: 2 },
   singleHeaderAction: {
     alignSelf: 'center',
     width: 188,
@@ -906,7 +1771,12 @@ const styles = StyleSheet.create({
   },
   messagesScroll: { flex: 1 },
   messagesContent: { paddingHorizontal: 28, paddingTop: 44, paddingBottom: 20 },
-  messageRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 10 },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 10,
+  },
   myMessageRow: { justifyContent: 'flex-end' },
   bubble: {
     maxWidth: '76%',
@@ -934,7 +1804,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 18,
   },
-  systemText: { color: '#333333', fontSize: 13, fontWeight: '700', textAlign: 'center', lineHeight: 19 },
+  systemText: {
+    color: '#333333',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 19,
+  },
   systemButton: {
     alignSelf: 'center',
     marginTop: 8,
@@ -951,7 +1827,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF1F4',
     paddingVertical: 8,
   },
-  acceptTimerText: { color: '#FF6678', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  acceptTimerText: {
+    color: '#FF6678',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   actionSheet: {
     marginHorizontal: 20,
     borderTopLeftRadius: 16,
@@ -964,7 +1845,11 @@ const styles = StyleSheet.create({
     gap: 80,
     paddingVertical: 18,
   },
-  actionSheetItem: { alignItems: 'center', justifyContent: 'flex-start', width: 64 },
+  actionSheetItem: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    width: 64,
+  },
   actionSheetIconBox: {
     width: 36,
     height: 36,
@@ -981,7 +1866,12 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
   actionSheetIconImage: { width: 34, height: 34, resizeMode: 'contain' },
-  actionSheetText: { color: '#111111', fontSize: 13, marginTop: 4, lineHeight: 16 },
+  actionSheetText: {
+    color: '#111111',
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 16,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1020,7 +1910,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moreButtonText: { color: '#777777', fontSize: 24, lineHeight: 25, fontWeight: '900' },
+  moreButtonText: {
+    color: '#777777',
+    fontSize: 24,
+    lineHeight: 25,
+    fontWeight: '900',
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: '#00000014',
@@ -1031,6 +1926,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 360,
+    maxHeight: '90%',
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
     padding: 22,
@@ -1050,11 +1946,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoIconText: { color: '#111111', fontSize: 16, fontWeight: '900' },
-  modalSmallTitle: { color: '#001A44', fontSize: 14, fontWeight: '800', marginBottom: 8 },
-  modalTitle: { color: '#001A44', fontSize: 18, fontWeight: '900', marginBottom: 10 },
-  reportTitle: { color: '#001A44', fontSize: 24, fontWeight: '900', marginBottom: 8 },
-  modalBody: { color: '#46506A', fontSize: 15, lineHeight: 22, marginBottom: 20 },
-  modalBodyStrong: { color: '#001A44', fontSize: 17, fontWeight: '800', lineHeight: 24, marginBottom: 20 },
+  modalSmallTitle: {
+    color: '#001A44',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    color: '#001A44',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  reportTitle: {
+    color: '#001A44',
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  reportScroll: { flexShrink: 1 },
+  modalBody: {
+    color: '#46506A',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  modalBodyStrong: {
+    color: '#001A44',
+    fontSize: 17,
+    fontWeight: '800',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
   modalButtonRow: { flexDirection: 'row', gap: 18 },
   modalPrimary: {
     flex: 1,
@@ -1064,6 +1987,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reportSubmitDisabled: { opacity: 0.5 },
   modalPrimaryWide: {
     height: 44,
     borderRadius: 6,
@@ -1128,7 +2052,12 @@ const styles = StyleSheet.create({
   },
   targetOption: { color: '#555555', fontSize: 14, fontWeight: '700' },
   targetOptionActive: { color: '#FF6678', fontWeight: '900' },
-  radioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
   radioCircle: {
     width: 21,
     height: 21,
@@ -1149,7 +2078,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlignVertical: 'top',
   },
-  reportHelp: { color: '#6D7890', fontSize: 14, fontWeight: '700', marginTop: 10, marginBottom: 12 },
+  reportHelp: {
+    color: '#6D7890',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 10,
+    marginBottom: 12,
+  },
 });
 
 export default MeetingTeamChatScreen;

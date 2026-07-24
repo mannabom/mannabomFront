@@ -1,4 +1,8 @@
-import { API_ENDPOINTS_LIST, getApiUrl, getApiUrlWithParams } from '../config/api';
+import {
+  API_ENDPOINTS_LIST,
+  getApiUrl,
+  getApiUrlWithParams,
+} from '../config/api';
 import {
   AcceptMatchRequest,
   AcceptMatchResult,
@@ -58,8 +62,8 @@ const normalizeChatRoomInfo = (raw: any): MeetingChatRoomInfo => {
   const rawTeamMembers = Array.isArray(raw?.teamMembers)
     ? raw.teamMembers
     : Array.isArray(raw?.teamMember)
-      ? raw.teamMember
-      : [];
+    ? raw.teamMember
+    : [];
 
   return {
     roomId: toNumber(raw?.roomId),
@@ -93,7 +97,9 @@ const normalizeRoomSummary = (raw: any): MeetingRoomSummary => ({
       ? undefined
       : toNumber(raw?.roomId),
   meetingId: toNumber(raw?.meetingId),
-  meetingStatus: String(raw?.meetingStatus ?? 'RECRUITING') as MeetingSearchStatus,
+  meetingStatus: String(
+    raw?.meetingStatus ?? 'RECRUITING',
+  ) as MeetingSearchStatus,
   roomName: toStringValue(raw?.roomName, '미팅 방'),
   region: {
     sido: toStringValue(raw?.region?.sido),
@@ -110,14 +116,34 @@ const normalizeRoomSummary = (raw: any): MeetingRoomSummary => ({
   membersPreview: Array.isArray(raw?.membersPreview)
     ? raw.membersPreview.map((member: any) => ({
         userId: toNumber(member?.userId ?? member?.id),
-        profileImage: toStringValue(member?.profileImage ?? member?.profileImageUrl),
+        profileImage: toStringValue(
+          member?.profileImage ?? member?.profileImageUrl,
+        ),
       }))
     : [],
 });
 
-const parseStreamPayload = (value: string): MeetingStreamEvent | null => {
+const STREAM_EVENT_TYPE: Record<
+  MeetingStreamEventName,
+  MeetingStreamEvent['type']
+> = {
+  'matching-status': 'MATCHING_STATUS',
+  'match-found': 'MATCH_FOUND',
+  'matching-timeout': 'MATCHING_TIMEOUT',
+  'decision-result': 'DECISION_RESULT',
+};
+
+const parseStreamPayload = (
+  value: string,
+  eventName: MeetingStreamEventName,
+): MeetingStreamEvent | null => {
   try {
-    return JSON.parse(value) as MeetingStreamEvent;
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      ...parsed,
+      type: STREAM_EVENT_TYPE[eventName],
+    } as MeetingStreamEvent;
   } catch {
     return null;
   }
@@ -172,7 +198,9 @@ class MeetingApiService {
     };
   }
 
-  async getMemberProfiles(roomId: number): Promise<MeetingMemberProfilesResult> {
+  async getMemberProfiles(
+    roomId: number,
+  ): Promise<MeetingMemberProfilesResult> {
     const response = await apiClient.get(
       getApiUrlWithParams(API_ENDPOINTS_LIST.MEETING_MEMBER_PROFILES, {
         roomId: String(roomId),
@@ -209,7 +237,9 @@ class MeetingApiService {
 
     return {
       creationCost:
-        data?.creationCost === undefined ? undefined : toNumber(data?.creationCost),
+        data?.creationCost === undefined
+          ? undefined
+          : toNumber(data?.creationCost),
       remainingPoints: toNumber(data?.remainingPoints),
       meetingChatRoomInfo: normalizeChatRoomInfo(
         data?.meetingChatRoomInfo ?? data?.chatRoomInfo ?? data,
@@ -253,7 +283,9 @@ class MeetingApiService {
     };
   }
 
-  async leaveRoom(payload: MeetingRoomLeaveRequest): Promise<MeetingRoomLeaveResult> {
+  async leaveRoom(
+    payload: MeetingRoomLeaveRequest,
+  ): Promise<MeetingRoomLeaveResult> {
     const response = await apiClient.post(
       API_ENDPOINTS_LIST.MEETING_ROOM_LEAVE,
       payload,
@@ -325,7 +357,7 @@ class MeetingApiService {
 
     eventNames.forEach(eventName => {
       source.addEventListener(eventName, (event: any) => {
-        const parsed = parseStreamPayload(event?.data);
+        const parsed = parseStreamPayload(event?.data, eventName);
         if (parsed) handlers.onEvent?.(parsed, eventName);
       });
     });
@@ -341,7 +373,9 @@ class MeetingApiService {
 
   async getMatchingResult(roomId: string): Promise<MatchingResultData> {
     const response = await apiClient.get(
-      getApiUrlWithParams(API_ENDPOINTS_LIST.MEETING_MATCHING_RESULT, { roomId }),
+      getApiUrlWithParams(API_ENDPOINTS_LIST.MEETING_MATCHING_RESULT, {
+        roomId,
+      }),
     );
     return this.unwrap<MatchingResultData>(response.data);
   }
@@ -351,7 +385,10 @@ class MeetingApiService {
       API_ENDPOINTS_LIST.MEETING_MATCHING_ACCEPT,
       payload,
     );
-    return this.unwrap<AcceptMatchResult>(response.data);
+    const raw = response.data;
+    return (
+      raw?.currentStatus ? raw : this.unwrap<AcceptMatchResult>(raw)
+    ) as AcceptMatchResult;
   }
 
   async rejectMatch(payload: RejectMatchRequest): Promise<RejectMatchResult> {
@@ -359,7 +396,10 @@ class MeetingApiService {
       API_ENDPOINTS_LIST.MEETING_MATCHING_REJECT,
       payload,
     );
-    return this.unwrap<RejectMatchResult>(response.data);
+    const raw = response.data;
+    return (
+      raw?.currentStatus ? raw : this.unwrap<RejectMatchResult>(raw)
+    ) as RejectMatchResult;
   }
 }
 

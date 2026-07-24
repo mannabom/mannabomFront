@@ -120,17 +120,31 @@ export type RootStackParamList = {
 
   MeetingTeamChat: {
     roomId?: string;
+    meetingRoomId?: string;
     roomType?: string;
+    roomTitle?: string;
+    participants?: Array<{
+      userId: string;
+      nickname: string;
+      profileImage: string;
+    }>;
   };
 
   MeetingGeneralChat: {
     roomId?: string;
     roomType?: string;
+    roomTitle?: string;
+    participants?: Array<{
+      userId: string;
+      nickname: string;
+      profileImage: string;
+    }>;
   };
 
   ProfileChat: {
     roomId?: string;
     roomType?: string;
+    targetUserId?: string;
     targetProfileId?: number;
     nickname?: string;
     profileImage?: string;
@@ -140,6 +154,7 @@ export type RootStackParamList = {
   LoveviewChat: {
     roomId?: string;
     roomType?: string;
+    targetUserId?: string;
     targetProfileId?: number;
     nickname?: string;
     profileImage?: string;

@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { REPORT_REASON_OPTIONS } from '../../constants/reportReasons';
 import { chatApiService } from '../../services/ChatApiService';
+import { reportApiService } from '../../services/ReportApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import apiClient from '../../services/apiClient';
 import {
@@ -24,6 +26,7 @@ import {
   ChatRoomType,
   ProfileRequestStatus,
 } from '../../types/ChatAPI';
+import { ReportReason, toReportId } from '../../types/ReportAPI';
 import { getProfileId } from '../../utils/AuthUtils';
 import {
   clearSelectedGift,
@@ -36,8 +39,6 @@ const sendIconImg = require('../../assets/images/Send.png');
 const photoIconImg = require('../../assets/images/photo.png');
 const reportIconImg = require('../../assets/images/report.png');
 const giftIconImg = require('../../assets/images/Gift.png');
-
-const isMockRoomId = (value: string) => value.startsWith('mock-');
 
 type ProfileFlowState =
   | 'idle'
@@ -63,15 +64,6 @@ type UiMessage =
       title: string;
       body: string;
     };
-
-const SAMPLE_MESSAGES: UiMessage[] = [];
-
-const REPORT_REASONS = [
-  '폭언, 욕설 등 언어폭력',
-  '나체, 성적인 이미지',
-  '과도한 개인정보 요구',
-  '기타',
-];
 
 const formatMessageTime = (value?: string) => {
   if (!value) return '';
@@ -211,7 +203,7 @@ const DatingChatRoomScreen: React.FC = () => {
   const isProfileChat = !isLoveview;
 
   const [expanded, setExpanded] = useState(false);
-  const [messages, setMessages] = useState<UiMessage[]>(SAMPLE_MESSAGES);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatRoomStatus, setChatRoomStatus] = useState<ChatRoomStatus>('ACTIVE');
@@ -223,8 +215,12 @@ const DatingChatRoomScreen: React.FC = () => {
   const [profileTooEarlyVisible, setProfileTooEarlyVisible] = useState(false);
   const [giftVisible, setGiftVisible] = useState(false);
   const [leaveVisible, setLeaveVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
+  const [selectedReason, setSelectedReason] = useState(
+    ReportReason.ABUSIVE_LANGUAGE,
+  );
   const [reportDetail, setReportDetail] = useState('');
+  const [reportContextId, setReportContextId] = useState<number | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [selectedGift, setSelectedGiftState] = useState<SelectedGift | null>(null);
   const [resolvedGender, setResolvedGender] = useState(
     String(route.params?.myGender ?? '').toUpperCase(),
@@ -232,7 +228,8 @@ const DatingChatRoomScreen: React.FC = () => {
   const lastChatSyncTimeRef = useRef<string | null>(null);
 
   const closed = chatRoomStatus !== 'ACTIVE';
-  const opponentNickname = String(route.params?.nickname ?? '닉네임');
+  const opponentNickname = String(route.params?.nickname ?? '').trim() || '상대방';
+  const reportTargetUserId = route.params?.targetUserId;
   const targetProfileId = Number(route.params?.targetProfileId ?? 0);
   const opponentProfileImage = String(route.params?.profileImage ?? '');
   const myTalkCount = messages.filter(message => message.type === 'message' && message.mine).length;
@@ -269,6 +266,7 @@ const DatingChatRoomScreen: React.FC = () => {
         roomId,
         lastChatSyncTimeRef.current,
       );
+      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current = result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
       setProfileFlow(resolveProfileFlow(result, nextUserId));
@@ -483,12 +481,6 @@ const DatingChatRoomScreen: React.FC = () => {
       return;
     }
 
-    if (isMockRoomId(roomId)) {
-      setLeaveVisible(false);
-      navigation.goBack();
-      return;
-    }
-
     try {
       await chatApiService.leaveRoom(roomId);
       setLeaveVisible(false);
@@ -496,6 +488,36 @@ const DatingChatRoomScreen: React.FC = () => {
     } catch (error) {
       if (__DEV__) console.warn('Failed to leave dating chat room', error);
       Alert.alert('오류', '채팅방 나가기에 실패했어요.');
+    }
+  };
+
+  const submitReport = async () => {
+    const targetId = toReportId(reportTargetUserId);
+    if (!reportContextId || !targetId || reportSubmitting) {
+      Alert.alert(
+        '신고할 수 없어요',
+        '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
+      );
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      await reportApiService.reportChat({
+        contextId: reportContextId,
+        targetId,
+        reason: selectedReason,
+        additionalDetail: reportDetail.trim(),
+      });
+      setReportVisible(false);
+      setReportDetail('');
+      setSelectedReason(ReportReason.ABUSIVE_LANGUAGE);
+      Alert.alert('신고 완료', '신고가 접수됐어요.');
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to report dating chat', error);
+      Alert.alert('오류', '신고 접수에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -594,6 +616,11 @@ const DatingChatRoomScreen: React.FC = () => {
         reportDetail={reportDetail}
         onChangeReason={setSelectedReason}
         onChangeDetail={setReportDetail}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+        submitDisabled={
+          !reportContextId || !toReportId(reportTargetUserId)
+        }
         onClose={() => setReportVisible(false)}
       />
       <ProfileGuideModal
@@ -691,7 +718,7 @@ const LoveviewHeader = ({
               >
                 <Avatar open={profileOpen} unknown={!profileOpen} />
               </TouchableOpacity>
-              <Text style={styles.profileStatusName}>ㅇㅇㅇ</Text>
+              <Text style={styles.profileStatusName}>{title}</Text>
             </View>
           </View>
 
@@ -865,40 +892,70 @@ const ReportModal = ({
   reportDetail,
   onChangeReason,
   onChangeDetail,
+  onSubmit,
+  submitting,
+  submitDisabled,
   onClose,
 }: {
   visible: boolean;
-  selectedReason: string;
+  selectedReason: ReportReason;
   reportDetail: string;
-  onChangeReason: (reason: string) => void;
+  onChangeReason: (reason: ReportReason) => void;
   onChangeDetail: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  submitDisabled: boolean;
   onClose: () => void;
 }) => (
   <ModalShell visible={visible}>
-    <Text style={styles.reportTitle}>신고</Text>
-    {REPORT_REASONS.map(reason => (
-      <TouchableOpacity key={reason} style={styles.radioRow} onPress={() => onChangeReason(reason)}>
-        <View style={[styles.radioCircle, selectedReason === reason && styles.radioCircleOn]} />
-        <Text style={styles.radioText}>{reason}</Text>
-      </TouchableOpacity>
-    ))}
-    <TextInput
-      style={styles.reportInput}
-      value={reportDetail}
-      onChangeText={onChangeDetail}
-      placeholder="상세 내용"
-      placeholderTextColor="#B8B8B8"
-      multiline
-    />
-    <Text style={styles.reportHelp}>신고 대상과 사유를 선택해주세요!</Text>
-    <View style={styles.modalButtonRow}>
-      <TouchableOpacity style={styles.modalPrimary} onPress={onClose}>
-        <Text style={styles.modalButtonText}>신고하기</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
-        <Text style={styles.modalButtonText}>취소하기</Text>
-      </TouchableOpacity>
-    </View>
+    <ScrollView style={styles.reportScroll} showsVerticalScrollIndicator>
+      <Text style={styles.reportTitle}>신고</Text>
+      {REPORT_REASON_OPTIONS.map(option => (
+        <TouchableOpacity
+          key={option.value}
+          style={styles.radioRow}
+          onPress={() => onChangeReason(option.value)}
+        >
+          <View
+            style={[
+              styles.radioCircle,
+              selectedReason === option.value && styles.radioCircleOn,
+            ]}
+          />
+          <Text style={styles.radioText}>{option.label}</Text>
+        </TouchableOpacity>
+      ))}
+      <TextInput
+        style={styles.reportInput}
+        value={reportDetail}
+        onChangeText={onChangeDetail}
+        placeholder="상세 내용"
+        placeholderTextColor="#B8B8B8"
+        multiline
+      />
+      <Text style={styles.reportHelp}>
+        {submitDisabled
+          ? '채팅방 또는 신고 대상 정보를 확인할 수 없어 제출할 수 없어요.'
+          : '신고 사유를 선택해 주세요.'}
+      </Text>
+      <View style={styles.modalButtonRow}>
+        <TouchableOpacity
+          style={[
+            styles.modalPrimary,
+            (submitDisabled || submitting) && styles.disabledAction,
+          ]}
+          onPress={onSubmit}
+          disabled={submitDisabled || submitting}
+        >
+          <Text style={styles.modalButtonText}>
+            {submitting ? '신고 중...' : '신고하기'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.modalSecondary} onPress={onClose}>
+          <Text style={styles.modalButtonText}>취소하기</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   </ModalShell>
 );
 
@@ -1432,6 +1489,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 350,
+    maxHeight: '90%',
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
     padding: 18,
@@ -1473,6 +1531,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginBottom: 12,
   },
+  reportScroll: { flexShrink: 1 },
   modalBody: {
     color: '#46506A',
     fontSize: 15,

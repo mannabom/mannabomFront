@@ -195,10 +195,7 @@ export interface LoveViewMatchDetailResponse {
   };
 }
 
-export interface ExtraPhotoUnlockResponse {
-  tingRemains: number;
-  eventTingRemains: number;
-}
+export type { UnlockTargetPhotoResponseDto as ExtraPhotoUnlockResponse } from './ProfilePhotoAPI';
 
 // 프론트 확장
 export interface ProfileData extends ProfileMatchConditionResponse {
