@@ -22,6 +22,88 @@ import {
   RespondMessageRequestDTO,
 } from '../types/DatingAPI';
 import type { UnlockTargetPhotoRequestDto } from '../types/ProfilePhotoAPI';
+import { requireExternalId, toExternalId } from '../utils/IdUtils';
+
+const normalizeProfileMatch = (raw: any): ProfileMatchConditionResponse => ({
+  ...raw,
+  profileId: requireExternalId(raw?.profileId, 'profileId'),
+  userId: toExternalId(raw?.userId) ?? undefined,
+});
+
+const normalizeOptionalProfileMatch = (
+  raw: any,
+): ProfileMatchConditionResponse | null => {
+  const profileId = toExternalId(raw?.profileId);
+  if (!profileId) return null;
+  return {
+    ...raw,
+    profileId,
+    userId: toExternalId(raw?.userId) ?? undefined,
+  };
+};
+
+const normalizeLoveViewMatch = (
+  raw: any,
+): LoveViewMatchConditionResponse => ({
+  ...raw,
+  profileId: toExternalId(raw?.profileId) ?? undefined,
+  userId: toExternalId(raw?.userId) ?? undefined,
+});
+
+const normalizeQuestionAnswers = (raw: any) => {
+  if (!Array.isArray(raw)) return raw;
+  return raw.map(item => {
+    if (!item || typeof item !== 'object') return item;
+    if (!item.question || typeof item.question !== 'object') return item;
+    return {
+      ...item,
+      question: {
+        ...item.question,
+        questionId:
+          toExternalId(item.question.questionId ?? item.question.id) ??
+          undefined,
+      },
+    };
+  });
+};
+
+const normalizeMatchDetail = <T extends ProfileMatchDetailResponse | LoveViewMatchDetailResponse>(
+  raw: any,
+): T => ({
+  ...raw,
+  questionAnswers: normalizeQuestionAnswers(raw?.questionAnswers),
+  ...(Array.isArray(raw?.photos)
+    ? {
+        photos: raw.photos
+          .filter((photo: any) => photo && typeof photo === 'object')
+          .map((photo: any) => ({
+            ...photo,
+            photoId:
+              toExternalId(photo?.photoId ?? photo?.id) ?? undefined,
+          })),
+      }
+    : {}),
+}) as T;
+
+const normalizeReceivedSignal = (raw: any): ToMeSignalProfileDto | null => {
+  const id = toExternalId(raw?.id);
+  if (!id) return null;
+  return {
+    ...raw,
+    id,
+    profileId: toExternalId(raw?.profileId) ?? undefined,
+  };
+};
+
+const normalizeSentSignal = (raw: any): FromMeSignalProfileDto | null => {
+  const id = toExternalId(raw?.id);
+  if (!id) return null;
+  return {
+    ...raw,
+    id,
+    profileId: toExternalId(raw?.profileId) ?? undefined,
+  };
+};
 
 class DatingApiService {
   private unwrap<T>(raw: any): T {
@@ -36,7 +118,7 @@ class DatingApiService {
       API_ENDPOINTS_LIST.PROFILE_MATCH_SIMPLE,
       condition,
     );
-    const data = this.unwrap<ProfileMatchConditionResponse>(response.data);
+    const data = normalizeProfileMatch(this.unwrap<any>(response.data));
     if (__DEV__) console.log('프로필 매칭(무료권) 성공:', Boolean(data?.profileId));
     return data;
   }
@@ -49,7 +131,7 @@ class DatingApiService {
       API_ENDPOINTS_LIST.PROFILE_MATCH_SIMPLE_EXTRA,
       condition,
     );
-    const data = this.unwrap<ProfileMatchConditionResponse>(response.data);
+    const data = normalizeProfileMatch(this.unwrap<any>(response.data));
     if (__DEV__) console.log('프로필 매칭(혜택권) 성공:', Boolean(data?.profileId));
     return data;
   }
@@ -74,9 +156,15 @@ class DatingApiService {
     const response = await apiClient.get(
       API_ENDPOINTS_LIST.PROFILE_MATCH_SIMPLE_TODAY,
     );
-    const data = this.unwrap<TodayProfileMatchListResponse>(response.data);
+    const data = this.unwrap<TodayProfileMatchListResponse | any>(response.data);
     return Array.isArray(data?.recommendedTodayProfileList)
       ? data.recommendedTodayProfileList
+          .map(normalizeOptionalProfileMatch)
+          .filter(
+            (
+              item: ProfileMatchConditionResponse | null,
+            ): item is ProfileMatchConditionResponse => item !== null,
+          )
       : [];
   }
 
@@ -88,7 +176,7 @@ class DatingApiService {
       API_ENDPOINTS_LIST.LOVEVIEW_MATCH_SIMPLE,
       condition,
     );
-    const data = this.unwrap<LoveViewMatchConditionResponse>(response.data);
+    const data = normalizeLoveViewMatch(this.unwrap<any>(response.data));
     if (__DEV__) console.log('연애관 매칭 성공:', Boolean(data?.userId || data?.profileId));
     return data;
   }
@@ -98,9 +186,9 @@ class DatingApiService {
     const response = await apiClient.get(
       API_ENDPOINTS_LIST.LOVEVIEW_MATCH_SIMPLE_TODAY,
     );
-    const data = this.unwrap<TodayLoveViewMatchListResponse>(response.data);
+    const data = this.unwrap<TodayLoveViewMatchListResponse | any>(response.data);
     return Array.isArray(data?.recommendedTodayLoveViewList)
-      ? data.recommendedTodayLoveViewList
+      ? data.recommendedTodayLoveViewList.map(normalizeLoveViewMatch)
       : [];
   }
 
@@ -110,7 +198,7 @@ class DatingApiService {
       API_ENDPOINTS_LIST.LOVEVIEW_MATCH_SIMPLE_EXTRA,
       condition,
     );
-    return this.unwrap<LoveViewMatchConditionResponse>(response.data);
+    return normalizeLoveViewMatch(this.unwrap<any>(response.data));
   }
 
   // 추가 프로필 구매(팅)
@@ -129,23 +217,27 @@ class DatingApiService {
   }
 
   // 상대 일반 프로필 상세
-  async getProfileDetail(targetProfileId: number): Promise<ProfileMatchDetailResponse> {
+  async getProfileDetail(targetProfileId: string): Promise<ProfileMatchDetailResponse> {
     const response = await apiClient.post(API_ENDPOINTS_LIST.PROFILE_DETAIL, {
       targetProfileId,
     });
-    return this.unwrap<ProfileMatchDetailResponse>(response.data);
+    return normalizeMatchDetail<ProfileMatchDetailResponse>(
+      this.unwrap<any>(response.data),
+    );
   }
 
   // 상대 연애관 상세
-  async getLoveViewDetail(targetProfileId: number): Promise<LoveViewMatchDetailResponse> {
+  async getLoveViewDetail(targetProfileId: string): Promise<LoveViewMatchDetailResponse> {
     const response = await apiClient.post(API_ENDPOINTS_LIST.LOVEVIEW_DETAIL, {
       targetProfileId,
     });
-    return this.unwrap<LoveViewMatchDetailResponse>(response.data);
+    return normalizeMatchDetail<LoveViewMatchDetailResponse>(
+      this.unwrap<any>(response.data),
+    );
   }
 
   // 추가 사진 열람
-  async unlockExtraPhoto(targetProfileId: number, photoId: number): Promise<ExtraPhotoUnlockResponse> {
+  async unlockExtraPhoto(targetProfileId: string, photoId: string): Promise<ExtraPhotoUnlockResponse> {
     const request: UnlockTargetPhotoRequestDto = {
       targetProfileId,
       photoId,
@@ -158,7 +250,7 @@ class DatingApiService {
   }
 
   // 호감 보내기
-  async sendLike(targetProfileId: number, source: MatchSource): Promise<CheckTingWalletResponse> {
+  async sendLike(targetProfileId: string, source: MatchSource): Promise<CheckTingWalletResponse> {
     const payload = { targetProfileId, source };
     const response = await apiClient.post(API_ENDPOINTS_LIST.LIKE_SEND, payload);
     return this.unwrap<CheckTingWalletResponse>(response.data);
@@ -166,7 +258,7 @@ class DatingApiService {
 
   // 메시지 보내기
   async sendMessage(
-    targetProfileId: number,
+    targetProfileId: string,
     message: string,
     source: MatchSource,
   ): Promise<CheckTingWalletResponse> {
@@ -178,14 +270,14 @@ class DatingApiService {
     return this.unwrap<CheckTingWalletResponse>(response.data);
   }
 
-  async checkReceivedScore(targetProfileId: number): Promise<{ received: boolean }> {
+  async checkReceivedScore(targetProfileId: string): Promise<{ received: boolean }> {
     const response = await apiClient.post(API_ENDPOINTS_LIST.SCORE_IS_RECEIVED, {
       targetProfileId,
     });
     return this.unwrap<{ received: boolean }>(response.data);
   }
 
-  async getReceivedScore(targetProfileId: number): Promise<{ score: number }> {
+  async getReceivedScore(targetProfileId: string): Promise<{ score: number }> {
     const response = await apiClient.post(API_ENDPOINTS_LIST.SCORE_RECEIVED, {
       targetProfileId,
     });
@@ -196,13 +288,21 @@ class DatingApiService {
     try {
       const response = await apiClient.get(API_ENDPOINTS_LIST.INTEREST_RECEIVED);
       const data = this.unwrap<ToMeSignalResponseDTO>(response.data);
-      return Array.isArray(data?.profiles) ? data.profiles : [];
+      return Array.isArray(data?.profiles)
+        ? data.profiles.map(normalizeReceivedSignal).filter(
+            (item): item is ToMeSignalProfileDto => item !== null,
+          )
+        : [];
     } catch (e: any) {
       // 서버 철자 이슈(recieved) 호환 폴백
       if (e?.response?.status === 404) {
         const fallback = await apiClient.get('/api/interest/recieved');
         const data = this.unwrap<ToMeSignalResponseDTO>(fallback.data);
-        return Array.isArray(data?.profiles) ? data.profiles : [];
+        return Array.isArray(data?.profiles)
+          ? data.profiles.map(normalizeReceivedSignal).filter(
+              (item): item is ToMeSignalProfileDto => item !== null,
+            )
+          : [];
       }
       throw e;
     }
@@ -211,7 +311,11 @@ class DatingApiService {
   async getSentInterests(): Promise<FromMeSignalProfileDto[]> {
     const response = await apiClient.get(API_ENDPOINTS_LIST.INTEREST_SENT);
     const data = this.unwrap<FromMeSignalResponseDTO>(response.data);
-    return Array.isArray(data?.profiles) ? data.profiles : [];
+    return Array.isArray(data?.profiles)
+      ? data.profiles.map(normalizeSentSignal).filter(
+          (item): item is FromMeSignalProfileDto => item !== null,
+        )
+      : [];
   }
 
   // 서버 API 개발완료 후 UI 연결 예정

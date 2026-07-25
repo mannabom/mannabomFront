@@ -1,5 +1,5 @@
 export type StoredProfilePreviewCard = {
-  profileId: number;
+  profileId: string;
   nickname: string;
   name?: string;
   age: number;
@@ -10,8 +10,8 @@ export type StoredProfilePreviewCard = {
 export type ProfilePreviewState = {
   profiles: StoredProfilePreviewCard[];
   index: number;
-  ratedByProfileId: Record<number, number>;
-  lockedRatedProfileIds: number[];
+  ratedByProfileId: Record<string, number>;
+  lockedRatedProfileIds: string[];
   freeProfileNum?: number;
   additionalProfileNum?: number;
 };
@@ -28,4 +28,3 @@ export const setProfilePreviewState = (next: ProfilePreviewState | null) => {
 export const clearProfilePreviewState = () => {
   profilePreviewState = null;
 };
-

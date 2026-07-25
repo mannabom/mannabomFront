@@ -37,8 +37,12 @@ import {
   MeetingStreamEvent,
   MyMeetingStatus,
 } from '../../types/MeetingAPI';
-import { ReportReason, toReportId } from '../../types/ReportAPI';
-import { getProfileId } from '../../utils/AuthUtils';
+import {
+  REPORT_DETAIL_MAX_LENGTH,
+  ReportReason,
+} from '../../types/ReportAPI';
+import { getUserId } from '../../utils/AuthUtils';
+import { toExternalId } from '../../utils/IdUtils';
 
 const sendIconImg = require('../../assets/images/Send.png');
 const reportIconImg = require('../../assets/images/report.png');
@@ -129,16 +133,19 @@ const normalizeIncomingMessage = (
   raw: ChatMessageDTO | any,
   currentUserId?: string | null,
 ): ChatMessage | null => {
-  const messageId = raw?.messageId ?? raw?.id ?? raw?.clientMessageId;
+  const messageId = toExternalId(
+    raw?.messageId ?? raw?.id ?? raw?.clientMessageId,
+  );
   const messageContent = raw?.messageContent ?? raw?.content;
   if (!messageId || typeof messageContent !== 'string') return null;
 
   const mine = Boolean(
-    currentUserId && String(raw?.senderId) === String(currentUserId),
+    currentUserId && toExternalId(raw?.senderId) === currentUserId,
   );
   return {
-    id: String(messageId),
-    serverId: String(raw?.messageId ?? messageId),
+    id: messageId,
+    serverId:
+      toExternalId(raw?.messageId ?? raw?.serverId) ?? undefined,
     type: 'message',
     mine,
     tone: mine ? 'pink' : undefined,
@@ -150,8 +157,9 @@ const normalizeIncomingMessage = (
 const MeetingTeamChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const roomId = String(route.params?.roomId ?? '');
-  const requestedMeetingRoomId = String(route.params?.meetingRoomId ?? roomId);
+  const roomId = toExternalId(route.params?.roomId) ?? '';
+  const requestedMeetingRoomId =
+    toExternalId(route.params?.meetingRoomId) ?? '';
   const [expanded, setExpanded] = useState(false);
   const [matchState, setMatchState] = useState<MatchState>('waiting');
   const [meetingRoom, setMeetingRoom] = useState<MyMeetingStatus | null>(null);
@@ -193,11 +201,10 @@ const MeetingTeamChatScreen: React.FC = () => {
     ReportReason.ABUSIVE_LANGUAGE,
   );
   const [reportDetail, setReportDetail] = useState('');
-  const [reportContextId, setReportContextId] = useState<number | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
-  const meetingRoomIdValue = meetingRoom?.roomId || meetingRoom?.meetingId;
-  const meetingRoomId = meetingRoomIdValue ? String(meetingRoomIdValue) : '';
+  const meetingRoomIdValue = meetingRoom?.meetingId ?? meetingRoom?.roomId;
+  const meetingRoomId = toExternalId(meetingRoomIdValue) ?? '';
   const isLeader = Boolean(meetingRoom?.leader);
   const roomTitle = String(
     meetingRoom?.roomName ?? route.params?.roomTitle ?? '미팅 방',
@@ -246,30 +253,37 @@ const MeetingTeamChatScreen: React.FC = () => {
   const ownTeamMembers = useMemo<TeamMember[]>(() => {
     const serverMembers = meetingRoom?.teamMembers ?? [];
     if (serverMembers.length) {
-      const hasCurrentUser = serverMembers.some(
-        member => String(member.userId) === String(currentUserId),
-      );
-
-      return serverMembers.map(member => ({
-        id: String(member.userId),
-        name: member.nickname,
-        profileImage: member.profileImage,
-        leader: member.leader,
-        self:
-          String(member.userId) === String(currentUserId) ||
-          (!hasCurrentUser && isLeader && member.leader),
-      }));
+      return serverMembers.reduce<TeamMember[]>((normalized, member) => {
+          const userId = toExternalId(member.userId);
+          if (!userId) return normalized;
+          normalized.push({
+            id: userId,
+            name: member.nickname,
+            profileImage: member.profileImage,
+            leader: member.leader,
+            self: userId === currentUserId,
+          });
+          return normalized;
+        }, []);
     }
 
-    const routeParticipants = Array.isArray(route.params?.participants)
+    const routeParticipants: any[] = Array.isArray(route.params?.participants)
       ? route.params.participants
       : [];
-    return routeParticipants.map((member: any) => ({
-      id: String(member.userId),
-      name: String(member.nickname || '이름 없음'),
-      profileImage: String(member.profileImage || ''),
-      self: String(member.userId) === String(currentUserId),
-    }));
+    return routeParticipants.reduce<TeamMember[]>(
+      (normalized: TeamMember[], member: any) => {
+        const userId = toExternalId(member.userId);
+        if (!userId) return normalized;
+        normalized.push({
+          id: userId,
+          name: String(member.nickname || '이름 없음'),
+          profileImage: String(member.profileImage || ''),
+          self: userId === currentUserId,
+        });
+        return normalized;
+      },
+      [],
+    );
   }, [
     currentUserId,
     isLeader,
@@ -279,22 +293,32 @@ const MeetingTeamChatScreen: React.FC = () => {
 
   const opponentTeamMembers = useMemo<TeamMember[]>(
     () =>
-      (opponentTeam?.members ?? []).map(member => ({
-        id: String(member.userId),
-        name: member.nickname,
-        profileImage: member.profileImage,
-      })),
+      (opponentTeam?.members ?? []).reduce<TeamMember[]>(
+        (normalized, member) => {
+          const userId = toExternalId(member.userId);
+          if (!userId) return normalized;
+          normalized.push({
+            id: userId,
+            name: member.nickname,
+            profileImage: member.profileImage,
+          });
+          return normalized;
+        },
+        [],
+      ),
     [opponentTeam],
   );
   const reportableMembers = useMemo(() => {
+    if (!currentUserId) return [];
+
     const uniqueMembers = new Map<string, TeamMember>();
-    [...ownTeamMembers, ...opponentTeamMembers].forEach(member => {
+    ownTeamMembers.forEach(member => {
       if (!member.self && member.id) {
         uniqueMembers.set(member.id, member);
       }
     });
     return Array.from(uniqueMembers.values());
-  }, [opponentTeamMembers, ownTeamMembers]);
+  }, [currentUserId, ownTeamMembers]);
 
   const visibleMembers =
     teamView === 'opponent' ? opponentTeamMembers : ownTeamMembers;
@@ -365,11 +389,11 @@ const MeetingTeamChatScreen: React.FC = () => {
   );
 
   const refreshMeetingStatus = useCallback(async () => {
-    const [status, profileId] = await Promise.all([
+    const [status, userId] = await Promise.all([
       meetingApiService.getMyStatus(),
-      getProfileId(),
+      getUserId(),
     ]);
-    setCurrentUserId(profileId);
+    setCurrentUserId(userId);
 
     if (!status.hasActiveRoom) {
       setMeetingRoom(null);
@@ -377,11 +401,11 @@ const MeetingTeamChatScreen: React.FC = () => {
       throw new Error('현재 참여 중인 미팅 방을 찾을 수 없습니다.');
     }
 
-    const activeRoomId = status.roomId || status.meetingId;
+    const activeRoomId = status.meetingId ?? status.roomId;
     if (
       !activeRoomId ||
       !requestedMeetingRoomId ||
-      String(activeRoomId) !== requestedMeetingRoomId
+      toExternalId(activeRoomId) !== requestedMeetingRoomId
     ) {
       setMeetingRoom(null);
       updateMatchState('waiting');
@@ -398,12 +422,10 @@ const MeetingTeamChatScreen: React.FC = () => {
   const loadMeetingState = useCallback(async () => {
     try {
       const status = await refreshMeetingStatus();
-      const activeRoomId = status.roomId || status.meetingId;
+      const activeRoomId = status.meetingId ?? status.roomId;
       if (status.matchingStatus === 'MATCHING' && activeRoomId) {
         try {
-          const result = await meetingApiService.getMatchingResult(
-            String(activeRoomId),
-          );
+          const result = await meetingApiService.getMatchingResult(activeRoomId);
           applyMatchingResult(result);
         } catch (error) {
           if (__DEV__) {
@@ -442,14 +464,13 @@ const MeetingTeamChatScreen: React.FC = () => {
     if (!roomId) return;
 
     try {
-      const nextUserId = await getProfileId();
+      const nextUserId = await getUserId();
       setCurrentUserId(nextUserId);
       const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
       );
-      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current =
         result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
@@ -624,12 +645,12 @@ const MeetingTeamChatScreen: React.FC = () => {
       polling = true;
       try {
         const status = await meetingApiService.getMyStatus();
-        const activeRoomId = status.roomId || status.meetingId;
+        const activeRoomId = status.meetingId ?? status.roomId;
         if (
           disposed ||
           !status.hasActiveRoom ||
           !activeRoomId ||
-          String(activeRoomId) !== meetingRoomId
+          toExternalId(activeRoomId) !== meetingRoomId
         ) {
           return;
         }
@@ -901,10 +922,11 @@ const MeetingTeamChatScreen: React.FC = () => {
       roomType: 'MEETING',
       roomTitle: matchedChatRoom.roomName,
       participants: matchedChatRoom.participants.map(participant => ({
-        userId: String(participant.userId),
+        userId: toExternalId(participant.userId) ?? '',
+        profileId: toExternalId(participant.profileId) ?? undefined,
         nickname: participant.nickname,
         profileImage: participant.profileImage,
-      })),
+      })).filter(participant => participant.userId),
     });
   };
 
@@ -918,12 +940,7 @@ const MeetingTeamChatScreen: React.FC = () => {
   };
 
   const confirmLeaveRoom = async () => {
-    const numericMeetingRoomId = Number(meetingRoomId);
-    if (
-      !meetingRoomId ||
-      !Number.isSafeInteger(numericMeetingRoomId) ||
-      numericMeetingRoomId <= 0
-    ) {
+    if (!meetingRoomId) {
       Alert.alert(
         '나가기 실패',
         '미팅 방 식별자를 확인할 수 없어 방에서 나갈 수 없습니다.',
@@ -933,7 +950,7 @@ const MeetingTeamChatScreen: React.FC = () => {
 
     try {
       const result = await meetingApiService.leaveRoom({
-        roomId: numericMeetingRoomId,
+        roomId: meetingRoomId,
       });
       if (!result.left) {
         Alert.alert(
@@ -954,8 +971,8 @@ const MeetingTeamChatScreen: React.FC = () => {
   };
 
   const submitReport = async () => {
-    const targetId = toReportId(reportTarget);
-    if (!reportContextId || !targetId || reportSubmitting) {
+    const targetId = toExternalId(reportTarget);
+    if (!roomId || !targetId || reportSubmitting) {
       Alert.alert(
         '신고할 수 없어요',
         '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
@@ -966,10 +983,10 @@ const MeetingTeamChatScreen: React.FC = () => {
     setReportSubmitting(true);
     try {
       await reportApiService.reportChat({
-        contextId: reportContextId,
+        contextId: roomId,
         targetId,
         reason: reportReason,
-        additionalDetail: reportDetail.trim(),
+        additionalDetail: reportDetail.trim() || undefined,
       });
       setReportVisible(false);
       setReportDetail('');
@@ -1170,7 +1187,7 @@ const MeetingTeamChatScreen: React.FC = () => {
         onSubmit={submitReport}
         submitting={reportSubmitting}
         submitDisabled={
-          !reportContextId || !toReportId(reportTarget)
+          !roomId || !toExternalId(reportTarget)
         }
         onClose={() => setReportVisible(false)}
       />
@@ -1608,6 +1625,7 @@ const ReportModal = ({
           style={styles.reportInput}
           value={detail}
           onChangeText={onChangeDetail}
+          maxLength={REPORT_DETAIL_MAX_LENGTH}
           placeholder="상세 내용"
           placeholderTextColor="#B8B8B8"
           multiline

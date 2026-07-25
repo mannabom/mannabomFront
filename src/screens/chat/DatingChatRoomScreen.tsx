@@ -26,8 +26,12 @@ import {
   ChatRoomType,
   ProfileRequestStatus,
 } from '../../types/ChatAPI';
-import { ReportReason, toReportId } from '../../types/ReportAPI';
-import { getProfileId } from '../../utils/AuthUtils';
+import {
+  REPORT_DETAIL_MAX_LENGTH,
+  ReportReason,
+} from '../../types/ReportAPI';
+import { getUserId } from '../../utils/AuthUtils';
+import { toExternalId } from '../../utils/IdUtils';
 import {
   clearSelectedGift,
   getSelectedGift,
@@ -98,7 +102,7 @@ const resolveProfileFlow = (
     if (direction === 'RECEIVED' || requestedByMe === false) return 'incomingPending';
     if (direction === 'SENT' || requestedByMe === true) return 'outgoingPending';
     if (requesterId && currentUserId) {
-      return String(requesterId) === String(currentUserId)
+      return toExternalId(requesterId) === currentUserId
         ? 'outgoingPending'
         : 'incomingPending';
     }
@@ -145,22 +149,29 @@ const normalizeMessage = (
       '프로필 요청 상태가 변경되었습니다.';
 
     return {
-      id: String(raw?.messageId ?? raw?.id ?? `system-${Date.now()}`),
+      id:
+        toExternalId(raw?.messageId ?? raw?.id) ??
+        `system-${Date.now()}`,
       type: 'system',
       title: String(title),
       body: String(body),
     };
   }
 
-  const messageId = raw?.messageId ?? raw?.id ?? raw?.clientMessageId;
+  const messageId = toExternalId(
+    raw?.messageId ?? raw?.id ?? raw?.clientMessageId,
+  );
   const messageContent = raw?.messageContent ?? raw?.content;
   if (!messageId || typeof messageContent !== 'string') return null;
 
   return {
-    id: String(messageId),
-    serverId: String(raw?.messageId ?? messageId),
+    id: messageId,
+    serverId:
+      toExternalId(raw?.messageId ?? raw?.serverId) ?? undefined,
     type: 'message',
-    mine: Boolean(currentUserId && String(raw?.senderId) === String(currentUserId)),
+    mine: Boolean(
+      currentUserId && toExternalId(raw?.senderId) === currentUserId,
+    ),
     text: messageType === 'PHOTO' ? '사진을 보냈어요' : messageContent,
     time: formatMessageTime(raw?.timestamp),
     photoUri: messageType === 'PHOTO' ? messageContent : undefined,
@@ -197,7 +208,7 @@ const makeSystemMessage = (state: 'requested' | 'accepted' | 'rejected'): UiMess
 const DatingChatRoomScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const roomId = String(route.params?.roomId ?? '');
+  const roomId = toExternalId(route.params?.roomId) ?? '';
   const roomType = String(route.params?.roomType ?? 'PROFILE') as ChatRoomType;
   const isLoveview = roomType === 'LOVEVIEW' || roomType === 'CODE';
   const isProfileChat = !isLoveview;
@@ -219,7 +230,6 @@ const DatingChatRoomScreen: React.FC = () => {
     ReportReason.ABUSIVE_LANGUAGE,
   );
   const [reportDetail, setReportDetail] = useState('');
-  const [reportContextId, setReportContextId] = useState<number | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [selectedGift, setSelectedGiftState] = useState<SelectedGift | null>(null);
   const [resolvedGender, setResolvedGender] = useState(
@@ -229,8 +239,8 @@ const DatingChatRoomScreen: React.FC = () => {
 
   const closed = chatRoomStatus !== 'ACTIVE';
   const opponentNickname = String(route.params?.nickname ?? '').trim() || '상대방';
-  const reportTargetUserId = route.params?.targetUserId;
-  const targetProfileId = Number(route.params?.targetProfileId ?? 0);
+  const reportTargetUserId = toExternalId(route.params?.targetUserId);
+  const targetProfileId = toExternalId(route.params?.targetProfileId);
   const opponentProfileImage = String(route.params?.profileImage ?? '');
   const myTalkCount = messages.filter(message => message.type === 'message' && message.mine).length;
   const myBubbleColor = isProfileChat
@@ -259,14 +269,13 @@ const DatingChatRoomScreen: React.FC = () => {
     if (!roomId) return;
 
     try {
-      const nextUserId = await getProfileId();
+      const nextUserId = await getUserId();
       setCurrentUserId(nextUserId);
       const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
       );
-      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current = result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
       setProfileFlow(resolveProfileFlow(result, nextUserId));
@@ -492,8 +501,7 @@ const DatingChatRoomScreen: React.FC = () => {
   };
 
   const submitReport = async () => {
-    const targetId = toReportId(reportTargetUserId);
-    if (!reportContextId || !targetId || reportSubmitting) {
+    if (!roomId || !reportTargetUserId || reportSubmitting) {
       Alert.alert(
         '신고할 수 없어요',
         '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
@@ -504,10 +512,10 @@ const DatingChatRoomScreen: React.FC = () => {
     setReportSubmitting(true);
     try {
       await reportApiService.reportChat({
-        contextId: reportContextId,
-        targetId,
+        contextId: roomId,
+        targetId: reportTargetUserId,
         reason: selectedReason,
-        additionalDetail: reportDetail.trim(),
+        additionalDetail: reportDetail.trim() || undefined,
       });
       setReportVisible(false);
       setReportDetail('');
@@ -619,7 +627,7 @@ const DatingChatRoomScreen: React.FC = () => {
         onSubmit={submitReport}
         submitting={reportSubmitting}
         submitDisabled={
-          !reportContextId || !toReportId(reportTargetUserId)
+          !roomId || !reportTargetUserId
         }
         onClose={() => setReportVisible(false)}
       />
@@ -929,6 +937,7 @@ const ReportModal = ({
         style={styles.reportInput}
         value={reportDetail}
         onChangeText={onChangeDetail}
+        maxLength={REPORT_DETAIL_MAX_LENGTH}
         placeholder="상세 내용"
         placeholderTextColor="#B8B8B8"
         multiline

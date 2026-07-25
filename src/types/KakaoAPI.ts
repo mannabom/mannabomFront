@@ -33,7 +33,7 @@ export interface KakaoLoginResponseDto {
     // 기존 회원인 경우에만 제공 (userStatus == "ACTIVE")
     accessToken?: string;
     refreshToken?: string;
-    userId?: number;
+    userId?: string;
     nickname?: string; // 앱에서 설정한 닉네임
 
     // 신규 사용자인 경우에만 제공 (userStatus == "PENDING_VERIFICATION")

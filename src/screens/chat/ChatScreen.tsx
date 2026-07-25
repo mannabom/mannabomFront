@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   SafeAreaView,
   ScrollView,
@@ -14,7 +15,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ChatRoomDTO } from '../../types/ChatAPI';
 import { chatApiService } from '../../services/ChatApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getUserId } from '../../utils/AuthUtils';
+import { toExternalId } from '../../utils/IdUtils';
 
 const benchImg = require('../../assets/images/bench.png');
 
@@ -40,6 +42,33 @@ const getDatingKind = (room: ChatRoomDTO): DatingChatRoom['kind'] =>
   room.chatRoomType === 'PROFILE' || room.chatRoomType === 'DATING'
     ? 'profile'
     : 'loveView';
+
+const normalizeChatRoomIds = (room: ChatRoomDTO): ChatRoomDTO | null => {
+  const chatRoomId = toExternalId(room.chatRoomId);
+  if (!chatRoomId) return null;
+
+  const participants = (Array.isArray(room.participants)
+    ? room.participants
+    : []
+  ).reduce<ChatRoomDTO['participants']>((normalized, participant) => {
+      const userId = toExternalId(participant?.userId);
+      if (!userId) return normalized;
+      const profileId = toExternalId(participant?.profileId);
+      normalized.push({
+        ...participant,
+        userId,
+        ...(profileId ? { profileId } : {}),
+      });
+      return normalized;
+    }, []);
+
+  return {
+    ...room,
+    chatRoomId,
+    meetingRoomId: toExternalId(room.meetingRoomId) ?? undefined,
+    participants,
+  };
+};
 
 const formatChatTime = (value?: string) => {
   if (!value) return '';
@@ -76,7 +105,7 @@ const ChatScreen: React.FC = () => {
   const syncChatRooms = useCallback(async () => {
     setLoading(true);
     try {
-      const nextUserId = await getProfileId();
+      const nextUserId = await getUserId();
       setCurrentUserId(nextUserId);
       chatSocketService.connect().catch(error => {
         if (__DEV__) console.warn('Failed to connect chat socket', error);
@@ -85,7 +114,11 @@ const ChatScreen: React.FC = () => {
         lastSyncTimestamp: lastSyncTimestampRef.current,
       });
       lastSyncTimestampRef.current = result.lastSyncTime || lastSyncTimestampRef.current;
-      setChatRooms(result.chatRooms);
+      setChatRooms(
+        result.chatRooms
+          .map(normalizeChatRoomIds)
+          .filter((room): room is ChatRoomDTO => Boolean(room)),
+      );
     } catch (error) {
       if (__DEV__) console.warn('Failed to sync chat rooms', error);
       setChatRooms([]);
@@ -133,6 +166,14 @@ const ChatScreen: React.FC = () => {
   };
 
   const openMeetingRoom = (room: MeetingChatRoom) => {
+    if (!currentUserId) {
+      Alert.alert(
+        '채팅방을 열 수 없어요',
+        '로그인 사용자 정보를 확인하지 못했어요. 다시 로그인해 주세요.',
+      );
+      return;
+    }
+
     navigation.navigate(room.kind === 'team' ? 'MeetingTeamChat' : 'MeetingGeneralChat', {
       roomId: room.chatRoomId,
       meetingRoomId: room.meetingRoomId,
@@ -143,17 +184,32 @@ const ChatScreen: React.FC = () => {
   };
 
   const openDatingRoom = (room: DatingChatRoom) => {
-    const opponent =
-      room.participants.find(participant => String(participant.userId) !== String(currentUserId)) ??
-      room.participants[0];
+    if (!currentUserId) {
+      Alert.alert(
+        '채팅방을 열 수 없어요',
+        '로그인 사용자 정보를 확인하지 못했어요. 다시 로그인해 주세요.',
+      );
+      return;
+    }
+
+    const opponent = room.participants.find(
+      participant => participant.userId !== currentUserId,
+    );
+    if (!opponent) {
+      Alert.alert(
+        '채팅방을 열 수 없어요',
+        '상대방 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+      return;
+    }
 
     navigation.navigate(room.kind === 'profile' ? 'ProfileChat' : 'LoveviewChat', {
       roomId: room.chatRoomId,
       roomType: room.chatRoomType,
-      targetUserId: opponent?.userId,
-      targetProfileId: Number(opponent?.userId) || undefined,
-      nickname: opponent?.nickname,
-      profileImage: opponent?.profileImage,
+      targetUserId: opponent.userId,
+      targetProfileId: toExternalId(opponent.profileId) ?? undefined,
+      nickname: opponent.nickname,
+      profileImage: opponent.profileImage,
     });
   };
 

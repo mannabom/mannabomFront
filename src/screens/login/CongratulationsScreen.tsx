@@ -11,19 +11,33 @@ import {
   Dimensions,
 } from 'react-native';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId, saveAuthTokens } from '../../utils/AuthUtils';
+import {
+  clearSignupProfileId,
+  getSignupProfileId,
+  saveAuthenticatedSession,
+} from '../../utils/AuthUtils';
 import {
   SignupCompleteRequestDto,
   SignupCompleteResponseDto,
 } from '../../types/NicknameAPI';
 import {
   getCombinedProfileData,
+  clearAllProfileData,
   getOptionalAnswers,
   getRelationshipChoices,
 } from '../../utils/ProfileStorage';
+import { requireExternalId } from '../../utils/IdUtils';
 
 interface CongratulationsScreenProps {
   onComplete: (userData: any) => void;
+}
+
+interface PendingUserData {
+  signupProfileId: string;
+  userId: string;
+  accessToken: string;
+  refreshToken: string;
+  initialPoints: number;
 }
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -87,6 +101,13 @@ const toFiniteNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const requireNonEmptyString = (value: unknown, fieldName: string): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${fieldName}이(가) 없는 잘못된 서버 응답입니다.`);
+  }
+  return value.trim();
+};
+
 const calculateLocalSignupPoints = async (): Promise<number> => {
   const [optionalAnswers, relationshipChoices] = await Promise.all([
     getOptionalAnswers(),
@@ -135,9 +156,9 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
   onComplete,
 }) => {
   const [isPreparing, setIsPreparing] = useState(true);
-  const [isCompleting, setIsCompleting] = useState(false);
   const [initialPoints, setInitialPoints] = useState<number>(0);
-  const [pendingUserData, setPendingUserData] = useState<any | null>(null);
+  const [pendingUserData, setPendingUserData] =
+    useState<PendingUserData | null>(null);
 
   const [cardSize, setCardSize] = useState<{ w: number; h: number }>({
     w: CARD_W,
@@ -248,18 +269,82 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     );
   };
 
+  async function persistCompletedSignup(
+    completedUserData: PendingUserData,
+  ): Promise<void> {
+    await saveAuthenticatedSession(
+      completedUserData.accessToken,
+      completedUserData.refreshToken,
+      completedUserData.userId,
+    );
+
+    setInitialPoints(completedUserData.initialPoints);
+    setPendingUserData(completedUserData);
+
+    try {
+      await clearAllProfileData(completedUserData.signupProfileId);
+      await clearSignupProfileId();
+    } catch (error) {
+      // 가입 진행 ID를 남겨 두면 다음 앱 시작 시 정리를 다시 시도할 수 있다.
+      if (__DEV__) {
+        console.warn(
+          '❌ 가입 임시 데이터 정리 실패(로그인 세션은 저장됨):',
+          error,
+        );
+      }
+    }
+  }
+
+  function showSessionSaveError(completedUserData: PendingUserData): void {
+    Alert.alert(
+      '로그인 정보 저장 실패',
+      '회원가입은 완료되었지만 로그인 정보를 기기에 저장하지 못했습니다. 완료 API를 다시 호출하지 않고 저장만 다시 시도합니다.',
+      [
+        {
+          text: '저장 다시 시도',
+          onPress: () => {
+            void retrySessionSave(completedUserData);
+          },
+        },
+      ],
+    );
+  }
+
+  async function retrySessionSave(
+    completedUserData: PendingUserData,
+  ): Promise<void> {
+    try {
+      setIsPreparing(true);
+      await persistCompletedSignup(completedUserData);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('❌ 완료된 회원가입의 로그인 정보 재저장 실패:', error);
+      }
+      showSessionSaveError(completedUserData);
+    } finally {
+      setIsPreparing(false);
+    }
+  }
+
   const prepareSignupResult = async () => {
+    let completedUserData: PendingUserData | null = null;
+
     try {
       setIsPreparing(true);
 
-      const profileId = await getProfileId();
-      if (__DEV__) console.log('🎉 [prepareSignupResult] profileId:', profileId ? 'YES' : 'NO');
-
-      if (!profileId) {
-        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+      const signupProfileId = await getSignupProfileId();
+      if (__DEV__) {
+        console.log(
+          '🎉 [prepareSignupResult] signupProfileId:',
+          signupProfileId ? 'YES' : 'NO',
+        );
       }
 
-      const combined = await getCombinedProfileData(profileId);
+      if (!signupProfileId) {
+        throw new Error('가입 진행 ID가 없습니다. 다시 로그인해주세요.');
+      }
+
+      const combined = await getCombinedProfileData(signupProfileId);
       if (__DEV__) console.log('🔗 [prepareSignupResult] combined profile data ready:', !!combined);
 
       if (!combined) {
@@ -289,7 +374,9 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
       }
 
       const completeUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`;
-      const requestData: SignupCompleteRequestDto = { profileId };
+      const requestData: SignupCompleteRequestDto = {
+        profileId: signupProfileId,
+      };
 
       if (__DEV__) console.log('🌐 [prepareSignupResult] POST signup complete:', completeUrl);
       if (__DEV__) console.log('📝 [signup complete] request profileId:', requestData.profileId ? 'YES' : 'NO');
@@ -305,7 +392,11 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
 
       const responseData = body.json as SignupCompleteResponseDto | null;
 
-      if (!res.ok || !responseData?.data) {
+      if (
+        !res.ok ||
+        responseData?.success !== true ||
+        !responseData.data
+      ) {
         const msg =
           responseData?.message ||
           body.text ||
@@ -317,17 +408,32 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         responseData.data as unknown as Record<string, unknown>,
         localSignupPoints,
       );
-      setInitialPoints(points);
 
-      const userData = {
-        userId: responseData.data.userId,
-        accessToken: responseData.data.accessToken,
-        refreshToken: responseData.data.refreshToken,
+      completedUserData = {
+        signupProfileId,
+        userId: requireExternalId(
+          responseData.data.userId,
+          '회원가입 완료 사용자 ID',
+        ),
+        accessToken: requireNonEmptyString(
+          responseData.data.accessToken,
+          '액세스 토큰',
+        ),
+        refreshToken: requireNonEmptyString(
+          responseData.data.refreshToken,
+          '리프레시 토큰',
+        ),
         initialPoints: points,
       };
-      setPendingUserData(userData);
+
+      await persistCompletedSignup(completedUserData);
     } catch (error) {
       if (__DEV__) console.warn('❌ 회원가입 준비 오류(prepareSignupResult):', error);
+
+      if (completedUserData) {
+        showSessionSaveError(completedUserData);
+        return;
+      }
 
       const msg = error instanceof Error ? error.message : '오류가 발생했습니다.';
 
@@ -342,21 +448,14 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleConfirm = async () => {
-    if (!pendingUserData || isCompleting) return;
+  const handleConfirm = () => {
+    if (!pendingUserData) return;
 
-    setIsCompleting(true);
-    try {
-      if (__DEV__) console.log('🔐 [handleConfirm] saveAuthTokens start');
-      await saveAuthTokens(pendingUserData.accessToken, pendingUserData.refreshToken);
-      if (__DEV__) console.log('✅ [handleConfirm] tokens saved, navigating...');
-      onComplete(pendingUserData);
-    } catch (e) {
-      if (__DEV__) console.warn('❌ 토큰 저장 오류:', e);
-      Alert.alert('오류', '로그인 정보 저장 중 문제가 발생했어요.');
-    } finally {
-      setIsCompleting(false);
-    }
+    const {
+      signupProfileId: _completedSignupProfileId,
+      ...authenticatedUserData
+    } = pendingUserData;
+    onComplete(authenticatedUserData);
   };
 
   return (
@@ -402,13 +501,13 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (isPreparing || !pendingUserData || isCompleting) && styles.confirmButtonDisabled,
+              (isPreparing || !pendingUserData) && styles.confirmButtonDisabled,
             ]}
             onPress={handleConfirm}
-            disabled={isPreparing || !pendingUserData || isCompleting}
+            disabled={isPreparing || !pendingUserData}
             activeOpacity={0.85}
           >
-            {isPreparing || isCompleting ? (
+            {isPreparing ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.confirmButtonText}>확인</Text>

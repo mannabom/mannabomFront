@@ -141,7 +141,7 @@ export const getApiUrlWithParams = (
 ): string => {
   let url = endpoint;
   Object.entries(params).forEach(([key, value]) => {
-    url = url.replace(`{${key}}`, value);
+    url = url.replace(`{${key}}`, encodeURIComponent(value));
   });
   return `${API_BASE_URL}${url}`;
 };

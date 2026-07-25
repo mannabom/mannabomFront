@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 import type { SignupTermType } from './TermsAgreementScreen';
 
 interface TermsDetailScreenProps {
@@ -162,7 +162,7 @@ const TermsDetailScreen: React.FC<TermsDetailScreenProps> = ({
 
   const handleConfirm = async () => {
     try {
-      const id = await getProfileId();
+      const id = await getSignupProfileId();
       const key = id ? `${STORAGE_PREFIX}_${id}` : STORAGE_PREFIX;
       const raw = await AsyncStorage.getItem(key);
       const prev = raw ? normalizeTermsState(JSON.parse(raw)) : DEFAULT_STATE;

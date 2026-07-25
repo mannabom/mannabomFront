@@ -26,8 +26,12 @@ import { chatApiService } from '../../services/ChatApiService';
 import { reportApiService } from '../../services/ReportApiService';
 import { chatSocketService } from '../../services/ChatSocketService';
 import { ChatMessageDTO, ChatRoomStatus } from '../../types/ChatAPI';
-import { ReportReason, toReportId } from '../../types/ReportAPI';
-import { getProfileId } from '../../utils/AuthUtils';
+import {
+  REPORT_DETAIL_MAX_LENGTH,
+  ReportReason,
+} from '../../types/ReportAPI';
+import { getUserId } from '../../utils/AuthUtils';
+import { toExternalId } from '../../utils/IdUtils';
 import { PickedChatPhoto, showChatPhotoPicker } from '../../utils/ChatPhotoPicker';
 
 const sendIconImg = require('../../assets/images/Send.png');
@@ -127,21 +131,28 @@ const normalizeIncomingMessage = (
                 ? 'cancelRejected'
                 : 'cancelVote';
     return {
-      id: String(raw?.messageId ?? raw?.id ?? `system-${Date.now()}`),
+      id:
+        toExternalId(raw?.messageId ?? raw?.id) ??
+        `system-${Date.now()}`,
       type: 'system',
       kind,
       body: String(raw?.messageContent ?? raw?.content ?? '').trim() || undefined,
     };
   }
 
-  const messageId = raw?.messageId ?? raw?.id ?? raw?.clientMessageId;
+  const messageId = toExternalId(
+    raw?.messageId ?? raw?.id ?? raw?.clientMessageId,
+  );
   const messageContent = raw?.messageContent ?? raw?.content;
   if (!messageId || typeof messageContent !== 'string') return null;
 
-  const mine = Boolean(currentUserId && String(raw?.senderId) === String(currentUserId));
+  const mine = Boolean(
+    currentUserId && toExternalId(raw?.senderId) === currentUserId,
+  );
   return {
-    id: String(messageId),
-    serverId: String(raw?.messageId ?? messageId),
+    id: messageId,
+    serverId:
+      toExternalId(raw?.messageId ?? raw?.serverId) ?? undefined,
     type: 'message',
     mine,
     tone: mine ? 'pink' : undefined,
@@ -154,7 +165,7 @@ const normalizeIncomingMessage = (
 const MeetingGeneralChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const roomId = String(route.params?.roomId ?? '');
+  const roomId = toExternalId(route.params?.roomId) ?? '';
   const roomTitle = String(route.params?.roomTitle ?? '').trim() || '미팅 채팅방';
   const routeParticipants = route.params?.participants;
 
@@ -178,7 +189,6 @@ const MeetingGeneralChatScreen: React.FC = () => {
     ReportReason.ABUSIVE_LANGUAGE,
   );
   const [reportDetail, setReportDetail] = useState('');
-  const [reportContextId, setReportContextId] = useState<number | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LocationState>(null);
   const lastChatSyncTimeRef = useRef<string | null>(null);
@@ -187,20 +197,26 @@ const MeetingGeneralChatScreen: React.FC = () => {
   const members = useMemo<MeetingMember[]>(
     () => {
       const participants = Array.isArray(routeParticipants) ? routeParticipants : [];
-      return participants.map((participant: any) => ({
-        id: String(participant.userId),
-        name: String(participant.nickname ?? '').trim() || '이름 없음',
-        self: Boolean(
-          currentUserId && String(participant.userId) === String(currentUserId),
-        ),
-      }));
+      return participants.reduce<MeetingMember[]>(
+        (normalized: MeetingMember[], participant: any) => {
+          const userId = toExternalId(participant.userId);
+          if (!userId) return normalized;
+          normalized.push({
+            id: userId,
+            name: String(participant.nickname ?? '').trim() || '이름 없음',
+            self: Boolean(currentUserId && userId === currentUserId),
+          });
+          return normalized;
+        },
+        [],
+      );
     },
     [currentUserId, routeParticipants],
   );
   const visibleMembers = members.slice(memberPage * 4, memberPage * 4 + 4);
   const reportTargets = useMemo(
-    () => members.filter(member => !member.self),
-    [members],
+    () => currentUserId ? members.filter(member => !member.self) : [],
+    [currentUserId, members],
   );
 
   useEffect(() => {
@@ -213,14 +229,13 @@ const MeetingGeneralChatScreen: React.FC = () => {
     if (!roomId) return;
 
     try {
-      const nextUserId = await getProfileId();
+      const nextUserId = await getUserId();
       setCurrentUserId(nextUserId);
       const isInitialSync = !lastChatSyncTimeRef.current;
       const result = await chatApiService.syncChatRoomMessages(
         roomId,
         lastChatSyncTimeRef.current,
       );
-      setReportContextId(toReportId(result.chatRoomId));
       lastChatSyncTimeRef.current = result.lastSyncTime || lastChatSyncTimeRef.current;
       setChatRoomStatus(result.chatRoomStatus);
       const normalized = result.messages
@@ -473,8 +488,8 @@ const MeetingGeneralChatScreen: React.FC = () => {
   };
 
   const submitReport = async () => {
-    const targetId = toReportId(reportTarget);
-    if (!reportContextId || !targetId || reportSubmitting) {
+    const targetId = toExternalId(reportTarget);
+    if (!roomId || !targetId || reportSubmitting) {
       Alert.alert(
         '신고할 수 없어요',
         '채팅방 또는 신고 대상 정보를 확인하지 못했어요. 채팅 목록에서 다시 들어와 주세요.',
@@ -485,10 +500,10 @@ const MeetingGeneralChatScreen: React.FC = () => {
     setReportSubmitting(true);
     try {
       await reportApiService.reportChat({
-        contextId: reportContextId,
+        contextId: roomId,
         targetId,
         reason: selectedReason,
-        additionalDetail: reportDetail.trim(),
+        additionalDetail: reportDetail.trim() || undefined,
       });
       setReportVisible(false);
       setReportDetail('');
@@ -602,7 +617,7 @@ const MeetingGeneralChatScreen: React.FC = () => {
         onSubmit={submitReport}
         submitting={reportSubmitting}
         submitDisabled={
-          !reportContextId || !toReportId(reportTarget)
+          !roomId || !toExternalId(reportTarget)
         }
         onClose={() => setReportVisible(false)}
       />
@@ -981,6 +996,7 @@ const ReportModal = ({
         style={styles.reportInput}
         value={reportDetail}
         onChangeText={onChangeDetail}
+        maxLength={REPORT_DETAIL_MAX_LENGTH}
         placeholder="상세 내용"
         placeholderTextColor="#B8B8B8"
         multiline

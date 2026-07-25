@@ -20,6 +20,7 @@ import {
 import { API_BASE_URL } from '../../config/api';
 import { datingApiService } from '../../services/DatingApiService';
 import { drinkingHabitLabels, smokingHabitLabels } from '../../utils/DatingUtils';
+import { toExternalId } from '../../utils/IdUtils';
 
 type DetailData = {
   nickname: string;
@@ -32,7 +33,7 @@ type DetailData = {
   smoking?: SmokingHabit;
   drinking?: DrinkingHabit;
   questionAnswers: MatchQuestionAnswer[];
-  photos: { photoId: number; imageUrl: string; blind: boolean }[];
+  photos: { photoId: string; imageUrl: string; blind: boolean }[];
 };
 
 type ChoiceQA = {
@@ -50,14 +51,14 @@ const BODY_TYPE_LABELS: Record<string, string> = {
 };
 
 const CHOICE_QUESTIONS = [
-  { id: 'fight', title: '애인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', questionId: 8, keywords: ['싸웠을', '다퉜', '갈등'] },
-  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', questionId: 9, keywords: ['함께한사진', '사진', 'sns'] },
-  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', questionId: 10, keywords: ['중요한것', '중요한것은', '연애에서더중요'] },
-  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', questionId: 11, keywords: ['데이트', '실내', '실외'] },
-  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', questionId: 12, keywords: ['질투', '쿨한게편하다'] },
-  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기', questionId: 13, keywords: ['이상적인하루', '하루는', '휴일'] },
-  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', questionId: 14, keywords: ['끌리는모습', '매력', '주로끌리는'] },
-  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', questionId: 15, keywords: ['친구들과', '친구', '어울리며'] },
+  { id: 'fight', title: '애인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', questionId: '8', keywords: ['싸웠을', '다퉜', '갈등'] },
+  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', questionId: '9', keywords: ['함께한사진', '사진', 'sns'] },
+  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', questionId: '10', keywords: ['중요한것', '중요한것은', '연애에서더중요'] },
+  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', questionId: '11', keywords: ['데이트', '실내', '실외'] },
+  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', questionId: '12', keywords: ['질투', '쿨한게편하다'] },
+  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기', questionId: '13', keywords: ['이상적인하루', '하루는', '휴일'] },
+  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', questionId: '14', keywords: ['끌리는모습', '매력', '주로끌리는'] },
+  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', questionId: '15', keywords: ['친구들과', '친구', '어울리며'] },
 ] as const;
 
 const CHOICE_CODE_TO_SIDE: Record<string, 'LEFT' | 'RIGHT'> = {
@@ -146,15 +147,19 @@ const parseDetail = (
 
   const photosRaw = Array.isArray(raw?.photos) ? raw.photos : [];
   const photos = photosRaw
-    .map((p: any) => ({
-      photoId: Number(p?.photoId ?? 0),
+    .map((p: any, index: number) => ({
+      photoId: toExternalId(p?.photoId) ?? `photo-${index}`,
       imageUrl: toAbsoluteUri(p?.imageUrl ?? p?.ImageUrl ?? p?.photoUrl),
       blind: Boolean(p?.blind),
     }))
     .filter((p: any) => p.imageUrl);
 
   if (!photos.length && previewImageUrl) {
-    photos.push({ photoId: 0, imageUrl: toAbsoluteUri(previewImageUrl), blind: false });
+    photos.push({
+      photoId: 'preview',
+      imageUrl: toAbsoluteUri(previewImageUrl),
+      blind: false,
+    });
   }
 
   const regionText = String(raw?.region ?? '').trim();
@@ -182,7 +187,7 @@ const ChatProfileDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const source: MatchSource = route.params?.source ?? 'PROFILE_MATCH';
-  const targetProfileId = Number(route.params?.targetProfileId ?? 0);
+  const targetProfileId = toExternalId(route.params?.targetProfileId);
   const isProfileSource = source === 'PROFILE_MATCH';
 
   const [loading, setLoading] = useState(true);
@@ -223,7 +228,9 @@ const ChatProfileDetailScreen: React.FC = () => {
       .map((item: any, idx: number) => {
         const qObj = item?.question;
         const qText = typeof qObj === 'string' ? qObj : qObj?.question ?? '';
-        const qId = Number(typeof qObj === 'object' ? qObj?.questionId : item?.questionId) || 0;
+        const qId = toExternalId(
+          typeof qObj === 'object' ? qObj?.questionId : item?.questionId,
+        );
         const qType = String(
           (typeof qObj === 'object' ? qObj?.questionType : item?.questionType) ?? '',
         ).toUpperCase();
@@ -232,7 +239,7 @@ const ChatProfileDetailScreen: React.FC = () => {
         ).trim();
 
         return {
-          key: `${qId || 'q'}-${idx}`,
+          key: `${qId ?? 'q'}-${idx}`,
           qId,
           qType,
           title: cleanQuestionTitle(qText || `질문 ${idx + 1}`),
@@ -247,12 +254,14 @@ const ChatProfileDetailScreen: React.FC = () => {
 
     normalizedQAs.forEach(item => {
       const isChoiceType = item.qType.includes('CHOICE');
-      const isChoiceById = item.qId >= 8 && item.qId <= 15;
+      const isChoiceById = CHOICE_QUESTIONS.some(
+        question => question.questionId === item.qId,
+      );
       if (!isChoiceType && !isChoiceById) return;
 
       const normTitle = normalizeQuestionKey(item.title);
       const template = CHOICE_QUESTIONS.find(q => {
-        if (item.qId > 0 && item.qId === q.questionId) return true;
+        if (item.qId && item.qId === q.questionId) return true;
         if (normTitle.includes(normalizeQuestionKey(q.title))) return true;
         return q.keywords.some(keyword => normTitle.includes(normalizeQuestionKey(keyword)));
       });

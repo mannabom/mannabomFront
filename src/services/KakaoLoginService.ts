@@ -12,6 +12,7 @@ import {
   KakaoLoginRequestDto,
   Gender,
 } from '../types/KakaoAPI';
+import { toExternalId } from '../utils/IdUtils';
 
 export class KakaoLoginService {
   private static getReadableLoginError(error: any): string {
@@ -161,7 +162,7 @@ export class KakaoLoginService {
           userData: {
             accessToken: response.data.accessToken,
             refreshToken: response.data.refreshToken,
-            userId: response.data.userId,
+            userId: toExternalId(response.data.userId) ?? undefined,
             nickname: response.data.nickname,
           },
         };
@@ -184,4 +185,3 @@ export class KakaoLoginService {
     }
   }
 }
-

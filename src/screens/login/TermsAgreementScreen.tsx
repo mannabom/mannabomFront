@@ -12,7 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 
 export type SignupTermType =
   | 'privacy'
@@ -96,20 +96,23 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   onViewTermsDetail,
   onCancel,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [signupProfileId, setSignupProfileId] = useState<string | null>(null);
   const [termsState, setTermsState] = useState<TermsState>(DEFAULT_STATE);
   const [isLoading, setIsLoading] = useState(false);
 
   const storageKey = useMemo(
-    () => (profileId ? `${STORAGE_PREFIX}_${profileId}` : STORAGE_PREFIX),
-    [profileId],
+    () =>
+      signupProfileId
+        ? `${STORAGE_PREFIX}_${signupProfileId}`
+        : STORAGE_PREFIX,
+    [signupProfileId],
   );
 
   useEffect(() => {
     const init = async () => {
-      const id = await getProfileId();
+      const id = await getSignupProfileId();
       const key = id ? `${STORAGE_PREFIX}_${id}` : STORAGE_PREFIX;
-      setProfileId(id);
+      setSignupProfileId(id);
 
       try {
         const raw = await AsyncStorage.getItem(key);
@@ -179,7 +182,7 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!profileId || !isRequiredAgreed || isLoading) {
+    if (!signupProfileId || !isRequiredAgreed || isLoading) {
       Alert.alert('알림', '필수 약관에 모두 동의해주세요.');
       return;
     }
@@ -187,7 +190,7 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
     setIsLoading(true);
     try {
       const requestData = {
-        profileId,
+        profileId: signupProfileId,
         termsAgreement: {
           serviceTerms:
             termsState.operationPolicy &&

@@ -4,7 +4,7 @@ import type {
   ProfilePhotoUploadFile,
   UserProfilePhotosResponseDTO,
 } from '../types/ProfilePhotoAPI';
-import { toSafeProfilePhotoId } from '../types/ProfilePhotoAPI';
+import { toProfilePhotoId } from '../types/ProfilePhotoAPI';
 import apiClient from './apiClient';
 
 const sortByServerIndex = (
@@ -15,7 +15,16 @@ const sortByServerIndex = (
   }
 
   return {
-    photos: [...response.photos].sort((left, right) => left.index - right.index),
+    photos: response.photos
+      .map(photo => {
+        const id = toProfilePhotoId(photo?.id);
+        return id ? { ...photo, id } : null;
+      })
+      .filter(
+        (photo): photo is UserProfilePhotosResponseDTO['photos'][number] =>
+          photo !== null,
+      )
+      .sort((left, right) => left.index - right.index),
   };
 };
 
@@ -45,14 +54,14 @@ class ProfilePhotoApiService {
     return sortByServerIndex(response.data);
   }
 
-  async deletePhoto(photoId: number): Promise<UserProfilePhotosResponseDTO> {
-    const safePhotoId = toSafeProfilePhotoId(photoId);
-    if (!safePhotoId) {
+  async deletePhoto(photoId: string): Promise<UserProfilePhotosResponseDTO> {
+    const normalizedPhotoId = toProfilePhotoId(photoId);
+    if (!normalizedPhotoId) {
       throw new Error('삭제할 사진 ID가 올바르지 않습니다.');
     }
 
     const request: DeleteUserProfilePhotoRequestDTO = {
-      photoId: safePhotoId,
+      photoId: normalizedPhotoId,
     };
     const response = await apiClient.delete<UserProfilePhotosResponseDTO>(
       API_ENDPOINTS_LIST.USER_PHOTO,

@@ -20,11 +20,11 @@ export interface ProfileMatchConditionRequest {
 }
 
 export interface ProfileMatchConditionResponse {
-  // ✅ 백엔드 문서 기준: profileId
-  profileId: number;
+  // 백엔드 문서 기준: 상세 프로필 이동에 쓰는 영구 profileId
+  profileId: string;
 
-  // ✅ 기존 코드 호환용: 혹시 아직 userId로 내려오면 이것도 받게 처리
-  userId?: number;
+  // 응답에 포함될 수 있지만 profileId 대용으로 사용하지 않는다.
+  userId?: string;
 
   profileImageUrl: string;
   age: number;
@@ -39,7 +39,7 @@ export interface ProfileMatchConditionResponse {
 }
 
 export interface MatchProfileRatingRequest {
-  targetProfileId: number;
+  targetProfileId: string;
   score: number; // 1~5
 }
 
@@ -52,8 +52,8 @@ export interface LoveViewMatchConditionRequest {
 }
 
 export interface LoveViewMatchConditionResponse {
-  profileId?: number;
-  userId: number;
+  profileId?: string;
+  userId?: string;
   nickname?: string;
   name?: string;
   age: number;
@@ -89,8 +89,8 @@ export type InterestType = 'LIKE' | 'MESSAGE' | 'HIGH_SCORE';
 export type InterestMatchType = 'PROFILE' | 'LOVE_VIEW';
 
 export interface ToMeSignalProfileDto {
-  id: number;
-  profileId?: number;
+  id: string;
+  profileId?: string;
   type: InterestType;
   matchType?: InterestMatchType | null;
   fromUserNickname?: string;
@@ -100,8 +100,8 @@ export interface ToMeSignalProfileDto {
 }
 
 export interface FromMeSignalProfileDto {
-  id: number;
-  profileId?: number;
+  id: string;
+  profileId?: string;
   type: InterestType;
   matchType?: InterestMatchType | null;
   toUserNickname?: string;
@@ -121,13 +121,13 @@ export interface FromMeSignalResponseDTO {
 }
 
 export interface RespondLikeRequestDTO {
-  likeRequestId: number;
+  likeRequestId: string;
   accepted: boolean;
   rejectReason?: string;
 }
 
 export interface RespondMessageRequestDTO {
-  messageRequestId: number;
+  messageRequestId: string;
   accepted: boolean;
   rejectReason?: string;
 }
@@ -144,7 +144,7 @@ export interface MatchActionState<T extends string> {
 
 export interface MatchQuestionAnswer {
   question?: {
-    questionId?: number;
+    questionId?: string;
     question?: string;
     questionType?: string;
   } | string;
@@ -152,7 +152,11 @@ export interface MatchQuestionAnswer {
 }
 
 export interface MatchPhoto {
-  photoId: number;
+  /**
+   * 표시 전용 대표 사진에는 ID가 없을 수 있다.
+   * 사진 열람처럼 ID가 필요한 동작만 이 값이 있을 때 허용한다.
+   */
+  photoId?: string;
   imageUrl?: string;
   ImageUrl?: string;
   blind?: boolean;

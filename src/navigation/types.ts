@@ -28,7 +28,7 @@ export type RootStackParamList = {
   ProfileDetail: undefined;
   ProfilePreview: {
     profiles: Array<{
-      profileId: number;
+      profileId: string;
       nickname: string;
       name?: string;
       age: number;
@@ -36,8 +36,8 @@ export type RootStackParamList = {
       photoUris?: string[];
     }>;
     startIndex?: number;
-    ratedByProfileId?: Record<number, number>;
-    lockedRatedProfileIds?: number[];
+    ratedByProfileId?: Record<string, number>;
+    lockedRatedProfileIds?: string[];
     isVip: boolean;
     isSubscribed: boolean;
     tingBalance: number;
@@ -56,7 +56,7 @@ export type RootStackParamList = {
     want?: string;
     charm?: string;
     loveCards?: Array<{
-      profileId: number;
+      profileId: string;
       nickname: string;
       requiredQA: Array<{ question: string; answer: string }>;
       openQA: Array<{ question: string; answer: string }>;
@@ -93,7 +93,7 @@ export type RootStackParamList = {
 
   MatchDetail: {
     source: MatchSource;
-    targetProfileId: number;
+    targetProfileId: string;
     previewName?: string;
     previewImageUrl?: string;
     fromInterestTab?: 'received' | 'sent';
@@ -106,8 +106,8 @@ export type RootStackParamList = {
   InterestDetail: {
     tab: 'received' | 'sent';
     kind: 'LIKE' | 'MESSAGE' | 'HIGH_SCORE';
-    sourceId: number;
-    profileId: number;
+    sourceId: string;
+    profileId: string;
     nickname: string;
     imageUrl?: string;
     isLoveView?: boolean;
@@ -125,6 +125,7 @@ export type RootStackParamList = {
     roomTitle?: string;
     participants?: Array<{
       userId: string;
+      profileId?: string;
       nickname: string;
       profileImage: string;
     }>;
@@ -136,6 +137,7 @@ export type RootStackParamList = {
     roomTitle?: string;
     participants?: Array<{
       userId: string;
+      profileId?: string;
       nickname: string;
       profileImage: string;
     }>;
@@ -145,7 +147,7 @@ export type RootStackParamList = {
     roomId?: string;
     roomType?: string;
     targetUserId?: string;
-    targetProfileId?: number;
+    targetProfileId?: string;
     nickname?: string;
     profileImage?: string;
     myGender?: string;
@@ -155,7 +157,7 @@ export type RootStackParamList = {
     roomId?: string;
     roomType?: string;
     targetUserId?: string;
-    targetProfileId?: number;
+    targetProfileId?: string;
     nickname?: string;
     profileImage?: string;
     myGender?: string;
@@ -163,7 +165,7 @@ export type RootStackParamList = {
 
   ChatProfileDetail: {
     source: MatchSource;
-    targetProfileId: number;
+    targetProfileId: string;
     previewName?: string;
     previewImageUrl?: string;
   };

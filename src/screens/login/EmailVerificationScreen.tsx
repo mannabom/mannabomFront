@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 
 interface EmailVerificationScreenProps {
@@ -38,12 +38,12 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   const [codeInfo, setCodeInfo] = useState(''); // ✅ 인증 완료 문구(필요시)
 
   const [isLoading, setIsLoading] = useState(false);
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [signupProfileId, setSignupProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfileId = async () => {
-      const id = await getProfileId();
-      if (id) setProfileId(id);
+      const id = await getSignupProfileId();
+      if (id) setSignupProfileId(id);
       else {
         Alert.alert('오류', '프로필 ID를 찾을 수 없습니다. 다시 로그인해주세요.');
       }
@@ -100,7 +100,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleSendVerification = async () => {
-    if (!isEmailValid || isLoading || !profileId) {
+    if (!isEmailValid || isLoading || !signupProfileId) {
       // ❗️전송 성공/완료 모달만 제거 요청이라, 에러 Alert은 유지
       Alert.alert('오류', '올바른 학교 이메일을 입력해주세요.');
       return;
@@ -110,7 +110,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setEmailInfo('');
     try {
       const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFICATION, {
-        profileId,
+        profileId: signupProfileId,
         email: email.trim(),
       });
 
@@ -129,7 +129,11 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleVerifyCode = async () => {
-    if (verificationCode.trim().length === 0 || isLoading || !profileId) {
+    if (
+      verificationCode.trim().length === 0 ||
+      isLoading ||
+      !signupProfileId
+    ) {
       setCodeError('*인증번호가 일치하지 않습니다.');
       return;
     }
@@ -138,7 +142,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setCodeInfo('');
     try {
       const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFY, {
-        profileId,
+        profileId: signupProfileId,
         verificationCode: verificationCode.trim(),
       });
 

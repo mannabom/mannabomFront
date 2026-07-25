@@ -54,6 +54,10 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>만남 인증을 위해 현재 위치를 확인합니다.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>프로필 및 채팅 사진을 촬영하기 위해 카메라를 사용합니다.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>프로필 및 채팅 사진을 선택하기 위해 사진 보관함을 사용합니다.</string>
 	<key>NMFNcpKeyId</key>
 	<string>vcu6u550wp</string>
 	<key>UILaunchStoryboardName</key>

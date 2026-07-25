@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 import {
   SetNicknameRequestDto,
   SetNicknameResponseDto,
@@ -134,14 +134,14 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({ onNicknameComplete }) =
     setNicknameSuccess('');
 
     try {
-      const profileId = await getProfileId();
-      if (!profileId) {
+      const signupProfileId = await getSignupProfileId();
+      if (!signupProfileId) {
         setNicknameError('*프로필 ID가 없습니다. 다시 로그인해주세요.');
         return;
       }
 
       const requestData: SetNicknameRequestDto = {
-        profileId,
+        profileId: signupProfileId,
         nickname: nickname.trim(),
       };
 

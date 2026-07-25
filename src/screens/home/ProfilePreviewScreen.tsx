@@ -23,6 +23,7 @@ import {
   SmokingHabit,
 } from '../../types/DatingAPI';
 import { getProfilePreviewState, setProfilePreviewState } from '../../utils/ProfilePreviewStore';
+import { toExternalId } from '../../utils/IdUtils';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -33,7 +34,7 @@ const freeProfileImg = require('../../assets/images/freeprofile.png');
 const paidProfileImg = require('../../assets/images/paidprofile.png');
 
 type ProfileCard = {
-  profileId: number;
+  profileId: string;
   nickname: string;
   name?: string;
   age: number;
@@ -48,13 +49,10 @@ const firstNonEmptyString = (...vals: any[]): string | undefined => {
   return undefined;
 };
 
-const toPositiveId = (...vals: any[]): number | undefined => {
+const firstExternalId = (...vals: any[]): string | undefined => {
   for (const v of vals) {
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-    if (typeof v === 'string' && v.trim().length > 0) {
-      const n = Number(v);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
+    const id = toExternalId(v);
+    if (id) return id;
   }
   return undefined;
 };
@@ -85,7 +83,7 @@ export default function ProfilePreviewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const savedState = getProfilePreviewState();
-  const initialLockedRatedProfileIds: number[] =
+  const initialLockedRatedProfileIds: string[] =
     savedState?.lockedRatedProfileIds ?? route.params?.lockedRatedProfileIds ?? [];
   const initialProfiles: ProfileCard[] = (
     savedState?.profiles?.length ? savedState.profiles : route.params?.profiles ?? []
@@ -123,10 +121,10 @@ export default function ProfilePreviewScreen() {
     const maxIdx = Math.max(0, savedState?.profiles?.length ?? route.params?.profiles?.length ?? 0);
     return Math.max(0, Math.min(seed, maxIdx));
   });
-  const [ratedByProfileId, setRatedByProfileId] = useState<Record<number, number>>(
+  const [ratedByProfileId, setRatedByProfileId] = useState<Record<string, number>>(
     savedState?.ratedByProfileId ?? route.params?.ratedByProfileId ?? {},
   );
-  const [lockedRatedProfileIds, setLockedRatedProfileIds] = useState<number[]>(
+  const [lockedRatedProfileIds, setLockedRatedProfileIds] = useState<string[]>(
     initialLockedRatedProfileIds,
   );
   const [shortageVisible, setShortageVisible] = useState(false);
@@ -260,16 +258,20 @@ export default function ProfilePreviewScreen() {
     try {
       const todayList = await datingApiService.getTodayMatchingProfiles();
       if (Array.isArray(todayList) && todayList.length) {
-        const mappedRaw: ProfileCard[] = todayList
-          .map(p => ({
-            profileId: p.profileId ?? p.userId ?? 0,
-            name: p.name ?? p.nickname ?? p.nickName,
-            nickname: p.nickname ?? p.nickName ?? p.name ?? '회원',
-            age: p.age ?? 0,
-            mbti: p.mbti ?? '',
-            photoUris: [toAbsoluteUri(p.profileImageUrl)],
-          }))
-          .filter(p => p.profileId > 0);
+        const mappedRaw = todayList
+          .map((p): ProfileCard | null => {
+            const profileId = firstExternalId(p.profileId);
+            if (!profileId) return null;
+            return {
+              profileId,
+              name: p.name ?? p.nickname ?? p.nickName,
+              nickname: p.nickname ?? p.nickName ?? p.name ?? '회원',
+              age: p.age ?? 0,
+              mbti: p.mbti ?? '',
+              photoUris: [toAbsoluteUri(p.profileImageUrl)],
+            };
+          })
+          .filter((profile): profile is ProfileCard => profile !== null);
 
         if (mappedRaw.length) {
           const existing = new Set(profiles.map(item => item.profileId));
@@ -293,7 +295,7 @@ export default function ProfilePreviewScreen() {
         raw = await datingApiService.getMatchingProfileExtra(initialFilterCondition);
       }
 
-      const profileId = toPositiveId(raw?.profileId, raw?.userId, raw?.id);
+      const profileId = firstExternalId(raw?.profileId);
       if (!profileId) return false;
       if (profiles.some(item => item.profileId === profileId)) return false;
       if (lockedRatedProfileIds.includes(profileId)) return false;

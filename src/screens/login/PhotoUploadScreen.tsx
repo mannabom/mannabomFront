@@ -19,7 +19,7 @@ import {
   MediaType,
 } from 'react-native-image-picker';
 import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 import type { ProfilePhotosResponseDto } from '../../types/ProfilePhotoAPI';
 
@@ -52,7 +52,7 @@ const PINK_STRONG = '#FF6B6B';
 const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
   onUploadComplete,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [signupProfileId, setSignupProfileId] = useState<string | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,14 +62,14 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
 
   useEffect(() => {
     const fetchProfileId = async () => {
-      const id = await getProfileId();
-      setProfileId(id);
+      const id = await getSignupProfileId();
+      setSignupProfileId(id);
     };
     fetchProfileId();
   }, []);
 
   const canUploadMore = photos.length < MAX_PHOTOS && !isLoading;
-  const canSubmit = photos.length > 0 && !!profileId && !isLoading;
+  const canSubmit = photos.length > 0 && !!signupProfileId && !isLoading;
 
   const showImagePickerOptions = () => {
     Alert.alert(
@@ -207,7 +207,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
     setIsLoading(true);
     try {
       const formData = new FormData();
-      formData.append('profileId', profileId as string);
+      formData.append('profileId', signupProfileId as string);
 
       // ✅ 최대 5장만 업로드되도록 보장
       photos.slice(0, MAX_PHOTOS).forEach((photo, index) => {

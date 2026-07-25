@@ -23,6 +23,7 @@ export interface TermsContentDataDto {
 export type TermsContentResponseDto = ApiResponseDto<TermsContentDataDto>;
 
 export interface TermsAgreementRequestDto {
+  // 백엔드 wire key는 profileId지만 값은 임시 가입 진행 ID입니다.
   profileId: string;
   termsAgreement: {
     serviceTerms: boolean;
@@ -38,11 +39,12 @@ export interface TermsAgreementDataDto {
 export type TermsAgreementResponseDto = ApiResponseDto<TermsAgreementDataDto>;
 
 export interface SignupCompleteRequestDto {
+  // 백엔드 wire key는 profileId지만 값은 임시 가입 진행 ID입니다.
   profileId: string;
 }
 
 export interface SignupCompleteDataDto {
-  userId: number;
+  userId: string;
   accessToken: string;
   refreshToken: string;
   initialPoints: number;

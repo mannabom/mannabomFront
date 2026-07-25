@@ -25,9 +25,10 @@ import apiClient from '../../services/apiClient';
 import { profilePhotoApiService } from '../../services/ProfilePhotoApiService';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 import {
-  toSafeProfilePhotoId,
+  toProfilePhotoId,
   type UserProfilePhotoDTO,
 } from '../../types/ProfilePhotoAPI';
+import { toExternalId } from '../../utils/IdUtils';
 
 // ✅ 지역/시군구는 여기서 import로만 사용
 import {
@@ -54,7 +55,7 @@ type ServerProfile = {
 };
 
 type QuestionAnswer = {
-  questionId?: number;
+  questionId?: string;
   question?: string;
   answer?: string;
 };
@@ -92,6 +93,7 @@ const OPTIONAL_MIN = 30;
 const PHOTO_WIDTH = SCREEN_W - 32;
 
 type PhotoAction = 'add' | 'delete';
+type DisplayProfilePhoto = Omit<UserProfilePhotoDTO, 'id'> & { id?: string };
 
 const getPhotoErrorMessage = (error: any, fallback: string) =>
   String(
@@ -135,25 +137,25 @@ const INVALID_FIELD_ORDER = [
   'idealDate',
 ] as const;
 
-const QUESTION_ID_BY_KEYWORD: Array<{ key: string; id: number }> = [
-  { key: '자기소개', id: 1 },
-  { key: '설레게', id: 2 },
-  { key: '바라는', id: 3 },
-  { key: '연애란', id: 4 },
-  { key: '소울', id: 5 },
-  { key: '휴일', id: 6 },
-  { key: '하고 싶은 데이트', id: 7 },
-  { key: '싸웠을', id: 8 },
-  { key: '사진', id: 9 },
-  { key: '중요한 것은', id: 10 },
-  { key: '데이트에서', id: 11 },
-  { key: '질투', id: 12 },
-  { key: '이상적인 하루', id: 13 },
-  { key: '끌리는', id: 14 },
-  { key: '친구들과', id: 15 },
+const QUESTION_ID_BY_KEYWORD: Array<{ key: string; id: string }> = [
+  { key: '자기소개', id: '1' },
+  { key: '설레게', id: '2' },
+  { key: '바라는', id: '3' },
+  { key: '연애란', id: '4' },
+  { key: '소울', id: '5' },
+  { key: '휴일', id: '6' },
+  { key: '하고 싶은 데이트', id: '7' },
+  { key: '싸웠을', id: '8' },
+  { key: '사진', id: '9' },
+  { key: '중요한 것은', id: '10' },
+  { key: '데이트에서', id: '11' },
+  { key: '질투', id: '12' },
+  { key: '이상적인 하루', id: '13' },
+  { key: '끌리는', id: '14' },
+  { key: '친구들과', id: '15' },
 ];
 
-const QUESTION_TITLE_BY_ID: Record<number, string> = {
+const QUESTION_TITLE_BY_ID: Record<string, string> = {
   1: '자기소개 (필수)',
   2: '나를 설레게 하는 이성의 매력? (필수)',
   3: '연인에게 꼭 바라는 한 가지는? (필수)',
@@ -342,7 +344,7 @@ const splitMbti = (mbti?: string) => {
 const isMbtiValid = (arr: string[]) => arr.length === 4 && arr.every(x => x && x.length === 1);
 
 const norm = (s?: string) => (s || '').replace(/\s+/g, '').toLowerCase();
-const resolveQuestionId = (text?: string): number | undefined => {
+const resolveQuestionId = (text?: string): string | undefined => {
   const normalized = norm(text);
   if (!normalized) return undefined;
   const found = QUESTION_ID_BY_KEYWORD.find(item => normalized.includes(norm(item.key)));
@@ -350,18 +352,18 @@ const resolveQuestionId = (text?: string): number | undefined => {
 };
 
 const normalizeChoiceAnswerForDisplay = (
-  questionId: number | undefined,
+  questionId: string | undefined,
   answer: string,
 ): string => {
-  if (!questionId || questionId < 8 || questionId > 15) return answer;
+  if (!questionId || !['8', '9', '10', '11', '12', '13', '14', '15'].includes(questionId)) return answer;
   return CHOICE_ENUM_TO_LABEL[answer] ?? answer;
 };
 
 const normalizeChoiceAnswerForSave = (
-  questionId: number | undefined,
+  questionId: string | undefined,
   answer: string,
 ): string => {
-  if (!questionId || questionId < 8 || questionId > 15) return answer;
+  if (!questionId || !['8', '9', '10', '11', '12', '13', '14', '15'].includes(questionId)) return answer;
   return CHOICE_LABEL_TO_ENUM[answer] ?? answer;
 };
 
@@ -432,13 +434,13 @@ const normalizeQuestionAnswersFromResponse = (data: any): QuestionAnswer[] => {
     Array.isArray(data?.profile?.questionAnswers) ? data.profile.questionAnswers : [],
   ];
 
-  const dedup = new Map<number, QuestionAnswer>();
+  const dedup = new Map<string, QuestionAnswer>();
   const noIdRows: QuestionAnswer[] = [];
 
   sources.forEach(source => {
     source.forEach((item: any, idx: number) => {
       const qIdRaw = item?.question?.questionId ?? item?.questionId ?? item?.id;
-      const qId = Number.isFinite(Number(qIdRaw)) ? Number(qIdRaw) : undefined;
+      const qId = toExternalId(qIdRaw) ?? undefined;
 
       const qTextRaw =
         item?.question?.question ??
@@ -500,7 +502,7 @@ export default function ProfileDetail() {
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const photoActionRef = useRef<PhotoAction | null>(null);
 
-  const [profilePhotos, setProfilePhotos] = useState<UserProfilePhotoDTO[]>([]);
+  const [profilePhotos, setProfilePhotos] = useState<DisplayProfilePhoto[]>([]);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [photoAction, setPhotoAction] = useState<PhotoAction | null>(null);
   const photoUrls = useMemo(
@@ -699,7 +701,7 @@ export default function ProfileDetail() {
       setProfilePhotos(
         photoResponse?.photos ??
           (nextProfile.profileImageUrl
-            ? [{ id: 0, index: 0, url: nextProfile.profileImageUrl }]
+            ? [{ index: 0, url: nextProfile.profileImageUrl }]
             : []),
       );
       setActivePhotoIndex(0);
@@ -937,8 +939,8 @@ export default function ProfileDetail() {
 
       const previousPhotoIds = new Set(
         profilePhotos
-          .map(photo => toSafeProfilePhotoId(photo.id))
-          .filter((photoId): photoId is number => photoId !== null),
+          .map(photo => toProfilePhotoId(photo.id))
+          .filter((photoId): photoId is string => photoId !== null),
       );
       const response = await profilePhotoApiService.addPhoto({
         uri: asset.uri,
@@ -946,7 +948,7 @@ export default function ProfileDetail() {
         name: asset.fileName || `profile_photo_${Date.now()}.jpg`,
       });
       const addedIndex = response.photos.findIndex(photo => {
-        const photoId = toSafeProfilePhotoId(photo.id);
+        const photoId = toProfilePhotoId(photo.id);
         return photoId !== null && !previousPhotoIds.has(photoId);
       });
 
@@ -974,7 +976,7 @@ export default function ProfileDetail() {
     }
   };
 
-  const deletePhoto = async (photoId: number, selectedIndex: number) => {
+  const deletePhoto = async (photoId: string, selectedIndex: number) => {
     if (!beginPhotoAction('delete')) return;
 
     try {
@@ -1007,7 +1009,7 @@ export default function ProfileDetail() {
       return;
     }
 
-    const photoId = toSafeProfilePhotoId(selectedPhoto.id);
+    const photoId = toProfilePhotoId(selectedPhoto.id);
     if (!photoId) {
       Alert.alert(
         '사진 삭제 불가',

@@ -5,6 +5,7 @@ import {
   UserStatus,
 } from '../types/KakaoAPI';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
+import { toExternalId } from '../utils/IdUtils';
 
 export class KakaoAPIService {
   /**
@@ -60,7 +61,7 @@ export class KakaoAPIService {
           userData: {
             accessToken: response.data.accessToken,
             refreshToken: response.data.refreshToken,
-            userId: response.data.userId,
+            userId: toExternalId(response.data.userId) ?? undefined,
             nickname: response.data.nickname,
           },
           message: response.message,
