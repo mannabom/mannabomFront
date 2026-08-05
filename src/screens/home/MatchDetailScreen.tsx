@@ -27,6 +27,7 @@ import {
 import { datingApiService } from '../../services/DatingApiService';
 import { drinkingHabitLabels, smokingHabitLabels } from '../../utils/DatingUtils';
 import { API_BASE_URL } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   clearSelectedGift,
   getSelectedGift,
@@ -385,8 +386,10 @@ export default function MatchDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       const gift = getSelectedGift();
-      if (gift) {
+      if (gift && FEATURE_FLAGS.gifticon) {
         setSelectedGiftState(gift);
+        clearSelectedGift();
+      } else if (gift) {
         clearSelectedGift();
       }
       return undefined;
@@ -480,7 +483,9 @@ export default function MatchDetailScreen() {
 
   const likeCost = 20;
   const messageBaseCost = 40;
-  const messageCost = messageBaseCost + (selectedGift?.price ?? 0);
+  const messageCost =
+    messageBaseCost +
+    (FEATURE_FLAGS.gifticon ? selectedGift?.price ?? 0 : 0);
   const freeLikeLeft = wallet?.freeLikeNum ?? 0;
   const freeMessageLeft = wallet?.freeMessageNum ?? 0;
   const availableTing = (wallet?.tingNum ?? 0) + (wallet?.eventTingNum ?? 0);
@@ -557,7 +562,9 @@ export default function MatchDetailScreen() {
       setWallet(nextWallet);
       setMessagedAlreadySent(true);
       setSentMessagePreview(messageText.trim());
-      setSentGiftPreview(selectedGift?.title ?? '');
+      setSentGiftPreview(
+        FEATURE_FLAGS.gifticon ? selectedGift?.title ?? '' : '',
+      );
       setMessageText('');
       setSelectedGiftState(null);
       setSelectedGift(null);
@@ -669,7 +676,7 @@ export default function MatchDetailScreen() {
                   <Text style={styles.lockCostText}>5</Text>
                 </TouchableOpacity>
                 <Text style={styles.lockOverlayText} pointerEvents="none">
-                  결제를 하시거나{'\n'}프로필 사진을 추가로 업로드 하시면{'\n'}무료로 열람이 가능합니다.
+                  팅을 사용하거나{'\n'}프로필 사진을 추가로 업로드 하시면{'\n'}열람할 수 있습니다.
                 </Text>
               </View>
             )}
@@ -829,10 +836,14 @@ export default function MatchDetailScreen() {
               style={styles.pinkDoneBtn}
               onPress={() => {
                 setLikeShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.pinkDoneText}>스토어로 이동</Text>
+              <Text style={styles.pinkDoneText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -855,7 +866,7 @@ export default function MatchDetailScreen() {
                 <Text style={styles.sentMessageText}>
                   {sentMessagePreview || '텍스트 란'}
                 </Text>
-                {sentGiftPreview ? (
+                {FEATURE_FLAGS.gifticon && sentGiftPreview ? (
                   <TouchableOpacity style={styles.sentGiftViewBtn} onPress={() => setSentGiftVisible(true)}>
                     <Text style={styles.sentGiftViewBtnText}>선물 보기</Text>
                   </TouchableOpacity>
@@ -872,8 +883,10 @@ export default function MatchDetailScreen() {
                     placeholder="자유롭게 입력해주세요."
                     placeholderTextColor="#B9B9B9"
                   />
-                  {!selectedGift ? <Image source={letter2Img} style={styles.messageLetter} /> : null}
-                  {selectedGift ? (
+                  {!FEATURE_FLAGS.gifticon || !selectedGift ? (
+                    <Image source={letter2Img} style={styles.messageLetter} />
+                  ) : null}
+                  {FEATURE_FLAGS.gifticon && selectedGift ? (
                     <View style={styles.giftTag}>
                       <Text style={styles.giftTagText}>{`선물 - ${selectedGift.title} ${selectedGift.price}`}</Text>
                       <TouchableOpacity
@@ -901,12 +914,16 @@ export default function MatchDetailScreen() {
                       )}
                     </View>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.giftBtn}
-                    onPress={() => navigation.navigate('Store', { pickGiftMode: true })}
-                  >
-                    <Image source={giftImg} style={styles.giftBtnIcon} />
-                  </TouchableOpacity>
+                  {FEATURE_FLAGS.gifticon ? (
+                    <TouchableOpacity
+                      style={styles.giftBtn}
+                      onPress={() =>
+                        navigation.navigate('Store', { pickGiftMode: true })
+                      }
+                    >
+                      <Image source={giftImg} style={styles.giftBtnIcon} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </>
             )}
@@ -914,22 +931,24 @@ export default function MatchDetailScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={sentGiftVisible} transparent animationType="fade" onRequestClose={() => setSentGiftVisible(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setSentGiftVisible(false)}>
-          <Pressable style={styles.modalCardSmall} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{`${detail.nickname}님이 선물을 보냈어요!`}</Text>
-              <TouchableOpacity onPress={() => setSentGiftVisible(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.giftLabel}>선물명</Text>
-            <View style={styles.giftPreviewBox}>
-              <Text style={styles.giftPreviewText}>{sentGiftPreview || '이미지'}</Text>
-            </View>
+      {FEATURE_FLAGS.gifticon ? (
+        <Modal visible={sentGiftVisible} transparent animationType="fade" onRequestClose={() => setSentGiftVisible(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setSentGiftVisible(false)}>
+            <Pressable style={styles.modalCardSmall} onPress={() => {}}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{`${detail.nickname}님이 선물을 보냈어요!`}</Text>
+                <TouchableOpacity onPress={() => setSentGiftVisible(false)}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.giftLabel}>선물명</Text>
+              <View style={styles.giftPreviewBox}>
+                <Text style={styles.giftPreviewText}>{sentGiftPreview || '이미지'}</Text>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      ) : null}
 
       <Modal visible={messageSuccessVisible} transparent animationType="fade" onRequestClose={() => setMessageSuccessVisible(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setMessageSuccessVisible(false)}>
@@ -971,10 +990,14 @@ export default function MatchDetailScreen() {
               style={styles.pinkDoneBtn}
               onPress={() => {
                 setMessageShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.pinkDoneText}>스토어로 이동</Text>
+              <Text style={styles.pinkDoneText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

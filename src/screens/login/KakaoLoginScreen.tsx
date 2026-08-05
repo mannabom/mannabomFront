@@ -13,10 +13,10 @@ import {
 } from 'react-native';
 import { KakaoLoginService } from '../../services/KakaoLoginService';
 import {
-  clearSignupProfileId,
+  clearSignupSession,
   getSignupProfileId,
   saveAuthenticatedSession,
-  saveSignupProfileId,
+  saveSignupSession,
 } from '../../utils/AuthUtils';
 import { clearAllProfileData } from '../../utils/ProfileStorage';
 import { requireExternalId } from '../../utils/IdUtils';
@@ -78,7 +78,7 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
           const staleSignupProfileId = await getSignupProfileId();
           try {
             await clearAllProfileData(staleSignupProfileId ?? undefined);
-            await clearSignupProfileId();
+            await clearSignupSession();
           } catch (cleanupError) {
             if (__DEV__) {
               console.warn(
@@ -106,9 +106,16 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
           // 신규 사용자 - 회원가입 진행
           const kakaoUserInfo = result.userData?.kakaoUserInfo;
           const signupProfileId = requireExternalId(
-            kakaoUserInfo?.profileId,
+            result.userData?.signupProfileId,
             '가입 진행 ID',
           );
+          const signupToken =
+            typeof result.userData?.signupToken === 'string'
+              ? result.userData.signupToken.trim()
+              : '';
+          if (!signupToken) {
+            throw new Error('가입 토큰이 없는 잘못된 로그인 응답입니다.');
+          }
           const storedSignupProfileId = await getSignupProfileId();
 
           if (
@@ -116,10 +123,10 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
             storedSignupProfileId !== signupProfileId
           ) {
             await clearAllProfileData(storedSignupProfileId);
-            await clearSignupProfileId();
+            await clearSignupSession();
           }
 
-          await saveSignupProfileId(signupProfileId);
+          await saveSignupSession(signupProfileId, signupToken);
 
           if (__DEV__) console.log('신규 사용자 - 회원가입 진행');
           onSignupRequired({

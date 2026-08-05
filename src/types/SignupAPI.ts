@@ -4,12 +4,7 @@ export interface ApiResponseDto<T> {
   message: string;
 }
 
-/**
- * 백엔드 약관 상세 조회 API가 현재 문서화한 값입니다.
- *
- * 화면에서 사용하는 `operation`, `payment`, `location`은 이 API enum에
- * 포함되지 않으므로 백엔드 계약이 확정되기 전에는 두 타입을 합치지 않습니다.
- */
+/** 약관 상세 조회 API의 확정된 경로 파라미터 값입니다. */
 export type TermsApiTermType = 'service' | 'privacy' | 'marketing';
 
 export interface TermsContentDataDto {

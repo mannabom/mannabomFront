@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -24,6 +24,8 @@ import {
 } from '../../types/DatingAPI';
 import { getProfilePreviewState, setProfilePreviewState } from '../../utils/ProfilePreviewStore';
 import { toExternalId } from '../../utils/IdUtils';
+import { createIdempotencyKey } from '../../utils/IdempotencyUtils';
+import { FEATURE_FLAGS } from '../../config/features';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -128,6 +130,7 @@ export default function ProfilePreviewScreen() {
     initialLockedRatedProfileIds,
   );
   const [shortageVisible, setShortageVisible] = useState(false);
+  const loadingMoreRef = useRef(false);
   const [purchasing, setPurchasing] = useState<1 | 5 | null>(null);
   const [counterInfoVisible, setCounterInfoVisible] = useState(false);
   const [metaAnchor, setMetaAnchor] = useState({ x: 18, y: 120, width: 120, height: 28 });
@@ -251,10 +254,14 @@ export default function ProfilePreviewScreen() {
   };
 
   const loadMoreProfiles = async (force = false): Promise<boolean> => {
+    if (loadingMoreRef.current) {
+      return false;
+    }
     if (!force && availableProfileCount <= 0) {
       return false;
     }
 
+    loadingMoreRef.current = true;
     try {
       const todayList = await datingApiService.getTodayMatchingProfiles();
       if (Array.isArray(todayList) && todayList.length) {
@@ -290,7 +297,13 @@ export default function ProfilePreviewScreen() {
 
       let raw: any;
       try {
-        raw = await datingApiService.getMatchingProfile(initialFilterCondition);
+        const idempotencyKey = createIdempotencyKey(
+          'free-profile-recommendation',
+        );
+        raw = await datingApiService.getMatchingProfile(
+          initialFilterCondition,
+          idempotencyKey,
+        );
       } catch {
         raw = await datingApiService.getMatchingProfileExtra(initialFilterCondition);
       }
@@ -320,6 +333,8 @@ export default function ProfilePreviewScreen() {
       return true;
     } catch {
       return false;
+    } finally {
+      loadingMoreRef.current = false;
     }
   };
   const handleNext = async () => {
@@ -583,10 +598,14 @@ export default function ProfilePreviewScreen() {
               style={styles.storeBtn}
               onPress={() => {
                 setShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.storeBtnText}>스토어 이동</Text>
+              <Text style={styles.storeBtnText}>
+                {FEATURE_FLAGS.store ? '스토어 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

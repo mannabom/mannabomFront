@@ -28,6 +28,7 @@ import apiClient from '../../services/apiClient';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
 import { getProfilePreviewState } from '../../utils/ProfilePreviewStore';
 import { toExternalId } from '../../utils/IdUtils';
+import { createIdempotencyKey } from '../../utils/IdempotencyUtils';
 const petalImg = require('../../assets/images/petal.png');
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -509,17 +510,22 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       smoking: filterSettings.smoking,
       drinking: filterSettings.drinking,
     };
+    const idempotencyKey = createIdempotencyKey('free-profile-recommendation');
     let profileRaw: any;
     try {
       profileRaw = await withNetworkRetry(
-        () => datingApiService.getMatchingProfile(profileCondition),
+        () =>
+          datingApiService.getMatchingProfile(
+            profileCondition,
+            idempotencyKey,
+          ),
         2,
       );
     } catch (e: any) {
       if (isNoFreeTicketError(e)) {
-        profileRaw = await withNetworkRetry(
-          () => datingApiService.getMatchingProfileExtra(profileCondition),
-          2,
+        // 혜택권 차감 API에는 아직 멱등성 계약이 없으므로 자동 재시도하지 않는다.
+        profileRaw = await datingApiService.getMatchingProfileExtra(
+          profileCondition,
         );
       } else {
         throw e;
@@ -558,17 +564,22 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       smoking: filterSettings.smoking,
       drinking: filterSettings.drinking,
     };
+    const idempotencyKey = createIdempotencyKey('free-loveview-recommendation');
     let loveRaw: any;
     try {
       loveRaw = await withNetworkRetry(
-        () => datingApiService.getLoveViewMatching(loveViewCondition),
+        () =>
+          datingApiService.getLoveViewMatching(
+            loveViewCondition,
+            idempotencyKey,
+          ),
         2,
       );
     } catch (e: any) {
       if (isNoFreeTicketError(e)) {
-        loveRaw = await withNetworkRetry(
-          () => datingApiService.getLoveViewMatchingExtra(loveViewCondition),
-          2,
+        // 혜택권 차감 API에는 아직 멱등성 계약이 없으므로 자동 재시도하지 않는다.
+        loveRaw = await datingApiService.getLoveViewMatchingExtra(
+          loveViewCondition,
         );
       } else {
         throw e;

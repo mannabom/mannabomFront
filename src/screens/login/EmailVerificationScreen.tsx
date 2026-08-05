@@ -9,7 +9,7 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
-import apiClient from '../../services/apiClient';
+import signupApiClient from '../../services/signupApiClient';
 import { getSignupProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 
@@ -109,10 +109,13 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setIsLoading(true);
     setEmailInfo('');
     try {
-      const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFICATION, {
-        profileId: signupProfileId,
-        email: email.trim(),
-      });
+      const response = await signupApiClient.post(
+        API_ENDPOINTS_LIST.EMAIL_VERIFICATION,
+        {
+          profileId: signupProfileId,
+          email: email.trim(),
+        },
+      );
 
       if (response.data?.success && response.data?.data?.emailSent) {
         setIsCodeSent(true);
@@ -122,7 +125,12 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
       }
     } catch (error) {
       console.error('❌ 이메일 인증번호 전송 오류:', error);
-      Alert.alert('오류', '인증번호 전송 중 오류가 발생했습니다. 다시 시도해주세요.');
+      Alert.alert(
+        '오류',
+        error instanceof Error
+          ? error.message
+          : '인증번호 전송 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +149,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setIsLoading(true);
     setCodeInfo('');
     try {
-      const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFY, {
+      const response = await signupApiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFY, {
         profileId: signupProfileId,
         verificationCode: verificationCode.trim(),
       });
@@ -157,7 +165,12 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     } catch (error) {
       console.error('❌ 이메일 인증 확인 오류:', error);
       setCodeError('*인증번호가 일치하지 않습니다.');
-      Alert.alert('오류', '인증번호 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      Alert.alert(
+        '오류',
+        error instanceof Error
+          ? error.message
+          : '인증번호 확인 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }

@@ -113,10 +113,16 @@ class DatingApiService {
   // ✅ 프로필 매칭 요청 (당일 무료권)
   async getMatchingProfile(
     condition: ProfileMatchConditionRequest,
+    idempotencyKey: string,
   ): Promise<ProfileMatchConditionResponse> {
     const response = await apiClient.post(
       API_ENDPOINTS_LIST.PROFILE_MATCH_SIMPLE,
       condition,
+      {
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+      },
     );
     const data = normalizeProfileMatch(this.unwrap<any>(response.data));
     if (__DEV__) console.log('프로필 매칭(무료권) 성공:', Boolean(data?.profileId));
@@ -171,10 +177,16 @@ class DatingApiService {
   // 연애관 매칭 요청
   async getLoveViewMatching(
     condition: LoveViewMatchConditionRequest,
+    idempotencyKey: string,
   ): Promise<LoveViewMatchConditionResponse> {
     const response = await apiClient.post(
       API_ENDPOINTS_LIST.LOVEVIEW_MATCH_SIMPLE,
       condition,
+      {
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+      },
     );
     const data = normalizeLoveViewMatch(this.unwrap<any>(response.data));
     if (__DEV__) console.log('연애관 매칭 성공:', Boolean(data?.userId || data?.profileId));

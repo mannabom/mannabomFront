@@ -5,7 +5,7 @@ import DeviceInfo from 'react-native-device-info';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
 import {
   clearAllAuth,
-  clearSignupProfileId,
+  clearSignupSession,
   getAuthTokens,
   getSignupProfileId,
   getUserId,
@@ -166,7 +166,7 @@ export class AuthManager {
       if (staleSignupProfileId) {
         try {
           await clearAllProfileData(staleSignupProfileId);
-          await clearSignupProfileId();
+          await clearSignupSession();
         } catch (cleanupError) {
           if (__DEV__) {
             console.warn(
@@ -212,11 +212,23 @@ export class AuthManager {
       }
 
       const json: any = await res.json().catch(() => ({}));
-      // 응답 형태가 {data:{...}} 일 수도, 최상단일 수도 있어서 둘 다 대응
-      const nextAccess = json?.data?.accessToken ?? json?.accessToken;
-      const nextRefresh = json?.data?.refreshToken ?? json?.refreshToken;
+      if (json?.success === false) {
+        if (__DEV__) console.warn('⚠️ [Auth] refresh 거절:', res.status);
+        return null;
+      }
 
-      if (typeof nextAccess === 'string' && typeof nextRefresh === 'string') {
+      // Swagger 공통 envelope를 우선 사용하되 이전 최상단 응답도 호환합니다.
+      const payload = json?.data ?? json;
+      const nextAccess =
+        typeof payload?.accessToken === 'string'
+          ? payload.accessToken.trim()
+          : '';
+      const nextRefresh =
+        typeof payload?.refreshToken === 'string'
+          ? payload.refreshToken.trim()
+          : '';
+
+      if (nextAccess && nextRefresh) {
         return { accessToken: nextAccess, refreshToken: nextRefresh };
       }
 

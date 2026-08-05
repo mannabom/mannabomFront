@@ -12,7 +12,14 @@ import {
   KakaoLoginRequestDto,
   Gender,
 } from '../types/KakaoAPI';
-import { toExternalId } from '../utils/IdUtils';
+import { requireExternalId, toExternalId } from '../utils/IdUtils';
+
+const requireSignupToken = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('가입 토큰이 없는 잘못된 로그인 응답입니다.');
+  }
+  return value.trim();
+};
 
 export class KakaoLoginService {
   private static getReadableLoginError(error: any): string {
@@ -167,13 +174,26 @@ export class KakaoLoginService {
           },
         };
 
-      case UserStatus.PENDING_VERIFICATION:
+      case UserStatus.PENDING_VERIFICATION: {
+        const signupProfileId = requireExternalId(
+          response.data.profileId ?? response.data.kakaoUserInfo?.profileId,
+          '가입 진행 ID',
+        );
+        if (!response.data.kakaoUserInfo) {
+          throw new Error('카카오 사용자 정보가 없는 잘못된 로그인 응답입니다.');
+        }
         return {
           nextStep: 'signup',
           userData: {
-            kakaoUserInfo: response.data.kakaoUserInfo,
+            signupProfileId,
+            signupToken: requireSignupToken(response.data.signupToken),
+            kakaoUserInfo: {
+              ...response.data.kakaoUserInfo,
+              profileId: signupProfileId,
+            },
           },
         };
+      }
 
       case UserStatus.AGE_RESTRICTED:
         return {

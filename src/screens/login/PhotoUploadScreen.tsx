@@ -18,10 +18,11 @@ import {
   ImagePickerResponse,
   MediaType,
 } from 'react-native-image-picker';
-import apiClient from '../../services/apiClient';
+import signupApiClient from '../../services/signupApiClient';
 import { getSignupProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 import type { ProfilePhotosResponseDto } from '../../types/ProfilePhotoAPI';
+import { requireExternalId } from '../../utils/IdUtils';
 
 interface PhotoUploadScreenProps {
   onUploadComplete: () => void;
@@ -218,7 +219,7 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
         } as any);
       });
 
-      const response = await apiClient.post(
+      const response = await signupApiClient.post(
         API_ENDPOINTS_LIST.PROFILE_PHOTOS,
         formData,
         {
@@ -230,6 +231,18 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
 
       const responseData = response.data as ProfilePhotosResponseDto;
       if (responseData.success) {
+        if (
+          !Array.isArray(responseData.data?.uploadedPhotos) ||
+          responseData.data.uploadedPhotos.length === 0
+        ) {
+          throw new Error('업로드된 사진 목록이 없는 잘못된 서버 응답입니다.');
+        }
+        responseData.data.uploadedPhotos.forEach(photo => {
+          requireExternalId(photo.photoId, '프로필 사진 ID');
+          if (typeof photo.url !== 'string' || !photo.url.trim()) {
+            throw new Error('프로필 사진 URL이 없는 잘못된 서버 응답입니다.');
+          }
+        });
         // ✅ 성공 팝업 제거: 업로드 성공하면 바로 다음
         onUploadComplete();
       } else {
@@ -243,11 +256,13 @@ const PhotoUploadScreen: React.FC<PhotoUploadScreenProps> = ({
       const serverDetails = error.response?.data?.details;
       const status = error.response?.status;
       const fallbackMessage =
-        status || serverMessage || serverDetails
-          ? `status: ${status ?? 'unknown'}\nmessage: ${
-              serverMessage || '응답 메시지 없음'
-            }${serverDetails ? `\ndetails: ${serverDetails}` : ''}`
-          : '사진 업로드 중 오류가 발생했습니다. 다시 시도해주세요.';
+        status === 401 && error.message
+          ? error.message
+          : status || serverMessage || serverDetails
+            ? `status: ${status ?? 'unknown'}\nmessage: ${
+                serverMessage || '응답 메시지 없음'
+              }${serverDetails ? `\ndetails: ${serverDetails}` : ''}`
+            : '사진 업로드 중 오류가 발생했습니다. 다시 시도해주세요.';
 
       if (__DEV__) {
         console.warn('사진 업로드 오류:', {

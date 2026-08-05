@@ -23,6 +23,7 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 import apiClient from '../../services/apiClient';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 
 import type { RootStackParamList } from '../../navigation/types';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
@@ -281,48 +282,66 @@ export default function MyPage({ onLogout }: MyPageProps) {
             <View style={[styles.badge, styles.coinBadge]}>
               <Text style={styles.badgeText}>팅 {coins}개</Text>
             </View>
-            <View
-              style={[
-                styles.badge,
-                isSubscribed ? styles.subscribedBadge : styles.unsubscribedBadge,
-              ]}
-            >
-              <Text
+            {FEATURE_FLAGS.payments ? (
+              <View
                 style={[
-                  styles.badgeText,
-                  isSubscribed && { color: '#fff' },
-                  !isSubscribed && { color: '#EB5757' },
+                  styles.badge,
+                  isSubscribed ? styles.subscribedBadge : styles.unsubscribedBadge,
                 ]}
               >
-                {isSubscribed ? '구독중' : '미구독'}
-              </Text>
-            </View>
+                <Text
+                  style={[
+                    styles.badgeText,
+                    isSubscribed && { color: '#fff' },
+                    !isSubscribed && { color: '#EB5757' },
+                  ]}
+                >
+                  {isSubscribed ? '구독중' : '미구독'}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
 
       {/* 보유 팅 + 구독 카드 */}
-      <View style={styles.cardBox}>
-        {[
-          { label: `보유 팅 : ${coins}개`, action: () => navigation.navigate('Store') },
-          {
-            label: `구독 : ${isSubscribed ? '구독중' : '미구독'}`,
-            action: () => navigation.navigate('Store'),
-          },
-        ].map((item, idx, arr) => {
-          const isLast = idx === arr.length - 1;
-          return (
-            <View key={idx} style={[styles.cardRow, isLast && styles.lastCardRow]}>
-              <Text style={styles.cardText}>{item.label}</Text>
-              <Pressable style={styles.cta} onPress={item.action}>
-                <Text style={styles.ctaText}>
-                  {idx === 0 ? '충전' : isSubscribed ? '관리' : '구독'}
-                </Text>
-              </Pressable>
-            </View>
-          );
-        })}
-      </View>
+      {FEATURE_FLAGS.store || FEATURE_FLAGS.payments ? (
+        <View style={styles.cardBox}>
+          {[
+            ...(FEATURE_FLAGS.store
+              ? [
+                  {
+                    label: `보유 팅 : ${coins}개`,
+                    action: () => navigation.navigate('Store'),
+                    actionLabel: '충전',
+                  },
+                ]
+              : []),
+            ...(FEATURE_FLAGS.payments
+              ? [
+                  {
+                    label: `구독 : ${isSubscribed ? '구독중' : '미구독'}`,
+                    action: () => navigation.navigate('Store'),
+                    actionLabel: isSubscribed ? '관리' : '구독',
+                  },
+                ]
+              : []),
+          ].map((item, idx, arr) => {
+            const isLast = idx === arr.length - 1;
+            return (
+              <View
+                key={item.label}
+                style={[styles.cardRow, isLast && styles.lastCardRow]}
+              >
+                <Text style={styles.cardText}>{item.label}</Text>
+                <Pressable style={styles.cta} onPress={item.action}>
+                  <Text style={styles.ctaText}>{item.actionLabel}</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
 
       {/* 벤치 이미지 */}
       <Image
@@ -337,11 +356,30 @@ export default function MyPage({ onLogout }: MyPageProps) {
             label: '1. 프로필 수정',
             action: () => navigation.navigate('ProfileDetail'),
           },
-          { label: '2. 스토어', action: () => navigation.navigate('Store') },
-          { label: '3. 고객센터', action: () => console.log('고객센터') },
-          { label: '4. 앱정보', action: () => console.log('앱정보') },
-          { label: '5. 로그아웃', action: () => setLogoutVisible(true) },
-          { label: '6. 탈퇴', action: () => setDeleteVisible(true) },
+          ...(FEATURE_FLAGS.store
+            ? [
+                {
+                  label: '2. 스토어',
+                  action: () => navigation.navigate('Store'),
+                },
+              ]
+            : []),
+          {
+            label: FEATURE_FLAGS.store ? '3. 고객센터' : '2. 고객센터',
+            action: () => console.log('고객센터'),
+          },
+          {
+            label: FEATURE_FLAGS.store ? '4. 앱정보' : '3. 앱정보',
+            action: () => console.log('앱정보'),
+          },
+          {
+            label: FEATURE_FLAGS.store ? '5. 로그아웃' : '4. 로그아웃',
+            action: () => setLogoutVisible(true),
+          },
+          {
+            label: FEATURE_FLAGS.store ? '6. 탈퇴' : '5. 탈퇴',
+            action: () => setDeleteVisible(true),
+          },
         ].map((item, idx, arr) => {
           const isLast = idx === arr.length - 1;
           return (

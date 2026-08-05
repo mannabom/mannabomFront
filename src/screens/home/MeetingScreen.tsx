@@ -21,6 +21,7 @@ import Slider from '@react-native-community/slider';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import { DISTRICT_OPTIONS, REGION_OPTIONS, normalizeSido, normalizeSigungu } from '../../constants/koreaRegions';
 import { chatApiService } from '../../services/ChatApiService';
 import { datingApiService } from '../../services/DatingApiService';
@@ -2807,17 +2808,23 @@ const MeetingScreen: React.FC = () => {
           <Text style={styles.simpleModalBody}>
             {insufficientModal?.mode === 'create'
               ? `죄송합니다.\n재화가 부족하여 방을 생성할 수 없습니다.\n방을 생성하시려면 ${insufficientModal.required}팅이 더 필요합니다.`
-              : `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.\n팅을 충전하고 설레는 만남을 시작해 볼까요?`}
+              : FEATURE_FLAGS.store
+                ? `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.\n팅을 충전하고 설레는 만남을 시작해 볼까요?`
+                : `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.`}
           </Text>
 
           <TouchableOpacity
             style={styles.primaryButtonWide}
             onPress={() => {
               setInsufficientModal(null);
-              navigation.navigate('Store');
+              if (FEATURE_FLAGS.store) {
+                navigation.navigate('Store');
+              }
             }}
           >
-            <Text style={styles.primaryButtonText}>스토어로 이동</Text>
+            <Text style={styles.primaryButtonText}>
+              {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+            </Text>
           </TouchableOpacity>
         </MeetingModal>
 

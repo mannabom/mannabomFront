@@ -33,9 +33,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.mannabomfront"
+    namespace "com.mannabom.app"
     defaultConfig {
-        applicationId "com.mannabomfront"
+        applicationId "com.mannabom.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

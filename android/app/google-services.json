@@ -1,40 +1,21 @@
 {
   "project_info": {
-    "project_number": "909537647013",
-    "project_id": "mannabom-f7f34",
-    "storage_bucket": "mannabom-f7f34.firebasestorage.app"
+    "project_number": "1002665052211",
+    "project_id": "mannabom",
+    "storage_bucket": "mannabom.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:909537647013:android:41acc1af865db8a235b04c",
+        "mobilesdk_app_id": "1:1002665052211:android:3141cb115500423328fb46",
         "android_client_info": {
-          "package_name": "com.example.pushservicetest"
+          "package_name": "com.mannabom.app"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBRe6jIUZAYKtN7j-Dt5NywyKfWrTgwzLE"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:909537647013:android:e35f471d8356277635b04c",
-        "android_client_info": {
-          "package_name": "com.mannabomfront"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBRe6jIUZAYKtN7j-Dt5NywyKfWrTgwzLE"
+          "current_key": "AIzaSyDhGc8Cy6pGZtysovZFpaw3ZH_f9Fle8yE"
         }
       ],
       "services": {

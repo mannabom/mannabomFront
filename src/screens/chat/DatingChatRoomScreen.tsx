@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import { REPORT_REASON_OPTIONS } from '../../constants/reportReasons';
 import { chatApiService } from '../../services/ChatApiService';
 import { reportApiService } from '../../services/ReportApiService';
@@ -298,9 +299,11 @@ const DatingChatRoomScreen: React.FC = () => {
     useCallback(() => {
       let unsubscribe: (() => void) | undefined;
       const gift = getSelectedGift();
-      if (gift) {
+      if (gift && FEATURE_FLAGS.gifticon) {
         setSelectedGiftState(gift);
         setGiftVisible(true);
+        clearSelectedGift();
+      } else if (gift) {
         clearSelectedGift();
       }
 
@@ -431,7 +434,9 @@ const DatingChatRoomScreen: React.FC = () => {
   };
 
   const openGiftPicker = () => {
-    navigation.navigate('Store', { pickGiftMode: true });
+    if (FEATURE_FLAGS.gifticon && FEATURE_FLAGS.store) {
+      navigation.navigate('Store', { pickGiftMode: true });
+    }
   };
 
   const sendPhoto = (photo: PickedChatPhoto) => {
@@ -588,10 +593,12 @@ const DatingChatRoomScreen: React.FC = () => {
               setActionVisible(false);
               setReportVisible(true);
             }} />
-            <ActionSheetItem label="기프티콘" iconSource={giftIconImg} onPress={() => {
-              setActionVisible(false);
-              setGiftVisible(true);
-            }} />
+            {FEATURE_FLAGS.gifticon ? (
+              <ActionSheetItem label="기프티콘" iconSource={giftIconImg} onPress={() => {
+                setActionVisible(false);
+                setGiftVisible(true);
+              }} />
+            ) : null}
             <ActionSheetItem label="나가기" icon="↪" onPress={() => {
               setActionVisible(false);
               setLeaveVisible(true);
@@ -643,13 +650,15 @@ const DatingChatRoomScreen: React.FC = () => {
         button="확인"
         onClose={() => setProfileTooEarlyVisible(false)}
       />
-      <GiftModal
-        visible={giftVisible}
-        selectedGift={selectedGift}
-        onPickGift={openGiftPicker}
-        onSend={sendGift}
-        onClose={() => setGiftVisible(false)}
-      />
+      {FEATURE_FLAGS.gifticon ? (
+        <GiftModal
+          visible={giftVisible}
+          selectedGift={selectedGift}
+          onPickGift={openGiftPicker}
+          onSend={sendGift}
+          onClose={() => setGiftVisible(false)}
+        />
+      ) : null}
       <ConfirmModal
         visible={leaveVisible}
         title="나가기"

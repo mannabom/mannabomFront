@@ -32,6 +32,7 @@ import { AuthManager } from './src/utils/SecurityUtils';
 import { RootStackParamList } from './src/navigation/types';
 
 import MainTabNavigator from './src/navigation/MainTabNavigator';
+import { FEATURE_FLAGS } from './src/config/features';
 
 // ✅ FCM 토큰 등록 + 포그라운드 알림 리스너
 import {
@@ -277,8 +278,9 @@ const App: React.FC = () => {
             <Stack.Screen name="LoveviewChat" component={DatingChatRoomScreen} />
             <Stack.Screen name="ChatProfileDetail" component={ChatProfileDetailScreen} />
 
-            {/* ✅ 스토어 */}
-            <Stack.Screen name="Store" component={StoreScreen} />
+            {FEATURE_FLAGS.store ? (
+              <Stack.Screen name="Store" component={StoreScreen} />
+            ) : null}
           </>
         )}
       </Stack.Navigator>

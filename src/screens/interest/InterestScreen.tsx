@@ -17,6 +17,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { datingApiService } from '../../services/DatingApiService';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   FromMeSignalProfileDto,
   InterestType,
@@ -589,10 +590,14 @@ export default function InterestScreen() {
               style={styles.storeBtn}
               onPress={() => {
                 setShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.storeBtnText}>스토어로 이동</Text>
+              <Text style={styles.storeBtnText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

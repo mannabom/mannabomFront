@@ -17,6 +17,7 @@ import {
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_BASE_URL } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   CheckTingWalletResponse,
   DrinkingHabit,
@@ -702,10 +703,14 @@ export default function InterestDetailScreen() {
               style={styles.modalPinkBtn}
               onPress={() => {
                 setShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.modalPinkBtnText}>스토어 이동</Text>
+              <Text style={styles.modalPinkBtnText}>
+                {FEATURE_FLAGS.store ? '스토어 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

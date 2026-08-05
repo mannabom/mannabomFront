@@ -20,10 +20,14 @@ export interface ChatReportRequestDTO {
   additionalDetail?: string;
 }
 
+export interface ProfileReportRequestDTO {
+  /** 프로필 신고 API는 상대의 영구 profileId만 식별자로 받는다. */
+  profileId: string;
+  reason: ReportReason;
+  additionalDetail?: string;
+}
+
 export interface ReportSubmissionResult {
-  /**
-   * 백엔드 전환 기간에는 기존 200 응답에 reportId가 없을 수 있습니다.
-   * 신규 응답이 배포되면 문자열 ID가 채워집니다.
-   */
-  reportId: string | null;
+  /** 신규 신고와 중복 신고 모두 서버가 동일한 문자열 ID를 반환한다. */
+  reportId: string;
 }

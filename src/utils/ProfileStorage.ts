@@ -56,7 +56,8 @@ const STORAGE_KEYS = {
   OPTIONAL_ANSWERS: 'optional_answers',
   RELATIONSHIP_CHOICES: 'relationship_choices',
   RAW_RELATIONSHIP_ANSWERS: 'optional_this_or_that_answers_v1',
-  TERMS_STATE_PREFIX: 'signup_terms_state_v2',
+  LEGACY_TERMS_STATE_PREFIX: 'signup_terms_state_v2',
+  TERMS_STATE_PREFIX: 'signup_terms_state_v3',
 };
 
 // 신체 프로필 저장
@@ -227,11 +228,13 @@ export const clearAllProfileData = async (
       STORAGE_KEYS.OPTIONAL_ANSWERS,
       STORAGE_KEYS.RELATIONSHIP_CHOICES,
       STORAGE_KEYS.RAW_RELATIONSHIP_ANSWERS,
+      STORAGE_KEYS.LEGACY_TERMS_STATE_PREFIX,
       STORAGE_KEYS.TERMS_STATE_PREFIX,
     ];
 
     if (signupProfileId?.trim()) {
       keys.push(
+        `${STORAGE_KEYS.LEGACY_TERMS_STATE_PREFIX}_${signupProfileId.trim()}`,
         `${STORAGE_KEYS.TERMS_STATE_PREFIX}_${signupProfileId.trim()}`,
       );
     }
