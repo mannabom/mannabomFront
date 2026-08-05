@@ -59,10 +59,15 @@ try {
   if (messaging && typeof messaging === 'function') {
     messaging().setBackgroundMessageHandler(function (remoteMessage) {
       try {
-        console.log('📦 [PushBG] message:', {
-          notification: remoteMessage ? remoteMessage.notification : null,
-          data: remoteMessage ? remoteMessage.data : null,
-        });
+        if (__DEV__) {
+          console.log('📦 [PushBG] message received:', {
+            hasNotification: !!(remoteMessage && remoteMessage.notification),
+            dataKeys:
+              remoteMessage && remoteMessage.data
+                ? Object.keys(remoteMessage.data)
+                : [],
+          });
+        }
 
         return ensureChannel()
           .then(function () {

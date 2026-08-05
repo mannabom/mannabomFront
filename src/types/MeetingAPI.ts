@@ -20,20 +20,20 @@ export interface MeetingMemberInfo {
 }
 
 export interface MeetingMemberPreview {
-  userId: number;
+  userId: string;
   profileImage: string;
 }
 
 export interface MeetingTeamMember {
-  userId: number;
+  userId: string;
   nickname: string;
   profileImage: string;
   leader: boolean;
 }
 
 export interface MeetingRoomSummary {
-  roomId?: number;
-  meetingId: number;
+  roomId?: string;
+  meetingId: string;
   meetingStatus: MeetingSearchStatus | string;
   roomName: string;
   region: MeetingRegion;
@@ -44,8 +44,8 @@ export interface MeetingRoomSummary {
 
 export interface MyMeetingStatus {
   hasActiveRoom: boolean;
-  roomId?: number;
-  meetingId?: number;
+  roomId?: string;
+  meetingId?: string;
   matchingStatus?: MeetingStatus;
   roomName?: string;
   roomCode?: string;
@@ -58,8 +58,8 @@ export interface MyMeetingStatus {
 }
 
 export interface MeetingChatRoomInfo {
-  roomId: number;
-  meetingId: number;
+  roomId?: string;
+  meetingId?: string;
   matchingStatus: MeetingStatus;
   roomName: string;
   roomCode: string;
@@ -72,7 +72,7 @@ export interface MeetingChatRoomInfo {
 }
 
 export interface MeetingMemberProfile {
-  userId: number;
+  userId: string;
   profileImage: string;
   age: number;
   mbti: string;
@@ -111,7 +111,7 @@ export interface MeetingRoomCreateRequest {
 }
 
 export interface MeetingRoomJoinRequest {
-  meetingId: number;
+  meetingId: string;
 }
 
 export interface MeetingRoomJoinByCodeRequest {
@@ -119,7 +119,7 @@ export interface MeetingRoomJoinByCodeRequest {
 }
 
 export interface MeetingRoomLeaveRequest {
-  roomId: number;
+  roomId: string;
 }
 
 export interface MeetingRoomLeaveResult {
@@ -165,7 +165,7 @@ export interface MatchingContinueResult {
 }
 
 export interface MatchingResultMember {
-  userId: number;
+  userId: string;
   nickname: string;
   age: number;
   profileImage: string;
@@ -201,7 +201,8 @@ export interface AcceptMatchResult {
       roomId: string;
       roomName: string;
       participants: {
-        userId: number;
+        userId: string;
+        profileId?: string;
         nickname: string;
         profileImage: string;
       }[];
@@ -227,7 +228,7 @@ export interface MatchingStatusStreamEvent {
   type: 'MATCHING_STATUS';
   roomId: string;
   timestamp: string;
-  eventId: string;
+  eventId?: string;
   data: {
     status: MeetingStatus;
     matchingDuration?: number;
@@ -240,7 +241,7 @@ export interface MatchFoundStreamEvent {
   type: 'MATCH_FOUND';
   roomId: string;
   timestamp: string;
-  eventId: string;
+  eventId?: string;
   data: {
     matchId: string;
     opponentTeam: {
@@ -256,7 +257,7 @@ export interface MatchingTimeoutStreamEvent {
   type: 'MATCHING_TIMEOUT';
   roomId: string;
   timestamp: string;
-  eventId: string;
+  eventId?: string;
   data: {
     totalWaitTime: number;
     canContinue: boolean;
@@ -268,14 +269,15 @@ export interface DecisionResultStreamEvent {
   type: 'DECISION_RESULT';
   roomId: string;
   timestamp: string;
-  eventId: string;
+  eventId?: string;
   data: {
     matchId: string;
     chatRoom?: {
       roomId: string;
       roomName: string;
       participants: {
-        userId: number;
+        userId: string;
+        profileId?: string;
         nickname: string;
         profileImage: string;
       }[];

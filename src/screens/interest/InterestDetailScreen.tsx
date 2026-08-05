@@ -17,6 +17,7 @@ import {
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { datingApiService } from '../../services/DatingApiService';
 import { API_BASE_URL } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   CheckTingWalletResponse,
   DrinkingHabit,
@@ -25,6 +26,7 @@ import {
   SmokingHabit,
 } from '../../types/DatingAPI';
 import { drinkingHabitLabels, smokingHabitLabels } from '../../utils/DatingUtils';
+import { toExternalId } from '../../utils/IdUtils';
 
 type DetailData = {
   nickname: string;
@@ -35,7 +37,7 @@ type DetailData = {
   smoking?: SmokingHabit;
   drinking?: DrinkingHabit;
   questionAnswers: MatchQuestionAnswer[];
-  photos: { photoId: number; imageUrl: string; blind: boolean }[];
+  photos: { photoId?: string; imageUrl: string; blind: boolean }[];
 };
 
 const messageIcon = require('../../assets/images/likeable.png');
@@ -82,14 +84,14 @@ const parseDetail = (
   const photosRaw = Array.isArray(raw?.photos) ? raw.photos : [];
   const photos = photosRaw
     .map((p: any) => ({
-      photoId: Number(p?.photoId ?? 0),
+      photoId: toExternalId(p?.photoId ?? p?.id) ?? undefined,
       imageUrl: toAbsoluteUri(p?.imageUrl ?? p?.ImageUrl),
       blind: !!p?.blind,
     }))
     .filter((p: any) => !!p.imageUrl);
 
   if (!photos.length && previewImageUrl) {
-    photos.push({ photoId: 0, imageUrl: previewImageUrl, blind: false });
+    photos.push({ imageUrl: previewImageUrl, blind: false });
   }
 
   return {
@@ -133,8 +135,8 @@ export default function InterestDetailScreen() {
 
   const tab: 'received' | 'sent' = route.params?.tab ?? 'received';
   const kind: 'LIKE' | 'MESSAGE' | 'HIGH_SCORE' = route.params?.kind ?? 'LIKE';
-  const sourceId: number = route.params?.sourceId ?? 0;
-  const profileId: number = route.params?.profileId ?? 0;
+  const sourceId = toExternalId(route.params?.sourceId);
+  const profileId = toExternalId(route.params?.profileId);
   const isLoveView: boolean = !!route.params?.isLoveView;
   const previewName: string = route.params?.nickname ?? '회원';
   const previewImageUrl: string | undefined = route.params?.imageUrl;
@@ -183,6 +185,12 @@ export default function InterestDetailScreen() {
   }, [navigation]);
 
   const refresh = useCallback(async () => {
+    if (!profileId) {
+      Alert.alert('오류', '상세 프로필 ID를 확인할 수 없어요.');
+      navigation.goBack();
+      return;
+    }
+
     try {
       setLoading(true);
       const [walletRes, detailRes] = await Promise.all([
@@ -215,7 +223,12 @@ export default function InterestDetailScreen() {
         if (fromApi != null) setReceivedScore(fromApi);
       }
     } catch (e) {
-      console.warn('Failed to load interest detail', e);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load interest detail',
+          e instanceof Error ? e.message : 'unknown error',
+        );
+      }
       Alert.alert('오류', '상세 프로필을 불러오지 못했어요.');
       navigation.goBack();
     } finally {
@@ -277,6 +290,10 @@ export default function InterestDetailScreen() {
 
   const handleRespond = async (accepted: boolean, rejectReason?: string) => {
     if (responding) return;
+    if (!sourceId) {
+      Alert.alert('안내', '요청 ID를 확인할 수 없어 처리하지 않았어요.');
+      return;
+    }
     try {
       setResponding(true);
       if (kind === 'MESSAGE') {
@@ -686,10 +703,14 @@ export default function InterestDetailScreen() {
               style={styles.modalPinkBtn}
               onPress={() => {
                 setShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.modalPinkBtnText}>스토어 이동</Text>
+              <Text style={styles.modalPinkBtnText}>
+                {FEATURE_FLAGS.store ? '스토어 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

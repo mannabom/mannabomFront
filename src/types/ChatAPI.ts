@@ -6,6 +6,11 @@ export type ProfileRequestStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'pendin
 
 export interface ChatParticipantDTO {
   userId: string;
+  /**
+   * 상대 프로필 상세 이동에 사용하는 영구 profileId.
+   * 백엔드 participants 응답 배포 전까지는 없을 수 있다.
+   */
+  profileId?: string;
   nickname: string;
   profileImage: string;
 }

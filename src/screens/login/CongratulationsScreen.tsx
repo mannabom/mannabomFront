@@ -10,20 +10,34 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId, saveAuthTokens } from '../../utils/AuthUtils';
+import { API_ENDPOINTS_LIST } from '../../config/api';
+import {
+  clearSignupSession,
+  getSignupProfileId,
+  saveAuthenticatedSession,
+} from '../../utils/AuthUtils';
 import {
   SignupCompleteRequestDto,
   SignupCompleteResponseDto,
 } from '../../types/NicknameAPI';
 import {
   getCombinedProfileData,
-  getOptionalAnswers,
-  getRelationshipChoices,
+  clearAllProfileData,
 } from '../../utils/ProfileStorage';
+import { requireExternalId } from '../../utils/IdUtils';
+import signupApiClient from '../../services/signupApiClient';
+import { signupApiService } from '../../services/SignupApiService';
 
 interface CongratulationsScreenProps {
   onComplete: (userData: any) => void;
+}
+
+interface PendingUserData {
+  signupProfileId: string;
+  userId: string;
+  accessToken: string;
+  refreshToken: string;
+  initialPoints: number;
 }
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -69,75 +83,31 @@ const COLORS = [
   '#FF6B9D',
 ] as const;
 
-const readResponseBody = async (res: Response) => {
-  const text = await res.text();
-  try {
-    return { text, json: text ? JSON.parse(text) : null };
-  } catch {
-    return { text, json: null };
+const requireNonEmptyString = (value: unknown, fieldName: string): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${fieldName}이(가) 없는 잘못된 서버 응답입니다.`);
   }
+  return value.trim();
 };
 
-const toFiniteNumber = (value: unknown): number | undefined => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
+const requireInitialPoints = (value: unknown): number => {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
+    throw new Error('초기 포인트가 없는 잘못된 서버 응답입니다.');
   }
-  return undefined;
-};
-
-const calculateLocalSignupPoints = async (): Promise<number> => {
-  const [optionalAnswers, relationshipChoices] = await Promise.all([
-    getOptionalAnswers(),
-    getRelationshipChoices(),
-  ]);
-
-  const optionalCount = Object.values(optionalAnswers ?? {}).filter(
-    value => typeof value === 'string' && value.trim().length >= 30,
-  ).length;
-
-  const relationshipCount = Object.values(relationshipChoices ?? {}).filter(
-    value => typeof value === 'string' && value.trim().length > 0,
-  ).length;
-
-  return optionalCount * 15 + relationshipCount * 5;
-};
-
-const extractAwardedPoints = (data: Record<string, unknown>, fallback: number) => {
-  const directValue = toFiniteNumber(data.initialPoints);
-  if (directValue !== undefined && directValue > 0) return directValue;
-
-  const candidateKeys = [
-    'initialTing',
-    'initialTings',
-    'pointTing',
-    'pointTingNum',
-    'rewardedPoints',
-    'rewardPoints',
-    'points',
-  ];
-
-  for (const key of candidateKeys) {
-    const value = toFiniteNumber(data[key]);
-    if (value !== undefined && value > 0) return value;
-  }
-
-  const eventTing = toFiniteNumber(data.eventTing ?? data.eventTingNum);
-  const normalTing = toFiniteNumber(data.ting ?? data.tingNum);
-  const walletTotal = (eventTing ?? 0) + (normalTing ?? 0);
-  if (walletTotal > 0) return walletTotal;
-
-  return fallback;
+  return value;
 };
 
 const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
   onComplete,
 }) => {
   const [isPreparing, setIsPreparing] = useState(true);
-  const [isCompleting, setIsCompleting] = useState(false);
   const [initialPoints, setInitialPoints] = useState<number>(0);
-  const [pendingUserData, setPendingUserData] = useState<any | null>(null);
+  const [pendingUserData, setPendingUserData] =
+    useState<PendingUserData | null>(null);
 
   const [cardSize, setCardSize] = useState<{ w: number; h: number }>({
     w: CARD_W,
@@ -248,18 +218,85 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     );
   };
 
+  async function persistCompletedSignup(
+    completedUserData: PendingUserData,
+  ): Promise<void> {
+    await saveAuthenticatedSession(
+      completedUserData.accessToken,
+      completedUserData.refreshToken,
+      completedUserData.userId,
+    );
+
+    setInitialPoints(completedUserData.initialPoints);
+    setPendingUserData(completedUserData);
+
+    const cleanupResults = await Promise.allSettled([
+      clearAllProfileData(completedUserData.signupProfileId),
+      clearSignupSession(),
+    ]);
+    const failedCleanup = cleanupResults.find(
+      result => result.status === 'rejected',
+    );
+    if (failedCleanup?.status === 'rejected') {
+      if (__DEV__) {
+        console.warn(
+          '❌ 가입 임시 데이터 정리 실패(로그인 세션은 저장됨):',
+          failedCleanup.reason,
+        );
+      }
+    }
+  }
+
+  function showSessionSaveError(completedUserData: PendingUserData): void {
+    Alert.alert(
+      '로그인 정보 저장 실패',
+      '회원가입은 완료되었지만 로그인 정보를 기기에 저장하지 못했습니다. 완료 API를 다시 호출하지 않고 저장만 다시 시도합니다.',
+      [
+        {
+          text: '저장 다시 시도',
+          onPress: () => {
+            void retrySessionSave(completedUserData);
+          },
+        },
+      ],
+    );
+  }
+
+  async function retrySessionSave(
+    completedUserData: PendingUserData,
+  ): Promise<void> {
+    try {
+      setIsPreparing(true);
+      await persistCompletedSignup(completedUserData);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('❌ 완료된 회원가입의 로그인 정보 재저장 실패:', error);
+      }
+      showSessionSaveError(completedUserData);
+    } finally {
+      setIsPreparing(false);
+    }
+  }
+
   const prepareSignupResult = async () => {
+    let completedUserData: PendingUserData | null = null;
+
     try {
       setIsPreparing(true);
 
-      const profileId = await getProfileId();
-      if (__DEV__) console.log('🎉 [prepareSignupResult] profileId:', profileId ? 'YES' : 'NO');
-
-      if (!profileId) {
-        throw new Error('프로필 ID가 없습니다. 다시 로그인해주세요.');
+      const signupProfileId = await getSignupProfileId();
+      if (__DEV__) {
+        console.log(
+          '🎉 [prepareSignupResult] signupProfileId:',
+          signupProfileId ? 'YES' : 'NO',
+        );
       }
 
-      const combined = await getCombinedProfileData(profileId);
+      if (!signupProfileId) {
+        throw new Error('가입 진행 ID가 없습니다. 다시 로그인해주세요.');
+      }
+
+      const combined = await getCombinedProfileData(signupProfileId);
       if (__DEV__) console.log('🔗 [prepareSignupResult] combined profile data ready:', !!combined);
 
       if (!combined) {
@@ -268,66 +305,60 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
         );
       }
 
-      const localSignupPoints = await calculateLocalSignupPoints();
-
-      const prUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP}`;
-      if (__DEV__) console.log('🌐 [prepareSignupResult] POST profile-relationship:', prUrl);
-
-      const prRes = await fetch(prUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(combined),
-      });
-
-      const prBody = await readResponseBody(prRes);
-      if (__DEV__) console.log('✅ [profile-relationship] status:', prRes.status);
-
-      if (!prRes.ok || (prBody.json && prBody.json.success === false)) {
-        const msg =
-          prBody.json?.message || `프로필 저장 실패 (status ${prRes.status})`;
-        throw new Error(msg);
+      const profileResponse = await signupApiClient.post(
+        API_ENDPOINTS_LIST.SAVE_PROFILE_RELATIONSHIP,
+        combined,
+      );
+      if (profileResponse.data?.success === false) {
+        throw new Error(
+          profileResponse.data?.message || '프로필 저장에 실패했습니다.',
+        );
       }
 
-      const completeUrl = `${API_BASE_URL}${API_ENDPOINTS_LIST.SIGNUP_COMPLETE}`;
-      const requestData: SignupCompleteRequestDto = { profileId };
+      const requestData: SignupCompleteRequestDto = {
+        profileId: signupProfileId,
+      };
 
-      if (__DEV__) console.log('🌐 [prepareSignupResult] POST signup complete:', completeUrl);
       if (__DEV__) console.log('📝 [signup complete] request profileId:', requestData.profileId ? 'YES' : 'NO');
 
-      const res = await fetch(completeUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
-      });
+      const responseData: SignupCompleteResponseDto =
+        await signupApiService.completeSignup(requestData);
 
-      const body = await readResponseBody(res);
-      if (__DEV__) console.log('✅ [signup complete] status:', res.status);
-
-      const responseData = body.json as SignupCompleteResponseDto | null;
-
-      if (!res.ok || !responseData?.data) {
+      if (
+        responseData?.success !== true ||
+        !responseData.data
+      ) {
         const msg =
           responseData?.message ||
-          body.text ||
           '회원가입 완료 중 오류가 발생했습니다.';
         throw new Error(msg);
       }
 
-      const points = extractAwardedPoints(
-        responseData.data as unknown as Record<string, unknown>,
-        localSignupPoints,
-      );
-      setInitialPoints(points);
-
-      const userData = {
-        userId: responseData.data.userId,
-        accessToken: responseData.data.accessToken,
-        refreshToken: responseData.data.refreshToken,
-        initialPoints: points,
+      completedUserData = {
+        signupProfileId,
+        userId: requireExternalId(
+          responseData.data.userId,
+          '회원가입 완료 사용자 ID',
+        ),
+        accessToken: requireNonEmptyString(
+          responseData.data.accessToken,
+          '액세스 토큰',
+        ),
+        refreshToken: requireNonEmptyString(
+          responseData.data.refreshToken,
+          '리프레시 토큰',
+        ),
+        initialPoints: requireInitialPoints(responseData.data.initialPoints),
       };
-      setPendingUserData(userData);
+
+      await persistCompletedSignup(completedUserData);
     } catch (error) {
       if (__DEV__) console.warn('❌ 회원가입 준비 오류(prepareSignupResult):', error);
+
+      if (completedUserData) {
+        showSessionSaveError(completedUserData);
+        return;
+      }
 
       const msg = error instanceof Error ? error.message : '오류가 발생했습니다.';
 
@@ -342,21 +373,14 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleConfirm = async () => {
-    if (!pendingUserData || isCompleting) return;
+  const handleConfirm = () => {
+    if (!pendingUserData) return;
 
-    setIsCompleting(true);
-    try {
-      if (__DEV__) console.log('🔐 [handleConfirm] saveAuthTokens start');
-      await saveAuthTokens(pendingUserData.accessToken, pendingUserData.refreshToken);
-      if (__DEV__) console.log('✅ [handleConfirm] tokens saved, navigating...');
-      onComplete(pendingUserData);
-    } catch (e) {
-      if (__DEV__) console.warn('❌ 토큰 저장 오류:', e);
-      Alert.alert('오류', '로그인 정보 저장 중 문제가 발생했어요.');
-    } finally {
-      setIsCompleting(false);
-    }
+    const {
+      signupProfileId: _completedSignupProfileId,
+      ...authenticatedUserData
+    } = pendingUserData;
+    onComplete(authenticatedUserData);
   };
 
   return (
@@ -402,13 +426,13 @@ const CongratulationsScreen: React.FC<CongratulationsScreenProps> = ({
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (isPreparing || !pendingUserData || isCompleting) && styles.confirmButtonDisabled,
+              (isPreparing || !pendingUserData) && styles.confirmButtonDisabled,
             ]}
             onPress={handleConfirm}
-            disabled={isPreparing || !pendingUserData || isCompleting}
+            disabled={isPreparing || !pendingUserData}
             activeOpacity={0.85}
           >
-            {isPreparing || isCompleting ? (
+            {isPreparing ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.confirmButtonText}>확인</Text>

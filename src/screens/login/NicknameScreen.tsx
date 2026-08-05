@@ -10,11 +10,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
+import signupApiClient from '../../services/signupApiClient';
 import {
   SetNicknameRequestDto,
   SetNicknameResponseDto,
 } from '../../types/NicknameAPI';
+import { requireExternalId } from '../../utils/IdUtils';
 
 interface NicknameScreenProps {
   onNicknameComplete: () => void;
@@ -134,29 +136,25 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({ onNicknameComplete }) =
     setNicknameSuccess('');
 
     try {
-      const profileId = await getProfileId();
-      if (!profileId) {
+      const signupProfileId = await getSignupProfileId();
+      if (!signupProfileId) {
         setNicknameError('*프로필 ID가 없습니다. 다시 로그인해주세요.');
         return;
       }
 
       const requestData: SetNicknameRequestDto = {
-        profileId,
+        profileId: signupProfileId,
         nickname: nickname.trim(),
       };
 
-      const response = await fetch(
-        `${API_BASE_URL}${API_ENDPOINTS_LIST.SET_NICKNAME}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestData),
-        },
+      const response = await signupApiClient.post<SetNicknameResponseDto>(
+        API_ENDPOINTS_LIST.SET_NICKNAME,
+        requestData,
       );
 
-      const responseData: SetNicknameResponseDto = await response.json();
+      const responseData = response.data;
 
-      if (!response.ok) {
+      if (!responseData.success) {
         setNicknameError(
           responseData?.message || '*닉네임 설정 중 오류가 발생했습니다.',
         );
@@ -165,11 +163,23 @@ const NicknameScreen: React.FC<NicknameScreenProps> = ({ onNicknameComplete }) =
         return;
       }
 
+      const responseProfileId = requireExternalId(
+        responseData.data?.profileId,
+        '닉네임 설정 응답의 가입 진행 ID',
+      );
+      if (responseProfileId !== signupProfileId) {
+        throw new Error('닉네임 설정 응답의 가입 진행 ID가 일치하지 않습니다.');
+      }
+
       // ✅ 설정 완료 모달 제거 → 바로 다음 단계
       onNicknameComplete();
     } catch (error) {
       console.error('닉네임 설정 오류:', error);
-      setNicknameError('*닉네임 설정 중 오류가 발생했습니다.');
+      setNicknameError(
+        error instanceof Error
+          ? `*${error.message}`
+          : '*닉네임 설정 중 오류가 발생했습니다.',
+      );
       setIsDuplicateChecked(false);
     } finally {
       setIsLoading(false);

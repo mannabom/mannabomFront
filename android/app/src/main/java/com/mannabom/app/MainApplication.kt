@@ -1,4 +1,4 @@
-package com.mannabomfront
+package com.mannabom.app
 
 import android.app.Application
 import com.facebook.react.PackageList

@@ -33,10 +33,12 @@ export interface KakaoLoginResponseDto {
     // 기존 회원인 경우에만 제공 (userStatus == "ACTIVE")
     accessToken?: string;
     refreshToken?: string;
-    userId?: number;
+    userId?: string;
     nickname?: string; // 앱에서 설정한 닉네임
 
     // 신규 사용자인 경우에만 제공 (userStatus == "PENDING_VERIFICATION")
+    profileId?: string; // Redis에 저장되는 임시 가입 진행 ID
+    signupToken?: string; // 임시 가입 API 인증 토큰 (20분)
     kakaoUserInfo?: KakaoUserInfo;
 
     // 연령 제한인 경우에만 제공 (userStatus == "AGE_RESTRICTED")

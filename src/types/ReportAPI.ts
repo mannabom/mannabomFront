@@ -9,23 +9,25 @@ export enum ReportReason {
   ETC = 'ETC',
 }
 
-export interface UserReportRequestDTO {
-  contextId: number;
-  targetId: number;
+export const REPORT_DETAIL_MAX_LENGTH = 1000;
+
+export interface ChatReportRequestDTO {
+  /** 채팅방 전체 신고이므로 messageId가 아닌 chatRoomId를 보낸다. */
+  contextId: string;
+  /** 신고 대상의 profileId가 아닌 userId를 보낸다. */
+  targetId: string;
   reason: ReportReason;
-  additionalDetail: string;
+  additionalDetail?: string;
 }
 
-export const toReportId = (value: unknown): number | null => {
-  const trimmedValue = typeof value === 'string' ? value.trim() : '';
-  const numericValue =
-    typeof value === 'number'
-      ? value
-      : /^\d+$/.test(trimmedValue)
-        ? Number(trimmedValue)
-        : Number.NaN;
+export interface ProfileReportRequestDTO {
+  /** 프로필 신고 API는 상대의 영구 profileId만 식별자로 받는다. */
+  profileId: string;
+  reason: ReportReason;
+  additionalDetail?: string;
+}
 
-  return Number.isSafeInteger(numericValue) && numericValue > 0
-    ? numericValue
-    : null;
-};
+export interface ReportSubmissionResult {
+  /** 신규 신고와 중복 신고 모두 서버가 동일한 문자열 ID를 반환한다. */
+  reportId: string;
+}

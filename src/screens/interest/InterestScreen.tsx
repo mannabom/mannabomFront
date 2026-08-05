@@ -17,11 +17,13 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { datingApiService } from '../../services/DatingApiService';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   FromMeSignalProfileDto,
   InterestType,
   ToMeSignalProfileDto,
 } from '../../types/DatingAPI';
+import { toExternalId } from '../../utils/IdUtils';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -34,8 +36,8 @@ type ItemKind = InterestType;
 
 type InterestItem = {
   id: string;
-  sourceId: number;
-  profileId?: number;
+  sourceId: string;
+  profileId?: string;
   kind: ItemKind;
   nickname: string;
   imageUrl?: string;
@@ -75,13 +77,10 @@ const normalizeStatus = (raw: FromMeSignalProfileDto['status']): InterestStatus 
   return undefined;
 };
 
-const toPositiveId = (...vals: any[]): number | undefined => {
+const firstExternalId = (...vals: any[]): string | undefined => {
   for (const v of vals) {
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-    if (typeof v === 'string' && v.trim().length > 0) {
-      const n = Number(v);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
+    const id = toExternalId(v);
+    if (id) return id;
   }
   return undefined;
 };
@@ -104,19 +103,14 @@ const extractProfileIdCandidates = (raw: any) => {
     anyRaw?.ratedProfileId,
     anyRaw?.scoreTargetProfileId,
     anyRaw?.matchProfileId,
-    anyRaw?.userId,
-    anyRaw?.targetUserId,
-    anyRaw?.toUserId,
-    anyRaw?.fromUserId,
   ];
 };
 
 const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
   const anyRaw: any = raw;
-  const resolvedProfileId =
-    raw.type === 'HIGH_SCORE'
-      ? toPositiveId(raw.id, ...extractProfileIdCandidates(raw))
-      : toPositiveId(...extractProfileIdCandidates(raw));
+  const resolvedProfileId = firstExternalId(
+    ...extractProfileIdCandidates(raw),
+  );
   return {
     id: `received-${raw.type}-${raw.id}`,
     sourceId: raw.id,
@@ -136,10 +130,9 @@ const mapReceivedItem = (raw: ToMeSignalProfileDto): InterestItem => {
 
 const mapSentItem = (raw: FromMeSignalProfileDto): InterestItem => {
   const anyRaw: any = raw;
-  const resolvedProfileId =
-    raw.type === 'HIGH_SCORE'
-      ? toPositiveId(raw.id, ...extractProfileIdCandidates(raw))
-      : toPositiveId(...extractProfileIdCandidates(raw));
+  const resolvedProfileId = firstExternalId(
+    ...extractProfileIdCandidates(raw),
+  );
   return {
     id: `sent-${raw.type}-${raw.id}`,
     sourceId: raw.id,
@@ -186,7 +179,14 @@ export default function InterestScreen() {
       setTingBalance(walletRes.value.tingNum ?? 0);
       setEventTingBalance(walletRes.value.eventTingNum ?? 0);
     } else {
-      console.warn('Failed to load wallet on interest screen', walletRes.reason);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load wallet on interest screen',
+          walletRes.reason instanceof Error
+            ? walletRes.reason.message
+            : 'unknown error',
+        );
+      }
     }
 
     if (receivedRes.status === 'fulfilled') {
@@ -195,7 +195,14 @@ export default function InterestScreen() {
         .filter(v => isWithin30Days(v.createdAt));
       setReceivedItems(mappedReceived);
     } else {
-      console.warn('Failed to load received interests', receivedRes.reason);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load received interests',
+          receivedRes.reason instanceof Error
+            ? receivedRes.reason.message
+            : 'unknown error',
+        );
+      }
       setReceivedItems([]);
     }
 
@@ -205,7 +212,14 @@ export default function InterestScreen() {
         .filter(v => isWithin30Days(v.createdAt));
       setSentItems(mappedSent);
     } else {
-      console.warn('Failed to load sent interests', sentRes.reason);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load sent interests',
+          sentRes.reason instanceof Error
+            ? sentRes.reason.message
+            : 'unknown error',
+        );
+      }
       setSentItems([]);
     }
 
@@ -225,7 +239,12 @@ export default function InterestScreen() {
       );
       setIsSubscribed(profileSub);
     } catch (e) {
-      console.warn('Failed to load subscription on interest screen', e);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load subscription on interest screen',
+          e instanceof Error ? e.message : 'unknown error',
+        );
+      }
       setIsSubscribed(false);
     } finally {
       setLoading(false);
@@ -261,28 +280,8 @@ export default function InterestScreen() {
   const canOpenHighScoreProfile = (item: InterestItem) =>
     hasFreeHighScoreView || purchasedHighScoreIds.includes(item.id);
 
-  const resolveSentTargetProfileId = (item: InterestItem): number | undefined => {
-    if (item.profileId) return item.profileId;
-    const sentWithProfileId = sentItems.filter(v => !!v.profileId);
-    const byNickname = sentWithProfileId.find(v => v.nickname === item.nickname)?.profileId;
-    if (byNickname) return byNickname;
-    const byImage = sentWithProfileId.find(v => v.imageUrl && v.imageUrl === item.imageUrl)?.profileId;
-    if (byImage) return byImage;
-    const receivedWithProfileId = receivedItems.filter(v => !!v.profileId);
-    const byReceivedNickname = receivedWithProfileId.find(v => v.nickname === item.nickname)?.profileId;
-    if (byReceivedNickname) return byReceivedNickname;
-    const byReceivedImage = receivedWithProfileId.find(
-      v => v.imageUrl && v.imageUrl === item.imageUrl,
-    )?.profileId;
-    if (byReceivedImage) return byReceivedImage;
-    return undefined;
-  };
-
   const openProfile = (item: InterestItem) => {
-    const targetProfileId =
-      tab === 'sent'
-        ? resolveSentTargetProfileId(item)
-        : item.profileId;
+    const targetProfileId = item.profileId;
 
     if (!targetProfileId) {
       Alert.alert('안내', '서버 응답에 profileId가 없어 상세 프로필을 열 수 없어요.');
@@ -591,10 +590,14 @@ export default function InterestScreen() {
               style={styles.storeBtn}
               onPress={() => {
                 setShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.storeBtnText}>스토어로 이동</Text>
+              <Text style={styles.storeBtnText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

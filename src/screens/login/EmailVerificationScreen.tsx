@@ -9,8 +9,8 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
-import apiClient from '../../services/apiClient';
-import { getProfileId } from '../../utils/AuthUtils';
+import signupApiClient from '../../services/signupApiClient';
+import { getSignupProfileId } from '../../utils/AuthUtils';
 import { API_ENDPOINTS_LIST } from '../../config/api';
 
 interface EmailVerificationScreenProps {
@@ -38,12 +38,12 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   const [codeInfo, setCodeInfo] = useState(''); // ✅ 인증 완료 문구(필요시)
 
   const [isLoading, setIsLoading] = useState(false);
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [signupProfileId, setSignupProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfileId = async () => {
-      const id = await getProfileId();
-      if (id) setProfileId(id);
+      const id = await getSignupProfileId();
+      if (id) setSignupProfileId(id);
       else {
         Alert.alert('오류', '프로필 ID를 찾을 수 없습니다. 다시 로그인해주세요.');
       }
@@ -100,7 +100,7 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   };
 
   const handleSendVerification = async () => {
-    if (!isEmailValid || isLoading || !profileId) {
+    if (!isEmailValid || isLoading || !signupProfileId) {
       // ❗️전송 성공/완료 모달만 제거 요청이라, 에러 Alert은 유지
       Alert.alert('오류', '올바른 학교 이메일을 입력해주세요.');
       return;
@@ -109,10 +109,13 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setIsLoading(true);
     setEmailInfo('');
     try {
-      const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFICATION, {
-        profileId,
-        email: email.trim(),
-      });
+      const response = await signupApiClient.post(
+        API_ENDPOINTS_LIST.EMAIL_VERIFICATION,
+        {
+          profileId: signupProfileId,
+          email: email.trim(),
+        },
+      );
 
       if (response.data?.success && response.data?.data?.emailSent) {
         setIsCodeSent(true);
@@ -122,14 +125,23 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
       }
     } catch (error) {
       console.error('❌ 이메일 인증번호 전송 오류:', error);
-      Alert.alert('오류', '인증번호 전송 중 오류가 발생했습니다. 다시 시도해주세요.');
+      Alert.alert(
+        '오류',
+        error instanceof Error
+          ? error.message
+          : '인증번호 전송 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleVerifyCode = async () => {
-    if (verificationCode.trim().length === 0 || isLoading || !profileId) {
+    if (
+      verificationCode.trim().length === 0 ||
+      isLoading ||
+      !signupProfileId
+    ) {
       setCodeError('*인증번호가 일치하지 않습니다.');
       return;
     }
@@ -137,8 +149,8 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setIsLoading(true);
     setCodeInfo('');
     try {
-      const response = await apiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFY, {
-        profileId,
+      const response = await signupApiClient.post(API_ENDPOINTS_LIST.EMAIL_VERIFY, {
+        profileId: signupProfileId,
         verificationCode: verificationCode.trim(),
       });
 
@@ -153,7 +165,12 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     } catch (error) {
       console.error('❌ 이메일 인증 확인 오류:', error);
       setCodeError('*인증번호가 일치하지 않습니다.');
-      Alert.alert('오류', '인증번호 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      Alert.alert(
+        '오류',
+        error instanceof Error
+          ? error.message
+          : '인증번호 확인 중 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }

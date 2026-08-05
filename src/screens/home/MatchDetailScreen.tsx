@@ -27,12 +27,14 @@ import {
 import { datingApiService } from '../../services/DatingApiService';
 import { drinkingHabitLabels, smokingHabitLabels } from '../../utils/DatingUtils';
 import { API_BASE_URL } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import {
   clearSelectedGift,
   getSelectedGift,
   SelectedGift,
   setSelectedGift,
 } from '../../utils/GiftSelectionStore';
+import { toExternalId } from '../../utils/IdUtils';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const likeableImg = require('../../assets/images/likeable.png');
@@ -53,7 +55,7 @@ type DetailData = {
   smoking?: SmokingHabit;
   drinking?: DrinkingHabit;
   questionAnswers: MatchQuestionAnswer[];
-  photos: { photoId: number; imageUrl: string; blind: boolean }[];
+  photos: { photoId?: string; imageUrl: string; blind: boolean }[];
 };
 
 type ChoiceQA = {
@@ -65,14 +67,14 @@ type ChoiceQA = {
 };
 
 const CHOICE_QUESTIONS = [
-  { id: 'fight', title: '연인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', questionId: 8, keywords: ['싸웠을', '다퉜', '갈등'] },
-  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', questionId: 9, keywords: ['함께한사진', '사진', 'sns'] },
-  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', questionId: 10, keywords: ['중요한것', '중요한것은', '연애에서더중요'] },
-  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', questionId: 11, keywords: ['데이트', '실내', '실외'] },
-  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', questionId: 12, keywords: ['질투', '쿨한게편하다'] },
-  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기', questionId: 13, keywords: ['이상적인하루', '하루는', '휴일'] },
-  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', questionId: 14, keywords: ['끌리는모습', '매력', '주로끌리는'] },
-  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', questionId: 15, keywords: ['친구들과', '친구', '어울리며'] },
+  { id: 'fight', title: '연인과 싸웠을 때', left: '바로 풀고 싶다', right: '시간을 좀 가지고 싶다', questionId: '8', keywords: ['싸웠을', '다퉜', '갈등'] },
+  { id: 'photo', title: '연인과 함께한 사진', left: 'SNS에 공유해도 된다', right: 'SNS에 공유하기 싫다', questionId: '9', keywords: ['함께한사진', '사진', 'sns'] },
+  { id: 'important', title: '연애에서 더 중요한 것은', left: '편안함', right: '설렘', questionId: '10', keywords: ['중요한것', '중요한것은', '연애에서더중요'] },
+  { id: 'date', title: '연인과의 데이트에서', left: '실내에서 데이트하기', right: '실외에서 데이트하기', questionId: '11', keywords: ['데이트', '실내', '실외'] },
+  { id: 'jealousy', title: '연애에서 적당한 질투가', left: '있어야 재미있다', right: '쿨한 게 편하다', questionId: '12', keywords: ['질투', '쿨한게편하다'] },
+  { id: 'idealDay', title: '연인과의 이상적인 하루는', left: '편한 일상 즐기기', right: '새로운 경험 해보기', questionId: '13', keywords: ['이상적인하루', '하루는', '휴일'] },
+  { id: 'attracted', title: '연인에게 주로 끌리는 모습은', left: '배려심 넘치는 모습', right: '주도적인 모습', questionId: '14', keywords: ['끌리는모습', '매력', '주로끌리는'] },
+  { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기', questionId: '15', keywords: ['친구들과', '친구', '어울리며'] },
 ] as const;
 
 const CHOICE_CODE_TO_SIDE: Record<string, 'LEFT' | 'RIGHT'> = {
@@ -189,14 +191,14 @@ const parseDetail = (
   const photosRaw = Array.isArray(raw?.photos) ? raw.photos : [];
   const photos = photosRaw
     .map((p: any) => ({
-      photoId: Number(p?.photoId ?? 0),
+      photoId: toExternalId(p?.photoId ?? p?.id) ?? undefined,
       imageUrl: toAbsoluteUri(p?.imageUrl ?? p?.ImageUrl),
       blind: !!p?.blind,
     }))
-    .filter((p: any) => p.photoId > 0 && !!p.imageUrl);
+    .filter((p: any) => !!p.imageUrl);
 
   if (!photos.length && previewImageUrl) {
-    photos.push({ photoId: 0, imageUrl: previewImageUrl, blind: false });
+    photos.push({ imageUrl: previewImageUrl, blind: false });
   }
 
   const regionText = String(raw?.region ?? '').trim();
@@ -249,13 +251,13 @@ export default function MatchDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const source: MatchSource = route.params?.source ?? 'PROFILE_MATCH';
-  const targetProfileId: number = route.params?.targetProfileId ?? 0;
+  const targetProfileId = toExternalId(route.params?.targetProfileId);
 
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [wallet, setWallet] = useState<CheckTingWalletResponse | null>(null);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
-  const [unlockedPhotoIds, setUnlockedPhotoIds] = useState<number[]>([]);
+  const [unlockedPhotoIds, setUnlockedPhotoIds] = useState<string[]>([]);
 
   const [likeConfirmVisible, setLikeConfirmVisible] = useState(false);
   const [likeSuccessVisible, setLikeSuccessVisible] = useState(false);
@@ -293,6 +295,12 @@ export default function MatchDetailScreen() {
   }, [navigation]);
 
   const loadAll = useCallback(async () => {
+    if (!targetProfileId) {
+      Alert.alert('오류', '상대 프로필 ID를 확인할 수 없어요.');
+      navigation.goBack();
+      return;
+    }
+
     try {
       setLoading(true);
       const [walletRes, detailRes] = await Promise.all([
@@ -346,7 +354,13 @@ export default function MatchDetailScreen() {
       setSentGiftPreview(sentGiftByApi);
     } catch (e: any) {
       Alert.alert('오류', '상대 상세 프로필을 불러오지 못했어요.');
-      console.warn('load match detail failed', e?.response?.data || e?.message || e);
+      if (__DEV__) {
+        console.warn(
+          'load match detail failed',
+          e?.response?.status,
+          e?.message ?? 'unknown error',
+        );
+      }
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -372,8 +386,10 @@ export default function MatchDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       const gift = getSelectedGift();
-      if (gift) {
+      if (gift && FEATURE_FLAGS.gifticon) {
         setSelectedGiftState(gift);
+        clearSelectedGift();
+      } else if (gift) {
         clearSelectedGift();
       }
       return undefined;
@@ -389,7 +405,10 @@ export default function MatchDetailScreen() {
           typeof qObj === 'string'
             ? qObj
             : (qObj?.question as string) || '';
-        const qId = Number(typeof qObj === 'object' ? qObj?.questionId : item?.questionId) || 0;
+        const qId =
+          toExternalId(
+            typeof qObj === 'object' ? qObj?.questionId : item?.questionId,
+          ) ?? undefined;
         const qType =
           String(
             (typeof qObj === 'object' ? qObj?.questionType : item?.questionType) ?? '',
@@ -403,7 +422,7 @@ export default function MatchDetailScreen() {
         ).trim();
 
         return {
-          key: `${qId || 'q'}-${idx}`,
+          key: `${qId ?? 'q'}-${idx}`,
           qId,
           qType,
           title: cleanQuestionTitle(qText || `질문 ${idx + 1}`),
@@ -418,12 +437,13 @@ export default function MatchDetailScreen() {
 
     normalizedQAs.forEach(item => {
       const isChoiceType = item.qType.includes('CHOICE');
-      const isChoiceById = item.qId >= 8 && item.qId <= 15;
+      const isChoiceById = !!item.qId &&
+        ['8', '9', '10', '11', '12', '13', '14', '15'].includes(item.qId);
       if (!isChoiceType && !isChoiceById) return;
 
       const normTitle = normalizeQuestionKey(item.title);
       const template = CHOICE_QUESTIONS.find(q => {
-        if (item.qId > 0 && item.qId === q.questionId) return true;
+        if (item.qId && item.qId === q.questionId) return true;
         if (normTitle.includes(normalizeQuestionKey(q.title))) return true;
         return q.keywords.some(k => normTitle.includes(normalizeQuestionKey(k)));
       });
@@ -458,21 +478,24 @@ export default function MatchDetailScreen() {
     isProfileSource &&
     !!activePhoto &&
     activePhoto.blind &&
-    activePhoto.photoId > 0 &&
+    !!activePhoto.photoId &&
     !unlockedPhotoIds.includes(activePhoto.photoId);
 
   const likeCost = 20;
   const messageBaseCost = 40;
-  const messageCost = messageBaseCost + (selectedGift?.price ?? 0);
+  const messageCost =
+    messageBaseCost +
+    (FEATURE_FLAGS.gifticon ? selectedGift?.price ?? 0 : 0);
   const freeLikeLeft = wallet?.freeLikeNum ?? 0;
   const freeMessageLeft = wallet?.freeMessageNum ?? 0;
   const availableTing = (wallet?.tingNum ?? 0) + (wallet?.eventTingNum ?? 0);
 
   const handleUnlockPhoto = async () => {
-    if (!activePhoto || !isLockedPhoto) return;
+    if (!targetProfileId || !activePhoto?.photoId || !isLockedPhoto) return;
+    const photoId = activePhoto.photoId;
     try {
-      const res = await datingApiService.unlockExtraPhoto(targetProfileId, activePhoto.photoId);
-      setUnlockedPhotoIds(prev => [...prev, activePhoto.photoId]);
+      const res = await datingApiService.unlockExtraPhoto(targetProfileId, photoId);
+      setUnlockedPhotoIds(prev => [...prev, photoId]);
       setWallet(prev =>
         prev
           ? { ...prev, tingNum: res.tingRemains, eventTingNum: res.eventTingRemains }
@@ -484,6 +507,7 @@ export default function MatchDetailScreen() {
   };
 
   const handleSendLike = async () => {
+    if (!targetProfileId) return;
     if (likedAlreadySent) {
       Alert.alert('안내', '이미 호감을 보낸 상대입니다.');
       return;
@@ -517,6 +541,7 @@ export default function MatchDetailScreen() {
   };
 
   const handleSendMessage = async () => {
+    if (!targetProfileId) return;
     if (messagedAlreadySent) {
       setMessageVisible(true);
       return;
@@ -537,7 +562,9 @@ export default function MatchDetailScreen() {
       setWallet(nextWallet);
       setMessagedAlreadySent(true);
       setSentMessagePreview(messageText.trim());
-      setSentGiftPreview(selectedGift?.title ?? '');
+      setSentGiftPreview(
+        FEATURE_FLAGS.gifticon ? selectedGift?.title ?? '' : '',
+      );
       setMessageText('');
       setSelectedGiftState(null);
       setSelectedGift(null);
@@ -620,14 +647,14 @@ export default function MatchDetailScreen() {
                 setActivePhotoIndex(Math.max(0, Math.min(idx, Math.max(0, photos.length - 1))));
               }}
             >
-              {(photos.length ? photos : [{ photoId: 0, imageUrl: route.params?.previewImageUrl ?? '', blind: false }]).map(
+              {(photos.length ? photos : [{ photoId: undefined, imageUrl: route.params?.previewImageUrl ?? '', blind: false }]).map(
                 item => (
                   <Image
-                    key={`${item.photoId}-${item.imageUrl}`}
+                    key={`${item.photoId ?? 'preview'}-${item.imageUrl}`}
                     source={{ uri: item.imageUrl }}
                     style={styles.heroImage}
                     blurRadius={
-                      isProfileSource && item.blind && item.photoId > 0 && !unlockedPhotoIds.includes(item.photoId)
+                      isProfileSource && item.blind && !!item.photoId && !unlockedPhotoIds.includes(item.photoId)
                         ? 16
                         : 0
                     }
@@ -649,7 +676,7 @@ export default function MatchDetailScreen() {
                   <Text style={styles.lockCostText}>5</Text>
                 </TouchableOpacity>
                 <Text style={styles.lockOverlayText} pointerEvents="none">
-                  결제를 하시거나{'\n'}프로필 사진을 추가로 업로드 하시면{'\n'}무료로 열람이 가능합니다.
+                  팅을 사용하거나{'\n'}프로필 사진을 추가로 업로드 하시면{'\n'}열람할 수 있습니다.
                 </Text>
               </View>
             )}
@@ -809,10 +836,14 @@ export default function MatchDetailScreen() {
               style={styles.pinkDoneBtn}
               onPress={() => {
                 setLikeShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.pinkDoneText}>스토어로 이동</Text>
+              <Text style={styles.pinkDoneText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -835,7 +866,7 @@ export default function MatchDetailScreen() {
                 <Text style={styles.sentMessageText}>
                   {sentMessagePreview || '텍스트 란'}
                 </Text>
-                {sentGiftPreview ? (
+                {FEATURE_FLAGS.gifticon && sentGiftPreview ? (
                   <TouchableOpacity style={styles.sentGiftViewBtn} onPress={() => setSentGiftVisible(true)}>
                     <Text style={styles.sentGiftViewBtnText}>선물 보기</Text>
                   </TouchableOpacity>
@@ -852,8 +883,10 @@ export default function MatchDetailScreen() {
                     placeholder="자유롭게 입력해주세요."
                     placeholderTextColor="#B9B9B9"
                   />
-                  {!selectedGift ? <Image source={letter2Img} style={styles.messageLetter} /> : null}
-                  {selectedGift ? (
+                  {!FEATURE_FLAGS.gifticon || !selectedGift ? (
+                    <Image source={letter2Img} style={styles.messageLetter} />
+                  ) : null}
+                  {FEATURE_FLAGS.gifticon && selectedGift ? (
                     <View style={styles.giftTag}>
                       <Text style={styles.giftTagText}>{`선물 - ${selectedGift.title} ${selectedGift.price}`}</Text>
                       <TouchableOpacity
@@ -881,12 +914,16 @@ export default function MatchDetailScreen() {
                       )}
                     </View>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.giftBtn}
-                    onPress={() => navigation.navigate('Store', { pickGiftMode: true })}
-                  >
-                    <Image source={giftImg} style={styles.giftBtnIcon} />
-                  </TouchableOpacity>
+                  {FEATURE_FLAGS.gifticon ? (
+                    <TouchableOpacity
+                      style={styles.giftBtn}
+                      onPress={() =>
+                        navigation.navigate('Store', { pickGiftMode: true })
+                      }
+                    >
+                      <Image source={giftImg} style={styles.giftBtnIcon} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </>
             )}
@@ -894,22 +931,24 @@ export default function MatchDetailScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={sentGiftVisible} transparent animationType="fade" onRequestClose={() => setSentGiftVisible(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setSentGiftVisible(false)}>
-          <Pressable style={styles.modalCardSmall} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{`${detail.nickname}님이 선물을 보냈어요!`}</Text>
-              <TouchableOpacity onPress={() => setSentGiftVisible(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.giftLabel}>선물명</Text>
-            <View style={styles.giftPreviewBox}>
-              <Text style={styles.giftPreviewText}>{sentGiftPreview || '이미지'}</Text>
-            </View>
+      {FEATURE_FLAGS.gifticon ? (
+        <Modal visible={sentGiftVisible} transparent animationType="fade" onRequestClose={() => setSentGiftVisible(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setSentGiftVisible(false)}>
+            <Pressable style={styles.modalCardSmall} onPress={() => {}}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{`${detail.nickname}님이 선물을 보냈어요!`}</Text>
+                <TouchableOpacity onPress={() => setSentGiftVisible(false)}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.giftLabel}>선물명</Text>
+              <View style={styles.giftPreviewBox}>
+                <Text style={styles.giftPreviewText}>{sentGiftPreview || '이미지'}</Text>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      ) : null}
 
       <Modal visible={messageSuccessVisible} transparent animationType="fade" onRequestClose={() => setMessageSuccessVisible(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setMessageSuccessVisible(false)}>
@@ -951,10 +990,14 @@ export default function MatchDetailScreen() {
               style={styles.pinkDoneBtn}
               onPress={() => {
                 setMessageShortageVisible(false);
-                navigation.navigate('Store');
+                if (FEATURE_FLAGS.store) {
+                  navigation.navigate('Store');
+                }
               }}
             >
-              <Text style={styles.pinkDoneText}>스토어로 이동</Text>
+              <Text style={styles.pinkDoneText}>
+                {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

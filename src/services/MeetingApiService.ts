@@ -37,6 +37,7 @@ import {
 } from '../types/MeetingAPI';
 import { Gender } from '../types/KakaoAPI';
 import { getAuthTokens } from '../utils/AuthUtils';
+import { requireExternalId, toExternalId } from '../utils/IdUtils';
 import apiClient from './apiClient';
 
 const toNumber = (value: any, fallback = 0) => {
@@ -51,11 +52,57 @@ const toNumber = (value: any, fallback = 0) => {
 const toStringValue = (value: any, fallback = '') =>
   typeof value === 'string' ? value : fallback;
 
-const normalizeTeamMember = (raw: any): MeetingTeamMember => ({
-  userId: toNumber(raw?.userId ?? raw?.id),
-  nickname: toStringValue(raw?.nickname ?? raw?.nickName, '팀원'),
-  profileImage: toStringValue(raw?.profileImage ?? raw?.profileImageUrl),
-  leader: Boolean(raw?.leader ?? raw?.isLeader),
+const normalizeTeamMember = (raw: any): MeetingTeamMember | null => {
+  const userId = toExternalId(raw?.userId);
+  if (!userId) return null;
+  return {
+    userId,
+    nickname: toStringValue(raw?.nickname ?? raw?.nickName, '팀원'),
+    profileImage: toStringValue(raw?.profileImage ?? raw?.profileImageUrl),
+    leader: Boolean(raw?.leader ?? raw?.isLeader),
+  };
+};
+
+const normalizeMatchingMember = (raw: any) => {
+  const userId = toExternalId(raw?.userId);
+  if (!userId) return null;
+  return {
+    ...raw,
+    userId,
+  };
+};
+
+const normalizeParticipants = (raw: any) =>
+  Array.isArray(raw)
+    ? raw
+        .map((participant: any) => {
+          const userId = toExternalId(participant?.userId);
+          if (!userId) return null;
+          return {
+            ...participant,
+            userId,
+            profileId: toExternalId(participant?.profileId) ?? undefined,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+const normalizeDecisionChatRoom = (raw: any) => ({
+  ...raw,
+  roomId: requireExternalId(raw?.roomId, 'roomId'),
+  participants: normalizeParticipants(raw?.participants),
+});
+
+const normalizeMatchingResult = (raw: any): MatchingResultData => ({
+  ...raw,
+  matchId: requireExternalId(raw?.matchId, 'matchId'),
+  opponentTeam: {
+    ...raw?.opponentTeam,
+    roomId: requireExternalId(raw?.opponentTeam?.roomId, 'opponentTeam.roomId'),
+    members: Array.isArray(raw?.opponentTeam?.members)
+      ? raw.opponentTeam.members.map(normalizeMatchingMember).filter(Boolean)
+      : [],
+  },
 });
 
 const normalizeChatRoomInfo = (raw: any): MeetingChatRoomInfo => {
@@ -65,9 +112,15 @@ const normalizeChatRoomInfo = (raw: any): MeetingChatRoomInfo => {
     ? raw.teamMember
     : [];
 
+  const roomId = toExternalId(raw?.roomId);
+  const meetingId = toExternalId(raw?.meetingId);
+  if (!roomId && !meetingId) {
+    throw new Error('미팅 방 ID가 없는 잘못된 서버 응답입니다.');
+  }
+
   return {
-    roomId: toNumber(raw?.roomId),
-    meetingId: toNumber(raw?.meetingId),
+    roomId: roomId ?? undefined,
+    meetingId: meetingId ?? undefined,
     matchingStatus: String(
       raw?.matchingStatus ?? raw?.meetingStatus ?? 'RECRUITING',
     ) as MeetingStatus,
@@ -86,42 +139,57 @@ const normalizeChatRoomInfo = (raw: any): MeetingChatRoomInfo => {
       min: toNumber(raw?.ageRangeDto?.min),
       max: toNumber(raw?.ageRangeDto?.max),
     },
-    teamMembers: rawTeamMembers.map(normalizeTeamMember),
+    teamMembers: rawTeamMembers
+      .map(normalizeTeamMember)
+      .filter(
+        (member: MeetingTeamMember | null): member is MeetingTeamMember =>
+          member !== null,
+      ),
     leader: Boolean(raw?.leader ?? raw?.isLeader),
   };
 };
 
-const normalizeRoomSummary = (raw: any): MeetingRoomSummary => ({
-  roomId:
-    raw?.roomId === undefined || raw?.roomId === null
-      ? undefined
-      : toNumber(raw?.roomId),
-  meetingId: toNumber(raw?.meetingId),
-  meetingStatus: String(
-    raw?.meetingStatus ?? 'RECRUITING',
-  ) as MeetingSearchStatus,
-  roomName: toStringValue(raw?.roomName, '미팅 방'),
-  region: {
-    sido: toStringValue(raw?.region?.sido),
-    sigungu: toStringValue(raw?.region?.sigungu),
-  },
-  memberInfo: {
-    currentCount: toNumber(raw?.memberInfo?.currentCount),
-    maxCount: toNumber(raw?.memberInfo?.maxCount),
-  },
-  ageRangeDto: {
-    min: toNumber(raw?.ageRangeDto?.min),
-    max: toNumber(raw?.ageRangeDto?.max),
-  },
-  membersPreview: Array.isArray(raw?.membersPreview)
-    ? raw.membersPreview.map((member: any) => ({
-        userId: toNumber(member?.userId ?? member?.id),
-        profileImage: toStringValue(
-          member?.profileImage ?? member?.profileImageUrl,
-        ),
-      }))
-    : [],
-});
+const normalizeRoomSummary = (raw: any): MeetingRoomSummary | null => {
+  const meetingId = toExternalId(raw?.meetingId);
+  if (!meetingId) return null;
+
+  return {
+    roomId:
+      raw?.roomId === undefined || raw?.roomId === null
+        ? undefined
+        : toExternalId(raw?.roomId) ?? undefined,
+    meetingId,
+    meetingStatus: String(
+      raw?.meetingStatus ?? 'RECRUITING',
+    ) as MeetingSearchStatus,
+    roomName: toStringValue(raw?.roomName, '미팅 방'),
+    region: {
+      sido: toStringValue(raw?.region?.sido),
+      sigungu: toStringValue(raw?.region?.sigungu),
+    },
+    memberInfo: {
+      currentCount: toNumber(raw?.memberInfo?.currentCount),
+      maxCount: toNumber(raw?.memberInfo?.maxCount),
+    },
+    ageRangeDto: {
+      min: toNumber(raw?.ageRangeDto?.min),
+      max: toNumber(raw?.ageRangeDto?.max),
+    },
+    membersPreview: Array.isArray(raw?.membersPreview)
+      ? raw.membersPreview.flatMap((member: any) => {
+          const userId = toExternalId(member?.userId);
+          return userId
+            ? [{
+                userId,
+                profileImage: toStringValue(
+                  member?.profileImage ?? member?.profileImageUrl,
+                ),
+              }]
+            : [];
+        })
+      : [],
+  };
+};
 
 const STREAM_EVENT_TYPE: Record<
   MeetingStreamEventName,
@@ -136,15 +204,52 @@ const STREAM_EVENT_TYPE: Record<
 const parseStreamPayload = (
   value: string,
   eventName: MeetingStreamEventName,
+  subscribedRoomId: string,
 ): MeetingStreamEvent | null => {
   try {
     const parsed = JSON.parse(value);
     if (!parsed || typeof parsed !== 'object') return null;
-    return {
+    const normalized: any = {
       ...parsed,
       type: STREAM_EVENT_TYPE[eventName],
-    } as MeetingStreamEvent;
-  } catch {
+      roomId:
+        toExternalId(parsed?.roomId) ??
+        requireExternalId(subscribedRoomId, 'roomId'),
+      eventId: toExternalId(parsed?.eventId) ?? undefined,
+    };
+
+    if (eventName === 'match-found') {
+      normalized.data = {
+        ...parsed.data,
+        matchId: requireExternalId(parsed?.data?.matchId, 'matchId'),
+        opponentTeam: {
+          ...parsed?.data?.opponentTeam,
+          roomId: requireExternalId(
+            parsed?.data?.opponentTeam?.roomId,
+            'opponentTeam.roomId',
+          ),
+          members: Array.isArray(parsed?.data?.opponentTeam?.members)
+            ? parsed.data.opponentTeam.members
+                .map(normalizeMatchingMember)
+                .filter(Boolean)
+            : [],
+        },
+      };
+    } else if (eventName === 'decision-result') {
+      normalized.data = {
+        ...parsed.data,
+        matchId: requireExternalId(parsed?.data?.matchId, 'matchId'),
+        ...(parsed?.data?.chatRoom
+          ? { chatRoom: normalizeDecisionChatRoom(parsed.data.chatRoom) }
+          : {}),
+      };
+    }
+
+    return normalized as MeetingStreamEvent;
+  } catch (error) {
+    if (__DEV__) {
+      console.warn('Invalid meeting stream event ignored', eventName, error);
+    }
     return null;
   }
 };
@@ -193,34 +298,45 @@ class MeetingApiService {
       nextCursor: toStringValue(data?.nextCursor),
       hasNext: Boolean(data?.hasNext),
       meetings: Array.isArray(data?.meetings)
-        ? data.meetings.map(normalizeRoomSummary)
+        ? data.meetings
+            .map(normalizeRoomSummary)
+            .filter(
+              (
+                room: MeetingRoomSummary | null,
+              ): room is MeetingRoomSummary => room !== null,
+            )
         : [],
     };
   }
 
   async getMemberProfiles(
-    roomId: number,
+    roomId: string,
   ): Promise<MeetingMemberProfilesResult> {
     const response = await apiClient.get(
       getApiUrlWithParams(API_ENDPOINTS_LIST.MEETING_MEMBER_PROFILES, {
-        roomId: String(roomId),
+        roomId,
       }),
     );
     const data = this.unwrap<any>(response.data);
 
     return {
       members: Array.isArray(data?.members)
-        ? data.members.map(
-            (member: any): MeetingMemberProfile => ({
-              userId: toNumber(member?.userId ?? member?.id),
-              profileImage: toStringValue(
-                member?.profileImage ?? member?.profileImageUrl,
-              ),
-              age: toNumber(member?.age),
-              mbti: toStringValue(member?.mbti),
-              smokingHabit: toStringValue(member?.smokingHabit),
-              drinkingHabit: toStringValue(member?.drinkingHabit),
-            }),
+        ? data.members.flatMap(
+            (member: any): MeetingMemberProfile[] => {
+              const userId = toExternalId(member?.userId);
+              return userId
+                ? [{
+                    userId,
+                    profileImage: toStringValue(
+                      member?.profileImage ?? member?.profileImageUrl,
+                    ),
+                    age: toNumber(member?.age),
+                    mbti: toStringValue(member?.mbti),
+                    smokingHabit: toStringValue(member?.smokingHabit),
+                    drinkingHabit: toStringValue(member?.drinkingHabit),
+                  }]
+                : [];
+            },
           )
         : [],
     };
@@ -357,7 +473,7 @@ class MeetingApiService {
 
     eventNames.forEach(eventName => {
       source.addEventListener(eventName, (event: any) => {
-        const parsed = parseStreamPayload(event?.data, eventName);
+        const parsed = parseStreamPayload(event?.data, eventName, roomId);
         if (parsed) handlers.onEvent?.(parsed, eventName);
       });
     });
@@ -377,7 +493,7 @@ class MeetingApiService {
         roomId,
       }),
     );
-    return this.unwrap<MatchingResultData>(response.data);
+    return normalizeMatchingResult(this.unwrap<any>(response.data));
   }
 
   async acceptMatch(payload: AcceptMatchRequest): Promise<AcceptMatchResult> {
@@ -386,9 +502,18 @@ class MeetingApiService {
       payload,
     );
     const raw = response.data;
-    return (
+    const result = (
       raw?.currentStatus ? raw : this.unwrap<AcceptMatchResult>(raw)
     ) as AcceptMatchResult;
+    return {
+      ...result,
+      data: {
+        ...result.data,
+        ...(result.data?.chatRoom
+          ? { chatRoom: normalizeDecisionChatRoom(result.data.chatRoom) }
+          : {}),
+      },
+    };
   }
 
   async rejectMatch(payload: RejectMatchRequest): Promise<RejectMatchResult> {

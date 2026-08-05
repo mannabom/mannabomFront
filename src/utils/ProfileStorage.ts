@@ -1,5 +1,6 @@
 // src/utils/ProfileStorage.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearProfilePreviewState } from './ProfilePreviewStore';
 
 // 프로필 데이터 타입 정의
 export interface PhysicalProfileData {
@@ -39,6 +40,7 @@ export interface RelationshipChoicesData {
 }
 
 export interface CompleteProfileData extends PhysicalProfileData {
+  // 백엔드 요청 필드명은 profileId지만 값은 Redis 가입 진행 ID입니다.
   profileId: string;
   selfIntroduction: string;
   attractivePartnerTrait: string;
@@ -53,6 +55,9 @@ const STORAGE_KEYS = {
   SELF_INTRODUCTION: 'self_introduction',
   OPTIONAL_ANSWERS: 'optional_answers',
   RELATIONSHIP_CHOICES: 'relationship_choices',
+  RAW_RELATIONSHIP_ANSWERS: 'optional_this_or_that_answers_v1',
+  LEGACY_TERMS_STATE_PREFIX: 'signup_terms_state_v2',
+  TERMS_STATE_PREFIX: 'signup_terms_state_v3',
 };
 
 // 신체 프로필 저장
@@ -183,7 +188,7 @@ export const getRelationshipChoices =
 
 // 전체 프로필 데이터 합치기
 export const getCombinedProfileData = async (
-  profileId: string,
+  signupProfileId: string,
 ): Promise<CompleteProfileData | null> => {
   try {
     const physicalProfile = await getPhysicalProfile();
@@ -197,7 +202,7 @@ export const getCombinedProfileData = async (
     }
 
     const combinedData: CompleteProfileData = {
-      profileId,
+      profileId: signupProfileId,
       ...physicalProfile,
       ...selfIntroduction,
       optionalAnswers: optionalAnswers || {},
@@ -213,17 +218,32 @@ export const getCombinedProfileData = async (
 };
 
 // 저장된 모든 프로필 데이터 삭제
-export const clearAllProfileData = async (): Promise<void> => {
+export const clearAllProfileData = async (
+  signupProfileId?: string,
+): Promise<void> => {
   try {
-    await AsyncStorage.multiRemove([
+    const keys = [
       STORAGE_KEYS.PHYSICAL_PROFILE,
       STORAGE_KEYS.SELF_INTRODUCTION,
       STORAGE_KEYS.OPTIONAL_ANSWERS,
       STORAGE_KEYS.RELATIONSHIP_CHOICES,
-    ]);
-    if (__DEV__) console.log('🗑️ 모든 프로필 데이터 삭제 완료');
+      STORAGE_KEYS.RAW_RELATIONSHIP_ANSWERS,
+      STORAGE_KEYS.LEGACY_TERMS_STATE_PREFIX,
+      STORAGE_KEYS.TERMS_STATE_PREFIX,
+    ];
+
+    if (signupProfileId?.trim()) {
+      keys.push(
+        `${STORAGE_KEYS.LEGACY_TERMS_STATE_PREFIX}_${signupProfileId.trim()}`,
+        `${STORAGE_KEYS.TERMS_STATE_PREFIX}_${signupProfileId.trim()}`,
+      );
+    }
+
+    await AsyncStorage.multiRemove(keys);
+    clearProfilePreviewState();
+    if (__DEV__) console.log('🗑️ 가입 임시 데이터 삭제 완료');
   } catch (error) {
-    if (__DEV__) console.warn('프로필 데이터 삭제 실패:', error);
+    if (__DEV__) console.warn('가입 임시 데이터 삭제 실패:', error);
     throw error;
   }
 };

@@ -1,21 +1,21 @@
 // src/config/api.ts
-// 환경별 API 주소 설정
-const API_ENDPOINTS = {
-  development: 'http://34.22.79.59:8080',
-  production: 'https://api.mannabom.com',
-};
+/**
+ * 현재 앱은 Debug·로컬 테스트·TestFlight/Release 모두 스테이징 서버를
+ * 사용합니다. 운영 서버가 실제로 준비되기 전까지는 환경을 자동으로
+ * production으로 전환하지 않아 죽은 주소나 운영 데이터에 연결되는 것을
+ * 방지합니다.
+ *
+ * 운영 배포를 시작할 때는 production 주소를 추가하고 빌드 환경값으로
+ * 명시적으로 선택하도록 전환해야 합니다.
+ */
+export const API_ENVIRONMENT = 'staging' as const;
 
-// 현재 환경 확인
-const getCurrentEnvironment = (): keyof typeof API_ENDPOINTS => {
-  if (__DEV__) {
-    return 'development'; // React Native 개발 모드에서는 개발 서버
-  } else {
-    return 'production'; // 릴리즈 빌드에서는 배포 서버
-  }
-};
+const API_ENDPOINTS = {
+  staging: 'https://staging-api.mannabom.com',
+} as const;
 
 // API 기본 URL
-export const API_BASE_URL = API_ENDPOINTS[getCurrentEnvironment()];
+export const API_BASE_URL = API_ENDPOINTS[API_ENVIRONMENT];
 
 // API 엔드포인트들
 export const API_ENDPOINTS_LIST = {
@@ -106,12 +106,7 @@ export const API_ENDPOINTS_LIST = {
 
 } as const;
 
-/**
- * 백엔드 구현 전 사전 등록한 회원가입 API 계약입니다.
- *
- * 현재 약관 동의·가입 완료 화면은 동일한 기존 경로를 직접 호출하고 있지만,
- * 아직 이 prepared 상수와 `signupApiService`로 전환하지는 않습니다.
- */
+/** 확정된 약관·가입 완료 API 경로입니다. */
 export const PREPARED_SIGNUP_API_ENDPOINTS = {
   TERMS_CONTENT: '/api/signup/terms/{termType}',
   TERMS_AGREEMENT: '/api/signup/terms-agreement',
@@ -141,7 +136,7 @@ export const getApiUrlWithParams = (
 ): string => {
   let url = endpoint;
   Object.entries(params).forEach(([key, value]) => {
-    url = url.replace(`{${key}}`, value);
+    url = url.replace(`{${key}}`, encodeURIComponent(value));
   });
   return `${API_BASE_URL}${url}`;
 };

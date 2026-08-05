@@ -27,6 +27,8 @@ import { datingApiService } from '../../services/DatingApiService';
 import apiClient from '../../services/apiClient';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
 import { getProfilePreviewState } from '../../utils/ProfilePreviewStore';
+import { toExternalId } from '../../utils/IdUtils';
+import { createIdempotencyKey } from '../../utils/IdempotencyUtils';
 const petalImg = require('../../assets/images/petal.png');
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -39,7 +41,7 @@ interface BlindDateScreenProps {
 }
 
 type BlindProfileCard = {
-  profileId: number;
+  profileId: string;
   name?: string;
   nickname: string;
   age: number;
@@ -49,7 +51,7 @@ type BlindProfileCard = {
 };
 
 type BlindLoveCodeCard = {
-  profileId: number;
+  profileId: string;
   nickname: string;
   mbti: string;
   requiredQA: { question: string; answer: string }[];
@@ -63,7 +65,7 @@ type BlindLoveCodeCard = {
   }[];
 };
 type PreviewModalProfile = {
-  profileId: number;
+  profileId: string;
   name?: string;
   nickname: string;
   age: number;
@@ -105,13 +107,10 @@ const extractPhotoUris = (raw: any): string[] => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
-const toPositiveId = (...vals: any[]): number | undefined => {
+const firstExternalId = (...vals: any[]): string | undefined => {
   for (const v of vals) {
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-    if (typeof v === 'string' && v.trim().length > 0) {
-      const n = Number(v);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
+    const id = toExternalId(v);
+    if (id) return id;
   }
   return undefined;
 };
@@ -151,15 +150,15 @@ const CHOICE_QUESTIONS = [
   { id: 'friends', title: '연인이 내 친구들과', left: '어울리며 놀기', right: '따로 놀기' },
 ] as const;
 
-const CHOICE_QUESTION_ID_BY_KEY: Record<string, number> = {
-  fight: 8,
-  photo: 9,
-  important: 10,
-  date: 11,
-  jealousy: 12,
-  idealDay: 13,
-  attracted: 14,
-  friends: 15,
+const CHOICE_QUESTION_ID_BY_KEY: Record<string, string> = {
+  fight: '8',
+  photo: '9',
+  important: '10',
+  date: '11',
+  jealousy: '12',
+  idealDay: '13',
+  attracted: '14',
+  friends: '15',
 };
 
 const CHOICE_CODE_TO_SIDE: Record<string, 'LEFT' | 'RIGHT'> = {
@@ -274,7 +273,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       setCoinBalance(wallet.eventTingNum ?? 0);
       return wallet;
     } catch (e) {
-      console.warn('Failed to load ting wallet info', e);
+      if (__DEV__) {
+        console.warn(
+          'Failed to load ting wallet info',
+          e instanceof Error ? e.message : 'unknown error',
+        );
+      }
       return null;
     }
   }, []);
@@ -312,7 +316,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         setTingBalance(wallet.tingNum ?? 0);
         setCoinBalance(wallet.eventTingNum ?? 0);
       } catch (e) {
-        console.warn('Failed to load ting wallet info', e);
+        if (__DEV__) {
+          console.warn(
+            'Failed to load ting wallet info',
+            e instanceof Error ? e.message : 'unknown error',
+          );
+        }
       }
     };
     loadWallet();
@@ -340,7 +349,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       } catch (e) {
         if (!mounted) return;
         setIsSubscribed(false);
-        console.warn('Failed to load subscription status', e);
+        if (__DEV__) {
+          console.warn(
+            'Failed to load subscription status',
+            e instanceof Error ? e.message : 'unknown error',
+          );
+        }
       }
     };
 
@@ -353,16 +367,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     const loveViewRes: any = firstLoveCandidate(raw);
     if (!loveViewRes) return null;
 
-    const loveProfileId = toPositiveId(
-      loveViewRes?.profileId,
-      loveViewRes?.userId,
-      loveViewRes?.id,
-    );
+    const loveProfileId = firstExternalId(loveViewRes?.profileId);
     if (!loveProfileId) return null;
 
     const questionAnswers = Array.isArray(loveViewRes?.questionAnswers) ? loveViewRes.questionAnswers : [];
     const qaMap = new Map<string, string>();
-    const qaById = new Map<number, string>();
+    const qaById = new Map<string, string>();
 
     questionAnswers.forEach((item: any) => {
       const answer = String(item?.answer ?? '').trim();
@@ -375,12 +385,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           : firstNonEmptyString(qObj?.question, qObj?.title, qObj?.content, item?.questionText);
       const questionIdRaw =
         typeof qObj === 'object' ? (qObj?.questionId ?? qObj?.id) : item?.questionId;
-      const questionId = Number(questionIdRaw);
+      const questionId = toExternalId(questionIdRaw);
 
       if (questionText) {
         qaMap.set(normalizeQuestionKey(questionText), answer);
       }
-      if (Number.isFinite(questionId) && questionId > 0) {
+      if (questionId) {
         qaById.set(questionId, answer);
       }
     });
@@ -388,7 +398,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
     const findAnswer = (
       questionCandidates: string[],
       fieldCandidates: any[] = [],
-      questionIds: number[] = [],
+      questionIds: string[] = [],
     ): string => {
       for (const id of questionIds) {
         const foundById = qaById.get(id);
@@ -406,47 +416,47 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       findAnswer(
         ['자기소개'],
         [loveViewRes?.intro, loveViewRes?.selfIntroduction, loveViewRes?.description, loveViewRes?.bio],
-        [1],
+        ['1'],
       ) || '자기소개가 아직 등록되지 않았어요.';
     const wantText =
       findAnswer(
         ['연인에게 꼭 바라는 한 가지는?', '연인에게 바라는 한 가지는?', '연인에게 바라는 한 가지'],
         [loveViewRes?.want, loveViewRes?.desiredPartnerTrait, loveViewRes?.requiredAnswer1],
-        [3],
+        ['3'],
       ) || '연인에게 바라는 한 가지 응답이 없어요.';
     const charmText =
       findAnswer(
         ['나를 설레게 하는 이성의 매력?', '나를 설레게 하는 이성의 매력'],
         [loveViewRes?.charm, loveViewRes?.attractivePartnerTrait, loveViewRes?.requiredAnswer2],
-        [2],
+        ['2'],
       ) || '매력 응답이 아직 없어요.';
 
     const openQA = [
       {
         question: '나에게 연애란 어떤 의미인가요?',
         answer:
-          findAnswer(['나에게 연애란?', '나에게 연애란 어떤 의미인가요?', '나에게 연애란'], [], [4]) ||
+          findAnswer(['나에게 연애란?', '나에게 연애란 어떤 의미인가요?', '나에게 연애란'], [], ['4']) ||
           firstNonEmptyString(loveViewRes?.meaningOfLove) ||
           '아직 작성된 답변이 없어요.',
       },
       {
         question: '나의 소울 푸드?',
         answer:
-          findAnswer(['나의 소울 푸드는?', '나의 소울 푸드?'], [], [5]) ||
+          findAnswer(['나의 소울 푸드는?', '나의 소울 푸드?'], [], ['5']) ||
           firstNonEmptyString(loveViewRes?.soulFood) ||
           '아직 작성된 답변이 없어요.',
       },
       {
         question: '나의 하루 그리고 나의 휴일은?',
         answer:
-          findAnswer(['나의 하루, 그리고 나의 휴일은?', '나의 하루 그리고 나의 휴일은?'], [], [6]) ||
+          findAnswer(['나의 하루, 그리고 나의 휴일은?', '나의 하루 그리고 나의 휴일은?'], [], ['6']) ||
           firstNonEmptyString(loveViewRes?.dailyAndHoliday) ||
           '아직 작성된 답변이 없어요.',
       },
       {
         question: '하고 싶은 데이트는?',
         answer:
-          findAnswer(['하고 싶은 데이트는?'], [], [7]) ||
+          findAnswer(['하고 싶은 데이트는?'], [], ['7']) ||
           firstNonEmptyString(loveViewRes?.idealDate) ||
           '아직 작성된 답변이 없어요.',
       },
@@ -500,28 +510,29 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       smoking: filterSettings.smoking,
       drinking: filterSettings.drinking,
     };
+    const idempotencyKey = createIdempotencyKey('free-profile-recommendation');
     let profileRaw: any;
     try {
       profileRaw = await withNetworkRetry(
-        () => datingApiService.getMatchingProfile(profileCondition),
+        () =>
+          datingApiService.getMatchingProfile(
+            profileCondition,
+            idempotencyKey,
+          ),
         2,
       );
     } catch (e: any) {
       if (isNoFreeTicketError(e)) {
-        profileRaw = await withNetworkRetry(
-          () => datingApiService.getMatchingProfileExtra(profileCondition),
-          2,
+        // 혜택권 차감 API에는 아직 멱등성 계약이 없으므로 자동 재시도하지 않는다.
+        profileRaw = await datingApiService.getMatchingProfileExtra(
+          profileCondition,
         );
       } else {
         throw e;
       }
     }
     const profileRes: any = firstProfileCandidate(profileRaw);
-    const profileId = toPositiveId(
-      profileRes?.profileId,
-      profileRes?.userId,
-      profileRes?.id,
-    );
+    const profileId = firstExternalId(profileRes?.profileId);
     if (!profileRes || !profileId) return null;
 
     const photoUris = extractPhotoUris(profileRes);
@@ -553,17 +564,22 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
       smoking: filterSettings.smoking,
       drinking: filterSettings.drinking,
     };
+    const idempotencyKey = createIdempotencyKey('free-loveview-recommendation');
     let loveRaw: any;
     try {
       loveRaw = await withNetworkRetry(
-        () => datingApiService.getLoveViewMatching(loveViewCondition),
+        () =>
+          datingApiService.getLoveViewMatching(
+            loveViewCondition,
+            idempotencyKey,
+          ),
         2,
       );
     } catch (e: any) {
       if (isNoFreeTicketError(e)) {
-        loveRaw = await withNetworkRetry(
-          () => datingApiService.getLoveViewMatchingExtra(loveViewCondition),
-          2,
+        // 혜택권 차감 API에는 아직 멱등성 계약이 없으므로 자동 재시도하지 않는다.
+        loveRaw = await datingApiService.getLoveViewMatchingExtra(
+          loveViewCondition,
         );
       } else {
         throw e;
@@ -587,7 +603,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         const profileCard = profileResult.value;
 
         if (__DEV__) {
-          console.log('🧪 [BlindDate] profile parsed:', profileCard);
+          console.log(
+            '🧪 [BlindDate] profile parsed:',
+            profileCard ? 'YES' : 'NO',
+          );
         }
         if (profileCard) {
           setProfileCards([profileCard]);
@@ -597,7 +616,14 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           setPreviewProfile(null);
         }
       } else {
-        console.warn('Failed to load profile preview', profileResult.reason);
+        if (__DEV__) {
+          console.warn(
+            'Failed to load profile preview',
+            profileResult.reason instanceof Error
+              ? profileResult.reason.message
+              : 'unknown error',
+          );
+        }
         setProfileCards([]);
         setPreviewProfile(null);
       }
@@ -606,7 +632,10 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
         const loveCodeCard = loveViewResult.value;
 
         if (__DEV__) {
-          console.log('🧪 [BlindDate] love parsed:', loveCodeCard);
+          console.log(
+            '🧪 [BlindDate] love parsed:',
+            loveCodeCard ? 'YES' : 'NO',
+          );
         }
         if (loveCodeCard) {
           setLoveCodeCards([loveCodeCard]);
@@ -616,7 +645,14 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           setPreviewLoveCode(null);
         }
       } else {
-        console.warn('Failed to load love code preview', loveViewResult.reason);
+        if (__DEV__) {
+          console.warn(
+            'Failed to load love code preview',
+            loveViewResult.reason instanceof Error
+              ? loveViewResult.reason.message
+              : 'unknown error',
+          );
+        }
         setLoveCodeCards([]);
         setPreviewLoveCode(null);
       }
@@ -757,7 +793,7 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
             .map(raw => parseLoveCodeCard(raw))
             .filter((item): item is BlindLoveCodeCard => !!item);
           if (parsed.length) {
-            const seen = new Set<number>();
+            const seen = new Set<string>();
             cards = [...cards, ...parsed].filter(item => {
               if (seen.has(item.profileId)) return false;
               seen.add(item.profileId);
@@ -770,7 +806,12 @@ const BlindDateScreen: React.FC<BlindDateScreenProps> = () => {
           }
         }
       } catch (e) {
-        console.warn('Failed to load today love cards', e);
+        if (__DEV__) {
+          console.warn(
+            'Failed to load today love cards',
+            e instanceof Error ? e.message : 'unknown error',
+          );
+        }
       }
 
       if (!cards.length) {

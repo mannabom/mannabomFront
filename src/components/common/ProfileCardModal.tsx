@@ -27,7 +27,7 @@ const FREE_ICON = require('../../assets/images/freeprofile.png');
 const PAID_ICON = require('../../assets/images/paidprofile.png');
 
 type MatchProfileCard = {
-  profileId: number;
+  profileId: string;
   nickname: string;
   age: number;
   mbti?: string;
@@ -55,8 +55,8 @@ export type ProfileCardModalProps = {
   profiles?: MatchProfileCard[];
 
   // ✅ 행동 콜백
-  onRateProfile?: (profileId: number, score: 1 | 2 | 3 | 4 | 5) => void | Promise<void>;
-  onPressProfileDetail?: (profileId: number) => void; // "상세 프로필 보기"
+  onRateProfile?: (profileId: string, score: 1 | 2 | 3 | 4 | 5) => void | Promise<void>;
+  onPressProfileDetail?: (profileId: string) => void; // "상세 프로필 보기"
   onNavigateToStore?: () => void;
 
   // 혹시 더 던지면 받기
@@ -83,7 +83,7 @@ const ProfileCardModal: React.FC<ProfileCardModalProps> = props => {
   const totalRemaining = (freeRemaining ?? 0) + (paidRemaining ?? 0);
 
   const [index, setIndex] = useState(0);
-  const [ratedMap, setRatedMap] = useState<Record<number, 1 | 2 | 3 | 4 | 5>>({});
+  const [ratedMap, setRatedMap] = useState<Record<string, 1 | 2 | 3 | 4 | 5>>({});
   const [infoVisible, setInfoVisible] = useState(false);
 
   const current = useMemo(() => {

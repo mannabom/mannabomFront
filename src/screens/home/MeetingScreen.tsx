@@ -21,7 +21,9 @@ import Slider from '@react-native-community/slider';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../../config/api';
+import { FEATURE_FLAGS } from '../../config/features';
 import { DISTRICT_OPTIONS, REGION_OPTIONS, normalizeSido, normalizeSigungu } from '../../constants/koreaRegions';
+import { chatApiService } from '../../services/ChatApiService';
 import { datingApiService } from '../../services/DatingApiService';
 import { meetingApiService } from '../../services/MeetingApiService';
 import apiClient from '../../services/apiClient';
@@ -37,7 +39,9 @@ import {
   MeetingTeamMember,
   MyMeetingStatus,
 } from '../../types/MeetingAPI';
+import { getUserId } from '../../utils/AuthUtils';
 import { getPhysicalProfile } from '../../utils/ProfileStorage';
+import { toExternalId } from '../../utils/IdUtils';
 
 const vipBadgeImg = require('../../assets/images/VIP.png');
 const subBadgeImg = require('../../assets/images/SUB.png');
@@ -93,7 +97,7 @@ type InsufficientModalState = {
 };
 
 type MeetingUserContext = {
-  userId?: number;
+  userId?: string;
   nickname: string;
   gender: Gender;
   region: MeetingRegion;
@@ -342,13 +346,13 @@ const buildDisplayTeamMembers = (
       (context.nickname && member.nickname === context.nickname),
   );
 
-  if (!room?.hasActiveRoom || hasSelf) {
+  if (!room?.hasActiveRoom || hasSelf || !context.userId) {
     return sortedMembers;
   }
 
   return [
     {
-      userId: context.userId ?? -1,
+      userId: context.userId,
       nickname: context.nickname || '나',
       profileImage: context.profileImage,
       leader: Boolean(room.leader),
@@ -1807,6 +1811,8 @@ const MeetingScreen: React.FC = () => {
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<'join' | 'create' | null>(null);
   const [leavingRoom, setLeavingRoom] = useState(false);
+  const [openingChatRoom, setOpeningChatRoom] = useState(false);
+  const openingChatRoomRef = useRef(false);
 
   const [tingBalance, setTingBalance] = useState(0);
   const [eventTingBalance, setEventTingBalance] = useState(0);
@@ -1842,11 +1848,18 @@ const MeetingScreen: React.FC = () => {
   }, [filterSettings]);
 
   const refreshWalletAndProfile = useCallback(async (requireCompleteContext = false) => {
-    const [walletResult, profileResult, mainPhotoResult, storedProfileResult] = await Promise.allSettled([
+    const [
+      walletResult,
+      profileResult,
+      mainPhotoResult,
+      storedProfileResult,
+      storedUserIdResult,
+    ] = await Promise.allSettled([
       datingApiService.getTingWalletInfo(),
       apiClient.get(API_ENDPOINTS_LIST.USER_PROFILE),
       apiClient.get(API_ENDPOINTS_LIST.USER_MAIN_PHOTO),
       getPhysicalProfile(),
+      getUserId(),
     ]);
 
     if (walletResult.status === 'fulfilled') {
@@ -1900,7 +1913,14 @@ const MeetingScreen: React.FC = () => {
       );
 
       const nextContext: MeetingUserContext = {
-        userId: raw?.userId ?? raw?.id ?? rawProfile?.userId ?? rawProfile?.profileId,
+        userId:
+          toExternalId(
+            (storedUserIdResult.status === 'fulfilled'
+              ? storedUserIdResult.value
+              : null) ??
+              raw?.userId ??
+              rawProfile?.userId,
+          ) ?? undefined,
         nickname: String(raw?.nickName ?? raw?.nickname ?? rawProfile?.nickName ?? rawProfile?.nickname ?? ''),
         gender: rawGender as Gender,
         region: {
@@ -2256,6 +2276,91 @@ const MeetingScreen: React.FC = () => {
     );
   };
 
+  const handleOpenTeamChat = async () => {
+    if (openingChatRoomRef.current) return;
+
+    const activeMeetingId = toExternalId(
+      activeRoom?.meetingId ?? activeRoom?.roomId,
+    );
+    if (!activeMeetingId) {
+      Alert.alert(
+        '채팅방을 열 수 없어요',
+        '현재 미팅 ID를 확인하지 못했어요. 미팅 화면을 새로고침한 뒤 다시 시도해 주세요.',
+      );
+      return;
+    }
+
+    openingChatRoomRef.current = true;
+    setOpeningChatRoom(true);
+
+    try {
+      const { chatRooms } = await chatApiService.syncChatRooms();
+      const linkedRooms = (Array.isArray(chatRooms) ? chatRooms : []).filter(
+        room =>
+          room?.chatRoomType === 'TEAM' &&
+          toExternalId(room?.meetingRoomId) === activeMeetingId,
+      );
+
+      if (linkedRooms.length === 0) {
+        Alert.alert(
+          '채팅방을 찾을 수 없어요',
+          '현재 미팅에 연결된 팀 채팅방이 아직 생성되지 않았어요. 잠시 후 다시 시도해 주세요.',
+        );
+        return;
+      }
+
+      if (linkedRooms.length > 1) {
+        Alert.alert(
+          '채팅방을 열 수 없어요',
+          '현재 미팅에 연결된 채팅방이 여러 개라 안전하게 선택할 수 없어요. 관리자에게 문의해 주세요.',
+        );
+        return;
+      }
+
+      const linkedRoom = linkedRooms[0];
+      const chatRoomId = toExternalId(linkedRoom.chatRoomId);
+      if (!chatRoomId) {
+        Alert.alert(
+          '채팅방을 열 수 없어요',
+          '연결된 채팅방 ID가 올바르지 않아요. 잠시 후 다시 시도해 주세요.',
+        );
+        return;
+      }
+
+      const participants = (
+        Array.isArray(linkedRoom.participants) ? linkedRoom.participants : []
+      ).flatMap(participant => {
+        const userId = toExternalId(participant?.userId);
+        if (!userId) return [];
+
+        const profileId = toExternalId(participant?.profileId);
+        return [{
+          userId,
+          ...(profileId ? { profileId } : {}),
+          nickname: String(participant?.nickname ?? ''),
+          profileImage: String(participant?.profileImage ?? ''),
+        }];
+      });
+
+      navigation.navigate('MeetingTeamChat', {
+        roomId: chatRoomId,
+        meetingRoomId: activeMeetingId,
+        roomType: 'TEAM',
+        roomTitle: activeRoom?.roomName,
+        participants,
+      });
+    } catch (error) {
+      if (__DEV__) console.warn('Failed to resolve meeting chat room', error);
+      Alert.alert(
+        '채팅방을 열 수 없어요',
+        '채팅방 정보를 불러오지 못했어요. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+      );
+    } finally {
+      openingChatRoomRef.current = false;
+      setOpeningChatRoom(false);
+    }
+  };
+
   const renderRoomCard = (room: MeetingRoomSummary) => {
     const disabled = String(room.meetingStatus).toUpperCase() === 'MATCHING';
     const fastJoin = !disabled && isLikelyFastJoinRoom(room);
@@ -2534,24 +2639,18 @@ const MeetingScreen: React.FC = () => {
         </View>
 
         <TouchableOpacity
-          style={styles.chatButton}
-          onPress={() =>
-            navigation.navigate('MeetingTeamChat', {
-              roomId: String(activeRoom?.roomId ?? activeRoom?.meetingId ?? ''),
-              meetingRoomId: String(
-                activeRoom?.roomId ?? activeRoom?.meetingId ?? '',
-              ),
-              roomType: 'TEAM',
-              roomTitle: activeRoom?.roomName,
-              participants: activeRoomMembers.map(member => ({
-                userId: String(member.userId),
-                nickname: member.nickname,
-                profileImage: member.profileImage,
-              })),
-            })
-          }
+          style={[
+            styles.chatButton,
+            openingChatRoom && styles.disabledPrimaryButton,
+          ]}
+          onPress={handleOpenTeamChat}
+          disabled={openingChatRoom}
         >
-          <Text style={styles.chatButtonText}>채팅방으로</Text>
+          {openingChatRoom ? (
+            <ActivityIndicator color="#4C2A35" />
+          ) : (
+            <Text style={styles.chatButtonText}>채팅방으로</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.noticeCard}>
@@ -2709,17 +2808,23 @@ const MeetingScreen: React.FC = () => {
           <Text style={styles.simpleModalBody}>
             {insufficientModal?.mode === 'create'
               ? `죄송합니다.\n재화가 부족하여 방을 생성할 수 없습니다.\n방을 생성하시려면 ${insufficientModal.required}팅이 더 필요합니다.`
-              : `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.\n팅을 충전하고 설레는 만남을 시작해 볼까요?`}
+              : FEATURE_FLAGS.store
+                ? `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.\n팅을 충전하고 설레는 만남을 시작해 볼까요?`
+                : `입장에 필요한 팅이 조금 부족해요.\n이 방에 입장하시려면 ${insufficientModal?.required ?? 0}팅이 더 필요합니다.`}
           </Text>
 
           <TouchableOpacity
             style={styles.primaryButtonWide}
             onPress={() => {
               setInsufficientModal(null);
-              navigation.navigate('Store');
+              if (FEATURE_FLAGS.store) {
+                navigation.navigate('Store');
+              }
             }}
           >
-            <Text style={styles.primaryButtonText}>스토어로 이동</Text>
+            <Text style={styles.primaryButtonText}>
+              {FEATURE_FLAGS.store ? '스토어로 이동' : '확인'}
+            </Text>
           </TouchableOpacity>
         </MeetingModal>
 

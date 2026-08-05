@@ -7,7 +7,7 @@ import type {
   TermsApiTermType,
   TermsContentResponseDto,
 } from '../types/SignupAPI';
-import apiClient from './apiClient';
+import signupApiClient from './signupApiClient';
 
 const buildTermsContentPath = (termType: TermsApiTermType): string =>
   PREPARED_SIGNUP_API_ENDPOINTS.TERMS_CONTENT.replace(
@@ -15,16 +15,12 @@ const buildTermsContentPath = (termType: TermsApiTermType): string =>
     encodeURIComponent(termType),
   );
 
-/**
- * 백엔드 구현 완료 후 화면에서 사용할 회원가입 API 서비스입니다.
- *
- * 아직 어떤 화면에서도 호출하지 않습니다.
- */
+/** 임시 signupToken으로 호출하는 회원가입 API 서비스입니다. */
 class SignupApiService {
   async getTermsContent(
     termType: TermsApiTermType,
   ): Promise<TermsContentResponseDto> {
-    const response = await apiClient.get<TermsContentResponseDto>(
+    const response = await signupApiClient.get<TermsContentResponseDto>(
       buildTermsContentPath(termType),
     );
     return response.data;
@@ -33,7 +29,7 @@ class SignupApiService {
   async agreeToTerms(
     request: TermsAgreementRequestDto,
   ): Promise<TermsAgreementResponseDto> {
-    const response = await apiClient.post<TermsAgreementResponseDto>(
+    const response = await signupApiClient.post<TermsAgreementResponseDto>(
       PREPARED_SIGNUP_API_ENDPOINTS.TERMS_AGREEMENT,
       request,
     );
@@ -43,7 +39,7 @@ class SignupApiService {
   async completeSignup(
     request: SignupCompleteRequestDto,
   ): Promise<SignupCompleteResponseDto> {
-    const response = await apiClient.post<SignupCompleteResponseDto>(
+    const response = await signupApiClient.post<SignupCompleteResponseDto>(
       PREPARED_SIGNUP_API_ENDPOINTS.SIGNUP_COMPLETE,
       request,
     );

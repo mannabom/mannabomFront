@@ -12,7 +12,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { KakaoLoginService } from '../../services/KakaoLoginService';
-import { saveAuthTokens, saveProfileId } from '../../utils/AuthUtils';
+import {
+  clearSignupSession,
+  getSignupProfileId,
+  saveAuthenticatedSession,
+  saveSignupSession,
+} from '../../utils/AuthUtils';
+import { clearAllProfileData } from '../../utils/ProfileStorage';
+import { requireExternalId } from '../../utils/IdUtils';
 import AgeRestrictionModal from '../../components/login/AgeRestrictionModal';
 
 // ✅ 로그인 성공 직후 토큰 확보 & 서버 등록
@@ -55,12 +62,30 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 
       switch (result.nextStep) {
         case 'home':
-          // 기존 회원 - 토큰 저장 후 홈으로
-          if (result.userData.accessToken && result.userData.refreshToken) {
-            await saveAuthTokens(
-              result.userData.accessToken,
-              result.userData.refreshToken,
-            );
+          // 기존 회원 - 영구 userId와 토큰을 함께 저장 후 홈으로
+          if (
+            !result.userData.accessToken ||
+            !result.userData.refreshToken ||
+            result.userData.userId == null
+          ) {
+            throw new Error('로그인 응답에 사용자 정보가 없습니다.');
+          }
+          await saveAuthenticatedSession(
+            result.userData.accessToken,
+            result.userData.refreshToken,
+            result.userData.userId,
+          );
+          const staleSignupProfileId = await getSignupProfileId();
+          try {
+            await clearAllProfileData(staleSignupProfileId ?? undefined);
+            await clearSignupSession();
+          } catch (cleanupError) {
+            if (__DEV__) {
+              console.warn(
+                '기존 가입 임시 데이터 정리 실패(로그인은 계속 진행):',
+                cleanupError,
+              );
+            }
           }
 
           // ✅ 토큰 저장 직후: FCM 토큰 서버 등록
@@ -79,12 +104,35 @@ const KakaoLoginScreen: React.FC<KakaoLoginScreenProps> = ({
 
         case 'signup':
           // 신규 사용자 - 회원가입 진행
-          if (result.userData.kakaoUserInfo.profileId) {
-            await saveProfileId(result.userData.kakaoUserInfo.profileId);
+          const kakaoUserInfo = result.userData?.kakaoUserInfo;
+          const signupProfileId = requireExternalId(
+            result.userData?.signupProfileId,
+            '가입 진행 ID',
+          );
+          const signupToken =
+            typeof result.userData?.signupToken === 'string'
+              ? result.userData.signupToken.trim()
+              : '';
+          if (!signupToken) {
+            throw new Error('가입 토큰이 없는 잘못된 로그인 응답입니다.');
+          }
+          const storedSignupProfileId = await getSignupProfileId();
+
+          if (
+            storedSignupProfileId &&
+            storedSignupProfileId !== signupProfileId
+          ) {
+            await clearAllProfileData(storedSignupProfileId);
+            await clearSignupSession();
           }
 
+          await saveSignupSession(signupProfileId, signupToken);
+
           if (__DEV__) console.log('신규 사용자 - 회원가입 진행');
-          onSignupRequired(result.userData.kakaoUserInfo);
+          onSignupRequired({
+            ...kakaoUserInfo,
+            profileId: signupProfileId,
+          });
           break;
 
         case 'ageRestricted':

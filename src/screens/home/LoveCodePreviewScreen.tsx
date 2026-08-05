@@ -35,7 +35,7 @@ type ChoiceQA = {
 };
 
 type LoveCard = {
-  profileId: number;
+  profileId: string;
   nickname: string;
   mbti: string;
   requiredQA: { question: string; answer: string }[];

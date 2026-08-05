@@ -1,3 +1,5 @@
+import { toExternalId } from '../utils/IdUtils';
+
 export interface UploadedProfilePhotoDTO {
   photoId: string;
   url: string;
@@ -25,7 +27,7 @@ export interface UserMainPhotoResponseDTO {
 }
 
 export interface UserProfilePhotoDTO {
-  id: number;
+  id: string;
   index: number;
   url: string;
 }
@@ -35,7 +37,7 @@ export interface UserProfilePhotosResponseDTO {
 }
 
 export interface DeleteUserProfilePhotoRequestDTO {
-  photoId: number;
+  photoId: string;
 }
 
 export interface ProfilePhotoUploadFile {
@@ -44,23 +46,11 @@ export interface ProfilePhotoUploadFile {
   name: string;
 }
 
-export const toSafeProfilePhotoId = (value: unknown): number | null => {
-  const trimmedValue = typeof value === 'string' ? value.trim() : '';
-  const numericValue =
-    typeof value === 'number'
-      ? value
-      : /^\d+$/.test(trimmedValue)
-        ? Number(trimmedValue)
-        : Number.NaN;
-
-  return Number.isSafeInteger(numericValue) && numericValue > 0
-    ? numericValue
-    : null;
-};
+export const toProfilePhotoId = toExternalId;
 
 export interface UnlockTargetPhotoRequestDto {
-  targetProfileId: number;
-  photoId: number;
+  targetProfileId: string;
+  photoId: string;
 }
 
 export interface UnlockTargetPhotoResponseDto {

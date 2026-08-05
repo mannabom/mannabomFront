@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '../config/api';
 import { ChatMessageDTO, ChatSendPayloadDTO } from '../types/ChatAPI';
 import { getAuthTokens } from '../utils/AuthUtils';
+import { requireExternalId } from '../utils/IdUtils';
 
 type MessageHandler = (message: ChatMessageDTO | any) => void;
 
@@ -9,12 +10,22 @@ const buildChatSocketUrl = () => {
   return `${base}/ws-chat`;
 };
 
+const escapeStompHeader = (value: string) =>
+  value
+    .replace(/\\/g, '\\\\')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/:/g, '\\c');
+
 const buildFrame = (
   command: string,
   headers: Record<string, string> = {},
   body = '',
 ) => {
-  const headerLines = Object.entries(headers).map(([key, value]) => `${key}:${value}`);
+  const headerLines = Object.entries(headers).map(
+    ([key, value]) =>
+      `${escapeStompHeader(key)}:${escapeStompHeader(value)}`,
+  );
   return `${command}\n${headerLines.join('\n')}\n\n${body}\0`;
 };
 
@@ -75,7 +86,15 @@ class ChatSocketService {
 
           if (frame.command === 'MESSAGE') {
             const destination = frame.headers.destination ?? '';
-            const roomId = destination.split('/').filter(Boolean).pop();
+            const encodedRoomId = destination.split('/').filter(Boolean).pop();
+            let roomId = encodedRoomId;
+            if (encodedRoomId) {
+              try {
+                roomId = decodeURIComponent(encodedRoomId);
+              } catch {
+                roomId = undefined;
+              }
+            }
             const handler = roomId ? this.roomHandlers.get(roomId) : undefined;
             if (!handler) return;
 
@@ -105,25 +124,32 @@ class ChatSocketService {
   }
 
   async subscribeRoom(roomId: string, handler: MessageHandler): Promise<() => void> {
+    const normalizedRoomId = requireExternalId(roomId, '채팅방 ID');
     await this.connect();
-    this.roomHandlers.set(roomId, handler);
+    this.roomHandlers.set(normalizedRoomId, handler);
+    const encodedRoomId = encodeURIComponent(normalizedRoomId);
+    const subscriptionId = `room-${encodedRoomId}`;
     this.socket?.send(
       buildFrame('SUBSCRIBE', {
-        id: `room-${roomId}`,
-        destination: `/topic/rooms/${roomId}`,
+        id: subscriptionId,
+        destination: `/topic/rooms/${encodedRoomId}`,
         ack: 'auto',
       }),
     );
 
     return () => {
-      this.roomHandlers.delete(roomId);
+      this.roomHandlers.delete(normalizedRoomId);
       if (this.socket?.readyState === 1) {
-        this.socket.send(buildFrame('UNSUBSCRIBE', { id: `room-${roomId}` }));
+        this.socket.send(buildFrame('UNSUBSCRIBE', { id: subscriptionId }));
       }
     };
   }
 
   async sendMessage(payload: ChatSendPayloadDTO): Promise<void> {
+    const normalizedPayload = {
+      ...payload,
+      roomId: requireExternalId(payload.roomId, '채팅방 ID'),
+    };
     await this.connect();
     this.socket?.send(
       buildFrame(
@@ -132,7 +158,7 @@ class ChatSocketService {
           destination: '/app/chat.send',
           'content-type': 'application/json',
         },
-        JSON.stringify(payload),
+        JSON.stringify(normalizedPayload),
       ),
     );
   }

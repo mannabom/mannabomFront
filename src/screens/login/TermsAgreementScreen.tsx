@@ -10,16 +10,11 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../../services/apiClient';
-import { API_ENDPOINTS_LIST } from '../../config/api';
-import { getProfileId } from '../../utils/AuthUtils';
+import { getSignupProfileId } from '../../utils/AuthUtils';
+import { signupApiService } from '../../services/SignupApiService';
+import type { TermsApiTermType } from '../../types/SignupAPI';
 
-export type SignupTermType =
-  | 'privacy'
-  | 'operation'
-  | 'payment'
-  | 'location'
-  | 'marketing';
+export type SignupTermType = TermsApiTermType;
 
 interface TermsAgreementScreenProps {
   onAgreementComplete: () => void;
@@ -28,20 +23,16 @@ interface TermsAgreementScreenProps {
 }
 
 interface TermsState {
-  privacyCollection: boolean;
-  operationPolicy: boolean;
-  paymentService: boolean;
-  locationService: boolean;
+  serviceTerms: boolean;
+  privacyPolicy: boolean;
   marketingConsent: boolean;
 }
 
-const STORAGE_PREFIX = 'signup_terms_state_v2';
+export const SIGNUP_TERMS_STORAGE_PREFIX = 'signup_terms_state_v3';
 
 const DEFAULT_STATE: TermsState = {
-  privacyCollection: false,
-  operationPolicy: false,
-  paymentService: false,
-  locationService: false,
+  serviceTerms: false,
+  privacyPolicy: false,
   marketingConsent: false,
 };
 
@@ -52,28 +43,16 @@ const TERMS: Array<{
   termType: SignupTermType;
 }> = [
   {
-    key: 'privacyCollection',
-    label: '개인정보 수집 및 이용',
+    key: 'serviceTerms',
+    label: '서비스 이용약관',
+    required: true,
+    termType: 'service',
+  },
+  {
+    key: 'privacyPolicy',
+    label: '개인정보 처리방침',
     required: true,
     termType: 'privacy',
-  },
-  {
-    key: 'operationPolicy',
-    label: '운영 정책 및 이용 제한 안내',
-    required: true,
-    termType: 'operation',
-  },
-  {
-    key: 'paymentService',
-    label: '결제 서비스 이용',
-    required: true,
-    termType: 'payment',
-  },
-  {
-    key: 'locationService',
-    label: '위치정보 이용',
-    required: true,
-    termType: 'location',
   },
   {
     key: 'marketingConsent',
@@ -84,10 +63,8 @@ const TERMS: Array<{
 ];
 
 const normalizeTermsState = (raw: Partial<TermsState> & Record<string, unknown>): TermsState => ({
-  privacyCollection: Boolean(raw.privacyCollection ?? raw.privacyPolicy),
-  operationPolicy: Boolean(raw.operationPolicy ?? raw.serviceTerms),
-  paymentService: Boolean(raw.paymentService ?? raw.serviceTerms),
-  locationService: Boolean(raw.locationService ?? raw.serviceTerms),
+  serviceTerms: Boolean(raw.serviceTerms),
+  privacyPolicy: Boolean(raw.privacyPolicy ?? raw.privacyCollection),
   marketingConsent: Boolean(raw.marketingConsent),
 });
 
@@ -96,20 +73,25 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   onViewTermsDetail,
   onCancel,
 }) => {
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [signupProfileId, setSignupProfileId] = useState<string | null>(null);
   const [termsState, setTermsState] = useState<TermsState>(DEFAULT_STATE);
   const [isLoading, setIsLoading] = useState(false);
 
   const storageKey = useMemo(
-    () => (profileId ? `${STORAGE_PREFIX}_${profileId}` : STORAGE_PREFIX),
-    [profileId],
+    () =>
+      signupProfileId
+        ? `${SIGNUP_TERMS_STORAGE_PREFIX}_${signupProfileId}`
+        : SIGNUP_TERMS_STORAGE_PREFIX,
+    [signupProfileId],
   );
 
   useEffect(() => {
     const init = async () => {
-      const id = await getProfileId();
-      const key = id ? `${STORAGE_PREFIX}_${id}` : STORAGE_PREFIX;
-      setProfileId(id);
+      const id = await getSignupProfileId();
+      const key = id
+        ? `${SIGNUP_TERMS_STORAGE_PREFIX}_${id}`
+        : SIGNUP_TERMS_STORAGE_PREFIX;
+      setSignupProfileId(id);
 
       try {
         const raw = await AsyncStorage.getItem(key);
@@ -138,10 +120,7 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
 
   const isRequiredAgreed = useMemo(
     () =>
-      termsState.privacyCollection &&
-      termsState.operationPolicy &&
-      termsState.paymentService &&
-      termsState.locationService,
+      termsState.serviceTerms && termsState.privacyPolicy,
     [termsState],
   );
 
@@ -162,10 +141,8 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
     setTermsState(prev => {
       const all = Object.values(prev).every(Boolean);
       const next: TermsState = {
-        privacyCollection: !all,
-        operationPolicy: !all,
-        paymentService: !all,
-        locationService: !all,
+        serviceTerms: !all,
+        privacyPolicy: !all,
         marketingConsent: !all,
       };
       persist(next);
@@ -179,7 +156,7 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!profileId || !isRequiredAgreed || isLoading) {
+    if (!signupProfileId || !isRequiredAgreed || isLoading) {
       Alert.alert('알림', '필수 약관에 모두 동의해주세요.');
       return;
     }
@@ -187,34 +164,33 @@ const TermsAgreementScreen: React.FC<TermsAgreementScreenProps> = ({
     setIsLoading(true);
     try {
       const requestData = {
-        profileId,
+        profileId: signupProfileId,
         termsAgreement: {
-          serviceTerms:
-            termsState.operationPolicy &&
-            termsState.paymentService &&
-            termsState.locationService,
-          privacyPolicy: termsState.privacyCollection,
+          serviceTerms: termsState.serviceTerms,
+          privacyPolicy: termsState.privacyPolicy,
           marketingConsent: termsState.marketingConsent,
         },
       };
 
-      const response = await apiClient.post(
-        API_ENDPOINTS_LIST.TERMS_AGREEMENT,
-        requestData,
-      );
+      const response = await signupApiService.agreeToTerms(requestData);
 
-      if (response.data.success) {
+      if (response.success && response.data?.agreed) {
         onAgreementComplete();
         return;
       }
 
       Alert.alert(
         '오류',
-        response.data.message || '약관 동의 처리에 실패했습니다.',
+        response.message || '약관 동의 처리에 실패했습니다.',
       );
     } catch (error) {
       console.error('약관 동의 오류:', error);
-      Alert.alert('오류', '네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      Alert.alert(
+        '오류',
+        error instanceof Error
+          ? error.message
+          : '네트워크 오류가 발생했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setIsLoading(false);
     }

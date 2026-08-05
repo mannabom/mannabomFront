@@ -14,6 +14,7 @@ const REDACTED = '[REDACTED]';
 const SENSITIVE_KEYS = new Set([
   'accessToken',
   'refreshToken',
+  'signupToken',
   'authorization',
   'deviceToken',
   'fcmToken',

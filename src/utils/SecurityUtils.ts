@@ -3,7 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
-import { getAuthTokens, saveAuthTokens, clearAllAuth } from './AuthUtils';
+import {
+  clearAllAuth,
+  clearSignupSession,
+  getAuthTokens,
+  getSignupProfileId,
+  getUserId,
+  saveAuthTokens,
+} from './AuthUtils';
+import { clearAllProfileData } from './ProfileStorage';
 
 // 로그인 정보 타입
 export interface LoginInfo {
@@ -127,6 +135,17 @@ export class AuthManager {
         return { isLoggedIn: false };
       }
 
+      // 영구 userId가 없는 기존 저장 세션은 임시 가입 profileId와 구분할
+      // 방법이 없으므로 한 번 다시 로그인하도록 처리합니다.
+      const userId = await getUserId();
+      if (!userId) {
+        if (__DEV__) {
+          console.warn('⚠️ [Auth] 영구 userId 없는 세션 -> 재로그인 필요');
+        }
+        await this.logout();
+        return { isLoggedIn: false };
+      }
+
       // 2) 시작할 때 refreshToken으로 accessToken 갱신 시도 (가장 안전)
       const refreshed = await this.refreshTokens(refreshToken);
       if (refreshed?.accessToken && refreshed?.refreshToken) {
@@ -139,6 +158,23 @@ export class AuthManager {
         if (__DEV__) console.warn('⚠️ [Auth] 자동로그인: 토큰 갱신 실패 -> 로그아웃 처리');
         await this.logout();
         return { isLoggedIn: false };
+      }
+
+      // 가입 완료 직후 앱이 종료됐거나 정리 작업이 중단된 경우 다음
+      // 자동 로그인에서 남은 임시 가입 데이터를 마저 제거합니다.
+      const staleSignupProfileId = await getSignupProfileId();
+      if (staleSignupProfileId) {
+        try {
+          await clearAllProfileData(staleSignupProfileId);
+          await clearSignupSession();
+        } catch (cleanupError) {
+          if (__DEV__) {
+            console.warn(
+              '⚠️ [Auth] 남은 가입 임시 데이터 정리 실패(로그인은 유지):',
+              cleanupError,
+            );
+          }
+        }
       }
 
       const userInfoStr = await AsyncStorage.getItem(this.USER_INFO_KEY);
@@ -176,11 +212,23 @@ export class AuthManager {
       }
 
       const json: any = await res.json().catch(() => ({}));
-      // 응답 형태가 {data:{...}} 일 수도, 최상단일 수도 있어서 둘 다 대응
-      const nextAccess = json?.data?.accessToken ?? json?.accessToken;
-      const nextRefresh = json?.data?.refreshToken ?? json?.refreshToken;
+      if (json?.success === false) {
+        if (__DEV__) console.warn('⚠️ [Auth] refresh 거절:', res.status);
+        return null;
+      }
 
-      if (typeof nextAccess === 'string' && typeof nextRefresh === 'string') {
+      // Swagger 공통 envelope를 우선 사용하되 이전 최상단 응답도 호환합니다.
+      const payload = json?.data ?? json;
+      const nextAccess =
+        typeof payload?.accessToken === 'string'
+          ? payload.accessToken.trim()
+          : '';
+      const nextRefresh =
+        typeof payload?.refreshToken === 'string'
+          ? payload.refreshToken.trim()
+          : '';
+
+      if (nextAccess && nextRefresh) {
         return { accessToken: nextAccess, refreshToken: nextRefresh };
       }
 
@@ -199,12 +247,22 @@ export class AuthManager {
 
   // 로그아웃: 신규 키 + legacy 키 + user_info 정리
   static async logout() {
-    await clearAllAuth();
-    await AsyncStorage.multiRemove([
-      this.LEGACY_ACCESS_TOKEN_KEY,
-      this.LEGACY_REFRESH_TOKEN_KEY,
-      this.USER_INFO_KEY,
+    const signupProfileId = await getSignupProfileId();
+    const cleanupResults = await Promise.allSettled([
+      clearAllProfileData(signupProfileId ?? undefined),
+      clearAllAuth(),
+      AsyncStorage.multiRemove([
+        this.LEGACY_ACCESS_TOKEN_KEY,
+        this.LEGACY_REFRESH_TOKEN_KEY,
+        this.USER_INFO_KEY,
+      ]),
     ]);
+    const failedCleanup = cleanupResults.find(
+      result => result.status === 'rejected',
+    );
+    if (failedCleanup?.status === 'rejected') {
+      throw failedCleanup.reason;
+    }
   }
 
   // 자동 로그인 처리

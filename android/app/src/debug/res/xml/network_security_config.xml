@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 운영 빌드는 시스템 인증서로 검증되는 HTTPS 통신만 허용합니다. -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- 개발 빌드에서만 로컬 Metro 등 개발 도구 연결을 허용합니다. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

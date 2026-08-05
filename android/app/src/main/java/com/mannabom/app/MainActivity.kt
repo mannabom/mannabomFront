@@ -1,4 +1,4 @@
-package com.mannabomfront
+package com.mannabom.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

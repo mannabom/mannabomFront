@@ -5,6 +5,14 @@ import {
   UserStatus,
 } from '../types/KakaoAPI';
 import { API_BASE_URL, API_ENDPOINTS_LIST } from '../config/api';
+import { requireExternalId, toExternalId } from '../utils/IdUtils';
+
+const requireSignupToken = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('가입 토큰이 없는 잘못된 로그인 응답입니다.');
+  }
+  return value.trim();
+};
 
 export class KakaoAPIService {
   /**
@@ -60,21 +68,34 @@ export class KakaoAPIService {
           userData: {
             accessToken: response.data.accessToken,
             refreshToken: response.data.refreshToken,
-            userId: response.data.userId,
+            userId: toExternalId(response.data.userId) ?? undefined,
             nickname: response.data.nickname,
           },
           message: response.message,
         };
 
-      case UserStatus.PENDING_VERIFICATION:
+      case UserStatus.PENDING_VERIFICATION: {
         // 신규 사용자 - 회원가입 진행
+        const signupProfileId = requireExternalId(
+          response.data.profileId ?? response.data.kakaoUserInfo?.profileId,
+          '가입 진행 ID',
+        );
+        if (!response.data.kakaoUserInfo) {
+          throw new Error('카카오 사용자 정보가 없는 잘못된 로그인 응답입니다.');
+        }
         return {
           nextStep: 'signup',
           userData: {
-            kakaoUserInfo: response.data.kakaoUserInfo,
+            signupProfileId,
+            signupToken: requireSignupToken(response.data.signupToken),
+            kakaoUserInfo: {
+              ...response.data.kakaoUserInfo,
+              profileId: signupProfileId,
+            },
           },
           message: response.message,
         };
+      }
 
       case UserStatus.AGE_RESTRICTED:
         // 연령 제한 - 접근 차단
