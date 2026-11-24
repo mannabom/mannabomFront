@@ -1,17 +1,15 @@
 // src/config/api.ts
 /**
- * 현재 앱은 Debug·로컬 테스트·TestFlight/Release 모두 스테이징 서버를
- * 사용합니다. 운영 서버가 실제로 준비되기 전까지는 환경을 자동으로
- * production으로 전환하지 않아 죽은 주소나 운영 데이터에 연결되는 것을
- * 방지합니다.
+ * 현재 앱은 Debug·로컬 테스트·TestFlight/Release 모두 운영 서버
+ * (api.mannabom.com)를 사용합니다. 별도 스테이징 서버는 아직 없습니다.
  *
- * 운영 배포를 시작할 때는 production 주소를 추가하고 빌드 환경값으로
- * 명시적으로 선택하도록 전환해야 합니다.
+ * 스테이징 서버가 생기면 주소를 추가하고 빌드 환경값으로 명시적으로
+ * 선택하도록 전환해야 합니다.
  */
-export const API_ENVIRONMENT = 'staging' as const;
+export const API_ENVIRONMENT = 'production' as const;
 
 const API_ENDPOINTS = {
-  staging: 'https://staging-api.mannabom.com',
+  production: 'https://api.mannabom.com',
 } as const;
 
 // API 기본 URL
